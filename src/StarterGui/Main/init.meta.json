@@ -1,0 +1,7 @@
+{
+    "ignoreUnknownInstances": true,
+    "className":"ScreenGui",
+    "properties":{
+        "ResetOnSpawn":false
+    }
+}

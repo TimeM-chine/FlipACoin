@@ -1,0 +1,7 @@
+{
+  "emitLegacyScripts": false,
+  "name": "satchel",
+  "tree": {
+    "$path": "src"
+  }
+}

@@ -1,0 +1,8 @@
+{
+    "ClassName": "Beam",
+    "Properties": {
+        "Texture": "rbxassetid://17273290251",
+        "Brightness":10,
+        "TextureMode":"Static"
+    }
+  }

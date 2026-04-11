@@ -1,0 +1,90 @@
+local DefaultData = {
+	---- user info ----
+	playTime = 0,
+	loginTime = 0,
+	startTimes = {},
+	createTime = 0,
+	buyStartPack = false,
+	claimFreeReward = false,
+	favoritePrompt = false,
+	---- attributes ----
+	robuxSpent = 0,
+	rebirth = 0,
+	destroyBlock = 0,
+	forgeCount = 0,
+	---- currency ---
+	wins = 100,
+	gems = 0,
+	redeemCode = {},
+	donated = 0,
+	---- game ----
+	badges = {},
+	level = 1,
+	exp = 0,
+	onboardingFunnelStep = 0,
+	blockCarried = 0,
+	blockPackLevel = 0,
+	levelUnlock = {},
+	likeMe = {},
+	maxZone = 1,
+	nowZone = 1,
+	trails = {},
+	trailEquipped = "",
+	spin = 1,
+	waitingSpinTime = 0,
+	settingsData = {
+		bgm = 1,
+		sfx = 1,
+		weatherSfx = 1,
+		-- showMyPets = true,
+		-- showOtherPets = true,
+		-- autoHatchNum = 1,
+		trade = true,
+	},
+	buffs = {},
+	guideData = {},
+	backpack = {
+		weapons = {},
+		miningTools = {},
+		ores = {},
+	},
+	potions = {},
+	equippedBuff = {},
+	dailyClaim = {},
+	groupClaim = 0,
+	season = {
+		seasonNum = 0,
+		exp = 0,
+		level = 0,
+		claimList = {},
+		premiumPass = false,
+		dayNum = 0,
+		weekNum = 0,
+		dailyQuests = {},
+		weeklyQuests = {},
+	},
+	event = {
+		eventId = "",
+		wins = 0,
+		multiplierIndex = 0,
+		quests = {},
+	},
+	calendar = {
+		calendarId = "",
+		regularPass = false,
+		premiumPass = false,
+		giftClaim = {},
+	},
+	questPack = {
+		lifeTime = 0,
+		count = 0,
+		quests = {},
+	},
+	quests = {},
+	---- game pass ----
+	gamePasses = {},
+}
+
+table.freeze(DefaultData)
+
+return DefaultData

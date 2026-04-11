@@ -1,0 +1,12 @@
+std = "roblox"
+
+[selene]
+exclude = ["Packages", "src/ReplicatedStorage/modules/*"]
+
+[lints]
+unused_variable = "allow"
+roblox_manual_fromscale_or_fromoffset = "allow"
+multiple_statements = "allow"
+
+[config]
+empty_if = { comments_count = true}

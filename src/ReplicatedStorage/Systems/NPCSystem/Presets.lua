@@ -1,0 +1,4 @@
+local NPCPresets = {}
+
+
+return NPCPresets

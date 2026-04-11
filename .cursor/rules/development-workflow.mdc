@@ -1,0 +1,106 @@
+---
+description: Development workflow for systems, features, testing, and releases
+alwaysApply: true
+---
+# Development Workflow
+
+## Adding New Systems
+
+To add a new system:
+
+1. Create a new folder in [src/ReplicatedStorage/Systems/](mdc:src/ReplicatedStorage/Systems)
+2. Copy and modify the Template system structure in `src/ReplicatedStorage/Systems/Template/` (follow the system architecture guidelines)
+3. Create a `Presets.lua` file if needed for system-specific configurations
+4. Register the system in the `systems` table in [SystemMgr.lua](mdc:src/ReplicatedStorage/Systems/SystemMgr.lua)
+5. If the system needs priority loading, add it to the `LoadOrder` table
+
+## Adding New Features
+
+When adding new features to the game:
+
+1. Identify which system should handle the feature
+2. If no existing system fits, create a new system
+3. Implement server-side logic first, then client-side logic
+4. Add any necessary UI components to StarterGui
+5. Use `uiController.SetButtonHoverAndClick` for button interactions
+6. Add configuration values to the appropriate config files
+7. Test the feature in both server and client contexts
+
+## Testing Process
+
+To test new features or systems:
+
+1. Test in Studio first with multiple clients using Team Test
+2. Verify both server and client functionality
+3. Test edge cases and error handling
+4. Check for performance impacts with the built-in profiler
+5. Validate data persistence if applicable
+
+## Production Preparation
+
+Before finalizing for production:
+
+1. Ensure all debug print statements are removed or disabled
+2. Verify all systems initialize properly
+3. Use pcall for error handling in critical paths
+4. Test data saving/loading thoroughly
+5. Optimize performance-critical code
+6. Check for memory leaks using the Memory Analyzer
+
+## UI Development Guidelines
+
+When working with user interfaces:
+
+1. Always use `uiController.SetButtonHoverAndClick` for button interactions
+2. Prefer `UDim2.fromScale()` over `UDim2.fromOffset()` for responsive UI
+3. Set all Offset values to 0 when using Scale for consistent cross-device display
+4. Use the centralized UI controller functions for consistency
+5. Clean up connections properly (uiController handles this automatically)
+6. Test UI on different screen sizes and devices
+7. **Cross-resolution adaptation**: For UI elements that need to maintain a fixed shape (e.g., progress bars, avatar frames), use `UIAspectRatioConstraint` to constrain the aspect ratio
+8. **Mobile adaptation**: Consider safe areas such as notches and home indicators to avoid UI elements being obscured
+
+## Server-Client Communication
+
+When communicating between server and client:
+
+- Use `self.Client:MethodName(player, args)` to send messages to a specific player
+- Use `self.AllClients:MethodName(args)` to broadcast messages to all clients
+- Always use `self.AllClients` when notifying all clients about server-wide events (e.g., Santa arrival, weather changes)
+- Set `args.unreliable = true` when using `AllClients` for non-critical updates to improve performance
+- Example: `self.AllClients:SantaArrive({ unreliable = true })`
+
+## Scheduled Tasks
+
+For periodic tasks and timers:
+
+- Use `ScheduleModule.AddSchedule(intervalSeconds, func)` instead of `while true` loops with `task.wait()`
+- ScheduleModule provides better performance by using a single heartbeat connection for all schedules
+- Store the schedule ID returned by `AddSchedule` if you need to cancel it later
+- Use `ScheduleModule.CancelSchedule(scheduleId)` to stop a scheduled task
+- Example: See WeatherSystem and EventSystem for reference implementations
+
+## Common Development Pitfalls
+
+- Check if player is still in game before taking actions based on player events
+- Avoid creating circular dependencies between systems
+- Don't store large amounts of data in the players table without proper cleanup
+- Remember to handle both server and client logic in system functions
+- Don't manually connect UI events when uiController provides the functionality
+- Don't use `self.Client` when broadcasting to all clients - use `self.AllClients` instead
+
+## Version Control Best Practices
+
+- Make frequent, small commits with clear messages
+- Test changes before committing
+- Use branches for major features
+- Document significant changes
+- Keep the main branch stable and deployable
+
+## Debugging Tips
+
+- Use `print()` and `warn()` strategically for debugging
+- Check the Output window for errors and warnings
+- Use Studio's built-in debugger for complex issues
+- Add visual indicators for debugging game state
+- Create debug commands for testing specific functionality

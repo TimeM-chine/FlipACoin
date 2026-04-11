@@ -1,0 +1,46 @@
+---
+description: Roblox Luau coding style (string interpolation)
+globs: 
+alwaysApply: true
+---
+# Coding Style (Roblox Luau)
+
+## String interpolation
+
+- Use Roblox backtick interpolation; do not use `string.format`.
+- Syntax: place expressions inside `{}` within a backtick string.
+
+```lua
+-- Good
+TextLabel.Text = `Cutting Power: {args.power}`
+
+local playerName = player.Name
+local coins = 42
+local message = `{playerName} found {coins} coins!`
+
+-- Avoid
+-- local message = string.format("%s found %d coins!", playerName, coins)
+```
+
+## Defensive programming
+
+- Do not over-do defensive programming. When resources and config are present and callers follow the contract, omit redundant nil checks, fallbacks, and warns so that issues surface during development or testing.
+
+## Code blocks
+
+- Do not use `do end` blocks.
+- Use function scoping or other control structures instead.
+
+```lua
+-- Good
+local function processData()
+	local result = calculate()
+	return result
+end
+
+-- Avoid
+-- do
+--     local result = calculate()
+--     return result
+-- end
+```

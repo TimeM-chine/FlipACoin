@@ -1,0 +1,11 @@
+[package]
+name = "magicalhailuo/animecutgrass"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]
+#BridgeNet2 = "ffrostflame/bridgenet2@1.0.0"
+#shapecasthitbox = "teamswordphin/shapecasthitbox@0.2.5"
+satchel = "ryanlua/satchel@1.4.0"
+SimpleDialogue = "crabzzai/simpledialogue@0.2.1"

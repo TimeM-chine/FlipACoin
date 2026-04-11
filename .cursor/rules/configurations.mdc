@@ -1,0 +1,103 @@
+---
+description: When you need to create configuration information
+globs: 
+alwaysApply: false
+---
+# Configuration Files
+
+## Core Configuration Files
+
+- [GameConfig.lua](mdc:src/ReplicatedStorage/configs/GameConfig.lua) - Main game configuration containing game constants and settings
+  - Core gameplay parameters
+  - Game balance values
+  - Game state constants
+   - Example usage:
+   ```lua
+   local ReplicatedStorage = game:GetService("ReplicatedStorage")
+   local GameConfig = require(ReplicatedStorage.configs.GameConfig)
+   local maxSpeed = GameConfig.PLAYER.MAX_SPEED
+   ```
+
+- [Types.lua](mdc:src/ReplicatedStorage/configs/Types.lua) - Type definitions using Luau's type system
+  - Custom type definitions for systems and components
+  - Interface definitions for game objects
+  - Type annotations for improved code safety
+   - Example usage:
+   ```lua
+   local ReplicatedStorage = game:GetService("ReplicatedStorage")
+   local Types = require(ReplicatedStorage.configs.Types)
+   
+   local function processWeapon(weapon: Types.Weapon)
+       -- Function implementation
+   end
+   ```
+
+- [Keys.lua](mdc:src/ReplicatedStorage/configs/Keys.lua) - Constants and key definitions
+  - DataStore keys
+  - Event keys
+  - Action identifiers
+   - Example usage:
+   ```lua
+   local ReplicatedStorage = game:GetService("ReplicatedStorage")
+   local Keys = require(ReplicatedStorage.configs.Keys)
+   local dataKey = Keys.DataStore.PLAYER_DATA
+   ```
+
+## System-Specific Presets
+
+Many systems have their own preset configurations located in a `Presets.lua` file within the system's folder. These preset files contain configuration data specific to that system and can be required and accessed by both the server and the client.
+
+- `PlayerSystem/Presets.lua` - Player-related configurations
+- `WeaponSystem/Presets.lua` - Weapon stats and behaviors
+- `AnimalSystem/Presets.lua` - Animal spawning and behavior settings
+- `QuestSystem/Presets.lua` - Quest definitions and rewards
+- `SpinSystem/Presets.lua` - Configurations for spin mechanics
+- `EventSystem/Presets.lua` - Event-related configurations
+- `SettingSystem/Presets.lua` - User settings configurations
+
+Example system preset structure:
+```lua
+return {
+    CONSTANTS = {
+        -- System-specific constants
+    },
+    
+    SETTINGS = {
+        -- Default settings
+    },
+    
+    ITEMS = {
+        -- Item definitions
+    }
+}
+```
+
+## Configuration Best Practices
+
+1. Use existing configuration files instead of hardcoding values
+2. Add new configurations to the appropriate file based on their purpose:
+   - Game-wide settings → GameConfig.lua
+   - Type definitions → Types.lua
+   - Key constants → Keys.lua
+   - System-specific settings → System's Presets.lua
+3. Follow the established naming conventions in each config file
+4. Use comments to explain the purpose and valid ranges for configuration values
+5. When referencing configurations, use the proper require path:
+
+```lua
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local GameConfig = require(ReplicatedStorage.configs.GameConfig)
+local Types = require(ReplicatedStorage.configs.Types)
+local Keys = require(ReplicatedStorage.configs.Keys)
+local SystemPresets = require(script.Presets)
+```
+
+## Modifying Configurations
+
+When modifying configuration values:
+
+1. Consider the impact on game balance
+2. Test changes thoroughly
+3. Document significant changes
+4. Be aware of which systems depend on the configuration
+5. Update related configurations that might be affected by the change

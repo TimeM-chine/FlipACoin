@@ -1,0 +1,4 @@
+local EffectPresets = {}
+
+
+return EffectPresets
