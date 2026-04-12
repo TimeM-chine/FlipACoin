@@ -1,33 +1,66 @@
+---- services ----
 local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local BaseSystem = require(Replicated.Systems.BaseSystem)
+---- requires ----
 local Presets = require(script.Presets)
+local Types = require(Replicated.configs.Types)
 
+---- common variables ----
 local IsServer = RunService:IsServer()
+local SENDER, SystemMgr
 
-local AnnouncementSystem = BaseSystem.new("AnnouncementSystem", {
+---- client variables ----
+local uiController
+local AnnouncementUi = { pendingCalls = {} }
+setmetatable(AnnouncementUi, Types.mt)
+
+local AnnouncementSystem: Types.System = {
 	whiteList = {
 		"HandleFlipResolved",
 	},
-})
+	players = {},
+	tasks = {},
+	IsLoaded = false,
+}
+AnnouncementSystem.__index = AnnouncementSystem
 
-local uiController
+if IsServer then
+	AnnouncementSystem.Client = setmetatable({}, AnnouncementSystem)
+else
+	AnnouncementSystem.Server = setmetatable({}, AnnouncementSystem)
+end
+
+local function GetSystemMgr()
+	if not SystemMgr then
+		SystemMgr = require(Replicated.Systems.SystemMgr)
+		SENDER = SystemMgr.SENDER
+	end
+	return SystemMgr
+end
 
 function AnnouncementSystem:Init()
-	BaseSystem.Init(self)
-	self._recentAnnouncements = self._recentAnnouncements or {}
+	GetSystemMgr()
+	self.recentAnnouncements = self.recentAnnouncements or {}
 end
 
 function AnnouncementSystem:PlayerAdded(sender, player, args)
 	if IsServer then
-		if not self:CheckSender(sender) then
+		if sender ~= SENDER then
 			return
 		end
+
 		self.Client:PlayerAdded(player, {})
 	else
-		self._Ui = self:InitUI(script.ui)
+		local pendingCalls = AnnouncementUi.pendingCalls
+
+		AnnouncementUi = require(script.ui)
+		AnnouncementUi.Init()
+
+		for _, call in ipairs(pendingCalls) do
+			AnnouncementUi[call.functionName](table.unpack(call.args))
+		end
 	end
 end
 
@@ -35,7 +68,7 @@ function AnnouncementSystem:HandleFlipResolved(sender, player, args)
 	if not IsServer then
 		return
 	end
-	if not self:CheckSender(sender) then
+	if sender ~= SENDER then
 		return
 	end
 	if args.result ~= "Heads" then
@@ -49,13 +82,13 @@ function AnnouncementSystem:HandleFlipResolved(sender, player, args)
 
 	local dedupeKey = `{player.UserId}:{args.streak}`
 	local now = os.clock()
-	if self._recentAnnouncements[dedupeKey] and now - self._recentAnnouncements[dedupeKey] < Presets.DebounceSeconds then
+	if self.recentAnnouncements[dedupeKey] and now - self.recentAnnouncements[dedupeKey] < Presets.DebounceSeconds then
 		return
 	end
-	self._recentAnnouncements[dedupeKey] = now
+	self.recentAnnouncements[dedupeKey] = now
 
 	local text = Presets.BuildText(player, args.streak)
-	local audiencePlayers = self:GetSystemMgr().systems.TableSeatSystem:GetAudiencePlayers(args.seatId)
+	local audiencePlayers = GetSystemMgr().systems.TableSeatSystem:GetAudiencePlayers(args.seatId)
 	for _, audiencePlayer in ipairs(audiencePlayers) do
 		self.Client:PlayAnnouncement(audiencePlayer, {
 			userId = player.UserId,

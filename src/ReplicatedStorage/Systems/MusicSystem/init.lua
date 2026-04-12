@@ -13,7 +13,6 @@ local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
 local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
-local ZoneCtrl = require(Replicated.modules.Zone)
 
 ---- requires ----
 local MusicPresets = require(script.Presets)

@@ -92,10 +92,7 @@ setmetatable(systems, mt)
 
 local LoadOrder = {
 	"PlayerSystem",
-	"TableSeatSystem",
-	"CoinFlipSystem",
 	"CharacterSystem",
-	"AnnouncementSystem",
 }
 
 local SystemMgr = {}

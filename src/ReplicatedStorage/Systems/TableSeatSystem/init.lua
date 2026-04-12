@@ -1,15 +1,23 @@
+---- services ----
 local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
-local BaseSystem = require(Replicated.Systems.BaseSystem)
+---- requires ----
 local ScheduleModule = require(Replicated.modules.ScheduleModule)
 local Presets = require(script.Presets)
+local Types = require(Replicated.configs.Types)
 
+---- common variables ----
 local IsServer = RunService:IsServer()
+local SENDER, SystemMgr
 
-local TableSeatSystem = BaseSystem.new("TableSeatSystem", {
+---- client variables ----
+local TableSeatUi = { pendingCalls = {} }
+setmetatable(TableSeatUi, Types.mt)
+
+local TableSeatSystem: Types.System = {
 	whiteList = {
 		"GetPlayerSeatId",
 		"GetTablePlayers",
@@ -18,7 +26,25 @@ local TableSeatSystem = BaseSystem.new("TableSeatSystem", {
 		"GetClientSeatState",
 		"GetAudiencePlayers",
 	},
-})
+	players = {},
+	tasks = {},
+	IsLoaded = false,
+}
+TableSeatSystem.__index = TableSeatSystem
+
+if IsServer then
+	TableSeatSystem.Client = setmetatable({}, TableSeatSystem)
+else
+	TableSeatSystem.Server = setmetatable({}, TableSeatSystem)
+end
+
+local function GetSystemMgr()
+	if not SystemMgr then
+		SystemMgr = require(Replicated.Systems.SystemMgr)
+		SENDER = SystemMgr.SENDER
+	end
+	return SystemMgr
+end
 
 local function buildSeatState(self, player)
 	local mySeatId = self._playerSeats[player.UserId]
@@ -75,7 +101,7 @@ local function refreshLocalPromptVisibility(self)
 end
 
 local function syncCoinFlipSeatState(self, player, seatState)
-	local coinFlipSystem = self:GetSystemMgr().systems.CoinFlipSystem
+	local coinFlipSystem = GetSystemMgr().systems.CoinFlipSystem
 	if not coinFlipSystem or not coinFlipSystem.Client or not coinFlipSystem.Client.SeatStateChanged then
 		return
 	end
@@ -89,7 +115,7 @@ local function syncCoinFlipSeatState(self, player, seatState)
 end
 
 local function broadcastSeatStates(self)
-	local systemMgr = self:GetSystemMgr()
+	local systemMgr = GetSystemMgr()
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		local seatState = buildSeatState(self, player)
@@ -126,10 +152,10 @@ local function clearSeatOwnership(self, player, notifyReason)
 	end
 
 	refreshPromptAttributes(self, seatId)
-	self:GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(player)
+	GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(player)
 
 	if notifyReason == "afk" then
-		self:GetSystemMgr().systems.GuiSystem:SetNotification(self._SENDER, player, {
+		GetSystemMgr().systems.GuiSystem:SetNotification(SENDER, player, {
 			text = "You were removed from the seat for inactivity.",
 			lastTime = 2.5,
 			textColor = Color3.fromRGB(255, 216, 128),
@@ -178,7 +204,7 @@ function TableSeatSystem:_EnsureSeatCatalog()
 
 		if prompt and not self._seatPromptConnections[prompt] then
 			self._seatPromptConnections[prompt] = prompt.Triggered:Connect(function(player)
-				self:RequestSit(self._SENDER, player, {
+				self:RequestSit(SENDER, player, {
 					seatId = seatId,
 				})
 			end)
@@ -198,7 +224,7 @@ function TableSeatSystem:_EnsureSeatCatalog()
 						self._playerSeats[occupantPlayer.UserId] = seatId
 						self._lastActivity[occupantPlayer.UserId] = os.clock()
 						refreshPromptAttributes(self, seatId)
-						self:GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(occupantPlayer)
+						GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(occupantPlayer)
 						broadcastSeatStates(self)
 					end
 					return
@@ -218,7 +244,7 @@ function TableSeatSystem:_EnsureSeatCatalog()
 end
 
 function TableSeatSystem:Init()
-	BaseSystem.Init(self)
+	GetSystemMgr()
 	self:_EnsureSeatCatalog()
 
 	if IsServer then
@@ -268,7 +294,7 @@ function TableSeatSystem:RegisterActivity(sender, player)
 	if not IsServer then
 		return
 	end
-	if not self:CheckSender(sender) then
+	if sender ~= SENDER then
 		return
 	end
 	if not self:IsPlayerSeated(player) then
@@ -284,7 +310,7 @@ end
 
 function TableSeatSystem:PlayerAdded(sender, player, args)
 	if IsServer then
-		if not self:CheckSender(sender) then
+		if sender ~= SENDER then
 			return
 		end
 
@@ -294,7 +320,15 @@ function TableSeatSystem:PlayerAdded(sender, player, args)
 		})
 		syncCoinFlipSeatState(self, player, seatState)
 	else
-		self._Ui = self:InitUI(script.ui)
+		local pendingCalls = TableSeatUi.pendingCalls
+
+		TableSeatUi = require(script.ui)
+		TableSeatUi.Init()
+
+		for _, call in ipairs(pendingCalls) do
+			TableSeatUi[call.functionName](table.unpack(call.args))
+		end
+
 		self._localSeatState = args and args.seatState or {
 			occupiedSeats = {},
 			tablePlayerUserIds = {},
@@ -308,7 +342,7 @@ function TableSeatSystem:PlayerRemoving(sender, player)
 	if not IsServer then
 		return
 	end
-	if not self:CheckSender(sender) then
+	if sender ~= SENDER then
 		return
 	end
 
@@ -319,7 +353,7 @@ function TableSeatSystem:RequestSit(sender, player, args)
 	if not IsServer then
 		return
 	end
-	if not self:CheckSender(sender) then
+	if sender ~= SENDER then
 		return
 	end
 
@@ -356,7 +390,7 @@ function TableSeatSystem:RequestSit(sender, player, args)
 	refreshPromptAttributes(self, seatId)
 	seatRecord.seat:Sit(humanoid)
 
-	self:GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(player)
+	GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(player)
 	broadcastSeatStates(self)
 end
 
@@ -364,7 +398,7 @@ function TableSeatSystem:RequestStand(sender, player, args)
 	if not IsServer then
 		return
 	end
-	if not self:CheckSender(sender) then
+	if sender ~= SENDER then
 		return
 	end
 

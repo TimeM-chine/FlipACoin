@@ -1,14 +1,54 @@
+---- services ----
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local BaseSystem = require(Replicated.Systems.BaseSystem)
+---- requires ----
 local Keys = require(Replicated.configs.Keys)
 local Presets = require(script.Presets)
+local Types = require(Replicated.configs.Types)
 
+---- common variables ----
 local IsServer = RunService:IsServer()
+local SENDER, SystemMgr
 local dataKey = Keys.DataKey
 
-local CoinFlipSystem = BaseSystem.new("CoinFlipSystem")
+---- server variables ----
+local PlayerServerClass
+
+---- client variables ----
+local CoinFlipUi = { pendingCalls = {} }
+setmetatable(CoinFlipUi, Types.mt)
+
+local CoinFlipSystem: Types.System = {
+	whiteList = {},
+	players = {},
+	tasks = {},
+	IsLoaded = false,
+}
+CoinFlipSystem.__index = CoinFlipSystem
+
+if IsServer then
+	CoinFlipSystem.Client = setmetatable({}, CoinFlipSystem)
+	local ServerStorage = game:GetService("ServerStorage")
+	PlayerServerClass = require(ServerStorage.classes.PlayerServerClass)
+else
+	CoinFlipSystem.Server = setmetatable({}, CoinFlipSystem)
+end
+
+local function GetSystemMgr()
+	if not SystemMgr then
+		SystemMgr = require(Replicated.Systems.SystemMgr)
+		SENDER = SystemMgr.SENDER
+	end
+	return SystemMgr
+end
+
+local function GetPlayerIns(player, createIfNil)
+	if not IsServer then
+		return nil
+	end
+	return PlayerServerClass.GetIns(player, createIfNil)
+end
 
 local function getPlayerState(self, player)
 	local playerState = self.players[player.UserId]
@@ -45,9 +85,8 @@ local function normalizeRunData(playerIns)
 	return runData
 end
 
-local function getSeatState(self, player)
-	local systemMgr = self:GetSystemMgr()
-	local seatId = systemMgr.systems.TableSeatSystem:GetPlayerSeatId(player)
+local function getSeatState(player)
+	local seatId = SystemMgr.systems.TableSeatSystem:GetPlayerSeatId(player)
 
 	return {
 		isSeated = seatId ~= nil,
@@ -55,8 +94,8 @@ local function getSeatState(self, player)
 	}
 end
 
-local function buildClientState(self, player)
-	local playerIns = self:GetPlayerIns(player)
+local function buildClientState(player)
+	local playerIns = GetPlayerIns(player, false)
 	if not playerIns then
 		return nil
 	end
@@ -70,12 +109,12 @@ local function buildClientState(self, player)
 		runData = table.clone(runData),
 		derivedStats = Presets.BuildDerivedStats(runData),
 		nextCosts = Presets.GetNextCosts(runData),
-		seatState = getSeatState(self, player),
+		seatState = getSeatState(player),
 	}
 end
 
 local function syncPlayerState(self, player, extraArgs, useFlipResolved)
-	local payload = buildClientState(self, player)
+	local payload = buildClientState(player)
 	if not payload then
 		return
 	end
@@ -93,14 +132,13 @@ local function syncPlayerState(self, player, extraArgs, useFlipResolved)
 	end
 end
 
-local function refreshCashDisplays(self, player)
-	local systemMgr = self:GetSystemMgr()
-	systemMgr.systems.PlayerSystem:UpdateLeaderStats(player)
-	systemMgr.systems.PlayerSystem:UpdatePlayerHeadGui(player)
+local function refreshCashDisplays(player)
+	SystemMgr.systems.PlayerSystem:UpdateLeaderStats(player)
+	SystemMgr.systems.PlayerSystem:UpdatePlayerHeadGui(player)
 end
 
 local function emitObservedFlip(self, player, args)
-	local audiencePlayers = self:GetSystemMgr().systems.TableSeatSystem:GetAudiencePlayers(args.seatId)
+	local audiencePlayers = SystemMgr.systems.TableSeatSystem:GetAudiencePlayers(args.seatId)
 
 	for _, audiencePlayer in ipairs(audiencePlayers) do
 		if audiencePlayer ~= player then
@@ -110,24 +148,32 @@ local function emitObservedFlip(self, player, args)
 end
 
 function CoinFlipSystem:Init()
-	BaseSystem.Init(self)
+	GetSystemMgr()
 end
 
 function CoinFlipSystem:PlayerAdded(sender, player, args)
 	if IsServer then
-		if not self:CheckSender(sender) then
+		if sender ~= SENDER then
 			return
 		end
 
 		getPlayerState(self, player)
 		self.Client:PlayerAdded(player, {
-			state = buildClientState(self, player),
+			state = buildClientState(player),
 		})
 	else
-		self._Ui = self:InitUI(script.ui)
+		local pendingCalls = CoinFlipUi.pendingCalls
+
+		CoinFlipUi = require(script.ui)
+		CoinFlipUi.Init()
+
+		for _, call in ipairs(pendingCalls) do
+			CoinFlipUi[call.functionName](table.unpack(call.args))
+		end
+
 		if args and args.state then
-			self._Ui.SyncRunState(args.state)
-			self._Ui.SeatStateChanged({
+			CoinFlipUi.SyncRunState(args.state)
+			CoinFlipUi.SeatStateChanged({
 				seatState = args.state.seatState,
 			})
 		end
@@ -138,7 +184,7 @@ function CoinFlipSystem:PlayerRemoving(sender, player)
 	if not IsServer then
 		return
 	end
-	if not self:CheckSender(sender) then
+	if sender ~= SENDER then
 		return
 	end
 
@@ -149,12 +195,11 @@ function CoinFlipSystem:RequestFlip(sender, player)
 	if not IsServer then
 		return
 	end
-	if not self:CheckSender(sender) then
+	if sender ~= SENDER then
 		return
 	end
 
-	local systemMgr = self:GetSystemMgr()
-	local seatSystem = systemMgr.systems.TableSeatSystem
+	local seatSystem = SystemMgr.systems.TableSeatSystem
 	if not seatSystem:IsPlayerSeated(player) then
 		return
 	end
@@ -165,7 +210,7 @@ function CoinFlipSystem:RequestFlip(sender, player)
 		return
 	end
 
-	local playerIns = self:GetPlayerIns(player)
+	local playerIns = GetPlayerIns(player, false)
 	if not playerIns then
 		return
 	end
@@ -186,11 +231,11 @@ function CoinFlipSystem:RequestFlip(sender, player)
 
 		playerIns:SetOneData(dataKey.wins, playerIns:GetOneData(dataKey.wins) + reward)
 		playerIns:SetOneData(dataKey.lifetimeHeads, playerIns:GetOneData(dataKey.lifetimeHeads) + 1)
+		playerIns:SetOneData(dataKey.lifetimeCashEarned, playerIns:GetOneData(dataKey.lifetimeCashEarned) + reward)
 		playerIns:SetOneData(
-			dataKey.lifetimeCashEarned,
-			playerIns:GetOneData(dataKey.lifetimeCashEarned) + reward
+			dataKey.bestStreak,
+			math.max(playerIns:GetOneData(dataKey.bestStreak), runData.bestStreakThisRun)
 		)
-		playerIns:SetOneData(dataKey.bestStreak, math.max(playerIns:GetOneData(dataKey.bestStreak), runData.bestStreakThisRun))
 	else
 		runData.currentStreak = 0
 	end
@@ -198,8 +243,8 @@ function CoinFlipSystem:RequestFlip(sender, player)
 	playerState.nextFlipAt = now + Presets.GetFlipInterval(runData)
 	playerIns:SetOneData(dataKey.runData, runData)
 
-	seatSystem:RegisterActivity(systemMgr.SENDER, player)
-	refreshCashDisplays(self, player)
+	seatSystem:RegisterActivity(SENDER, player)
+	refreshCashDisplays(player)
 
 	local observedPayload = {
 		userId = player.UserId,
@@ -211,7 +256,7 @@ function CoinFlipSystem:RequestFlip(sender, player)
 	}
 
 	emitObservedFlip(self, player, observedPayload)
-	systemMgr.systems.AnnouncementSystem:HandleFlipResolved(systemMgr.SENDER, player, observedPayload)
+	SystemMgr.systems.AnnouncementSystem:HandleFlipResolved(SENDER, player, observedPayload)
 
 	syncPlayerState(self, player, {
 		result = observedPayload.result,
@@ -224,12 +269,11 @@ function CoinFlipSystem:BuyUpgrade(sender, player, args)
 	if not IsServer then
 		return
 	end
-	if not self:CheckSender(sender) then
+	if sender ~= SENDER then
 		return
 	end
 
-	local systemMgr = self:GetSystemMgr()
-	local seatSystem = systemMgr.systems.TableSeatSystem
+	local seatSystem = SystemMgr.systems.TableSeatSystem
 	if not seatSystem:IsPlayerSeated(player) then
 		return
 	end
@@ -239,7 +283,7 @@ function CoinFlipSystem:BuyUpgrade(sender, player, args)
 		return
 	end
 
-	local playerIns = self:GetPlayerIns(player)
+	local playerIns = GetPlayerIns(player, false)
 	if not playerIns then
 		return
 	end
@@ -260,43 +304,43 @@ function CoinFlipSystem:BuyUpgrade(sender, player, args)
 	runData[upgradeKey] += 1
 	playerIns:SetOneData(dataKey.runData, runData)
 
-	seatSystem:RegisterActivity(systemMgr.SENDER, player)
-	refreshCashDisplays(self, player)
+	seatSystem:RegisterActivity(SENDER, player)
+	refreshCashDisplays(player)
 	syncPlayerState(self, player, {
 		upgradePurchased = upgradeKey,
 	})
 end
 
 function CoinFlipSystem:SyncRunState(sender, player, args)
-	if IsServer or not self._Ui then
+	if IsServer then
 		return
 	end
 
-	self._Ui.SyncRunState(args)
+	CoinFlipUi.SyncRunState(args)
 end
 
 function CoinFlipSystem:FlipResolved(sender, player, args)
-	if IsServer or not self._Ui then
+	if IsServer then
 		return
 	end
 
-	self._Ui.FlipResolved(args)
+	CoinFlipUi.FlipResolved(args)
 end
 
 function CoinFlipSystem:SeatStateChanged(sender, player, args)
-	if IsServer or not self._Ui then
+	if IsServer then
 		return
 	end
 
-	self._Ui.SeatStateChanged(args)
+	CoinFlipUi.SeatStateChanged(args)
 end
 
 function CoinFlipSystem:ObservedFlip(sender, player, args)
-	if IsServer or not self._Ui then
+	if IsServer then
 		return
 	end
 
-	self._Ui.ObservedFlip(args)
+	CoinFlipUi.ObservedFlip(args)
 end
 
 return CoinFlipSystem
