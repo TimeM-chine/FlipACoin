@@ -104,6 +104,48 @@ GameConfig.Zones = {
 
 GameConfig.ZoneCount = #GameConfig.Zones
 
+GameConfig.FlipACoin = {
+	SeatCount = 8,
+	AfkKickSeconds = 90,
+	AnnouncementStreaks = { 3, 5, 7, 9, 10 },
+	BaseHeadsChance = 0.20,
+	MaxHeadsChance = 0.60,
+	BaseReward = 5,
+	BaseFlipInterval = 1.80,
+	MinFlipInterval = 0.75,
+	ValueGrowth = 1.22,
+	ComboBaseStep = 0.20,
+	ComboStepPerLevel = 0.05,
+	SpeedDecay = 0.93,
+	BiasStep = 0.025,
+	UpgradeConfigs = {
+		valueLevel = {
+			displayName = "Value",
+			costBase = 10,
+			costGrowth = 1.55,
+			maxLevel = 20,
+		},
+		comboLevel = {
+			displayName = "Combo",
+			costBase = 20,
+			costGrowth = 1.60,
+			maxLevel = 15,
+		},
+		speedLevel = {
+			displayName = "Speed",
+			costBase = 25,
+			costGrowth = 1.65,
+			maxLevel = 12,
+		},
+		biasLevel = {
+			displayName = "Bias",
+			costBase = 40,
+			costGrowth = 1.70,
+			maxLevel = 16,
+		},
+	},
+}
+
 GameConfig.RarityNames = {
 	Common = "Common",
 	Uncommon = "Uncommon",

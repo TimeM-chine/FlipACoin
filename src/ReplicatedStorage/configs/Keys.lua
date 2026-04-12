@@ -18,8 +18,13 @@ Keys.DataKey = {
 	---- attributes ----
 	robuxSpent = "robuxSpent",
 	rebirth = "rebirth",
+	fateShards = "fateShards",
 	destroyBlock = "destroyBlock",
 	forgeCount = "forgeCount",
+	bestStreak = "bestStreak",
+	lifetimeFlips = "lifetimeFlips",
+	lifetimeHeads = "lifetimeHeads",
+	lifetimeCashEarned = "lifetimeCashEarned",
 	---- currency ---
 	wins = "wins",
 	gems = "gems",
@@ -53,6 +58,11 @@ Keys.DataKey = {
 	calendar = "calendar",
 	questPack = "questPack",
 	quests = "quests",
+	equippedCoin = "equippedCoin",
+	ownedCoins = "ownedCoins",
+	rebirthTree = "rebirthTree",
+	autoFlipUnlocked = "autoFlipUnlocked",
+	runData = "runData",
 	---- game pass ----
 	gamePasses = "gamePasses",
 }

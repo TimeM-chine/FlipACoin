@@ -244,17 +244,35 @@ function PlayerSystem:UpdateLeaderStats(player)
 end
 
 function PlayerSystem:UpdatePlayerHeadGui(player: Player)
+	GetSystemMgr()
 	local playerIns = PlayerServerClass.GetIns(player, false)
 	if not playerIns then
 		return
 	end
-	local onPlayerHead = player.Character:WaitForChild("Head"):WaitForChild("onPlayerHead")
+	local character = player.Character
+	if not character then
+		return
+	end
+	local head = character:FindFirstChild("Head")
+	if not head then
+		return
+	end
+	local onPlayerHead = head:FindFirstChild("onPlayerHead") or head:FindFirstChild("OnPlayerHead")
+	if not onPlayerHead then
+		return
+	end
 	onPlayerHead.name.Text = player.DisplayName
 
-	local gamePasses = playerIns:GetOneData(dataKey.gamePasses)
-	onPlayerHead.vip.Visible = gamePasses.vip
+	local runData = playerIns:GetOneData(dataKey.runData) or {}
+	local seatId = SystemMgr.systems.TableSeatSystem:GetPlayerSeatId(player)
+	local streak = runData.currentStreak or 0
+	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin) or "Rusty Penny"
 
-	onPlayerHead.cash.Text = `${Util.FormatNumber(playerIns:GetOneData(dataKey.wins))}`
+	onPlayerHead.vip.Visible = true
+	onPlayerHead.vip.Text = seatId or "Spectating"
+	onPlayerHead.cardPackOpened.Visible = true
+	onPlayerHead.cardPackOpened.Text = `Streak {streak} | {equippedCoin}`
+	onPlayerHead.cash.Text = `$ {Util.FormatNumber(playerIns:GetOneData(dataKey.wins), true)}`
 end
 
 table.insert(PlayerSystem.whiteList, "InitData")

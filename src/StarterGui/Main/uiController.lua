@@ -57,6 +57,20 @@ local controller = {}
 
 local NotificationStorage = {}
 
+local function playUiSound(groupName, soundName)
+	local soundGroup = SoundService:FindFirstChild(groupName)
+	if not soundGroup then
+		return
+	end
+
+	local sound = soundGroup:FindFirstChild(soundName)
+	if not sound or not sound:IsA("Sound") then
+		return
+	end
+
+	sound:Play()
+end
+
 local function refreshNotificationLifetime(entry, duration)
 	entry.token = (entry.token or 0) + 1
 	local token = entry.token
@@ -317,7 +331,7 @@ function controller.SetButtonHoverAndClick(btn, fun, playSound)
 	end
 	conns.MouseEnter = btn.MouseEnter:Connect(function()
 		controller.ScaleUnit(btn, scale + 0.15)
-		SoundService.SFX.hoverBtn:Play()
+		playUiSound("SFX", "hoverBtn")
 		if RotateIcon then
 			controller.RotateUnit(RotateIcon, rotate + math.random(-20, 20))
 		end
@@ -380,7 +394,7 @@ function controller.SetButtonHoverAndClick(btn, fun, playSound)
 				if fun then
 					fun()
 					if playSound ~= false then
-						SoundService.SFX.clickBtn:Play()
+						playUiSound("SFX", "clickBtn")
 					end
 					if btn:FindFirstChild("redDot") then
 						btn.redDot.Visible = false

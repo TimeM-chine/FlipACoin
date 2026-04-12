@@ -10,8 +10,13 @@ local DefaultData = {
 	---- attributes ----
 	robuxSpent = 0,
 	rebirth = 0,
+	fateShards = 0,
 	destroyBlock = 0,
 	forgeCount = 0,
+	bestStreak = 0,
+	lifetimeFlips = 0,
+	lifetimeHeads = 0,
+	lifetimeCashEarned = 0,
 	---- currency ---
 	wins = 100,
 	gems = 0,
@@ -81,6 +86,28 @@ local DefaultData = {
 		quests = {},
 	},
 	quests = {},
+	equippedCoin = "Rusty Penny",
+	ownedCoins = {
+		["Rusty Penny"] = true,
+	},
+	rebirthTree = {
+		polishedStart = 0,
+		chainStart = 0,
+		quickStart = 0,
+		luckyStart = 0,
+	},
+	autoFlipUnlocked = false,
+	runData = {
+		valueLevel = 0,
+		comboLevel = 0,
+		speedLevel = 0,
+		biasLevel = 0,
+		currentStreak = 0,
+		bestStreakThisRun = 0,
+		cashEarnedThisRun = 0,
+		flipsThisRun = 0,
+		headsThisRun = 0,
+	},
 	---- game pass ----
 	gamePasses = {},
 }

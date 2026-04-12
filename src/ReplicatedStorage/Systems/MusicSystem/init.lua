@@ -55,6 +55,10 @@ function GetSystemMgr()
 end
 local LoopedMusic = {}
 
+local function GetGlobalSoundVolumeFactor()
+	return 1
+end
+
 local function PlayBGMusic(musicData, fadeIn)
 	fadeIn = fadeIn or 2
 	local musicName = musicData.name
@@ -76,7 +80,7 @@ local function PlayBGMusic(musicData, fadeIn)
 	end
 	music.Looped = true
 	music:Play()
-	volume *= SystemMgr.systems.SettingsSystem:GetGlobalSoundVolumeFactor()
+	volume *= GetGlobalSoundVolumeFactor()
 	local tweenTime = (math.max(volume - music.Volume, 0) / volume) * fadeIn
 	if tweenTime == 0 then
 		return
@@ -91,7 +95,7 @@ local function StopBgMusic(musicData, fadeOut)
 	fadeOut = fadeOut or 2
 	local musicName = musicData.name
 	local volume = musicData.volume or 1
-	volume *= SystemMgr.systems.SettingsSystem:GetGlobalSoundVolumeFactor()
+	volume *= GetGlobalSoundVolumeFactor()
 	local _name = "BGSound." .. musicName
 	local music = workspace["BGSoundsFolder"]:FindFirstChild(_name) :: Sound
 	if music ~= nil then

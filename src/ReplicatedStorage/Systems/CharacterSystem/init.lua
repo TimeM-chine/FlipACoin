@@ -27,7 +27,6 @@ local Types = require(Replicated.configs.Types)
 local Util = require(Replicated.modules.Util)
 local GameConfig = require(Replicated.configs.GameConfig)
 local ModelModule = require(Replicated.modules.ModelModule)
-local RebirthPresets = require(Replicated.Systems.RebirthSystem.Presets)
 local dataKey = Keys.DataKey
 
 ---- common variables ----

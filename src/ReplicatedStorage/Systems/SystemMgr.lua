@@ -55,9 +55,11 @@ local mt = {
 local systems = {
 	AnimateSystem = require(Replicated.Systems.AnimateSystem),
 	-- BackpackSystem = require(Replicated.Systems.BackpackSystem),
+	AnnouncementSystem = require(Replicated.Systems.AnnouncementSystem),
 	-- BoxSystem = require(Replicated.Systems.BoxSystem),
 	-- BuffSystem = require(Replicated.Systems.BuffSystem), -- buff
 	CharacterSystem = require(Replicated.Systems.CharacterSystem),
+	CoinFlipSystem = require(Replicated.Systems.CoinFlipSystem),
 	-- DailySystem = require(Replicated.Systems.DailySystem),
 	-- DoorSystem = require(Replicated.Systems.DoorSystem),
 	-- EcoSystem = require(Replicated.Systems.EcoSystem),
@@ -71,6 +73,7 @@ local systems = {
 	-- NPCSystem = require(Replicated.Systems.NPCSystem),
 	-- PetSystem = require(Replicated.Systems.PetSystem),
 	PlayerSystem = require(Replicated.Systems.PlayerSystem),
+	TableSeatSystem = require(Replicated.Systems.TableSeatSystem),
 	-- PotionSystem = require(Replicated.Systems.PotionSystem),
 	-- QuestSystem = require(Replicated.Systems.QuestSystem),
 	-- RebirthSystem = require(Replicated.Systems.RebirthSystem),
@@ -89,7 +92,10 @@ setmetatable(systems, mt)
 
 local LoadOrder = {
 	"PlayerSystem",
+	"TableSeatSystem",
+	"CoinFlipSystem",
 	"CharacterSystem",
+	"AnnouncementSystem",
 }
 
 local SystemMgr = {}
@@ -289,13 +295,15 @@ end
 
 function SystemMgr.Start()
 	for _, name in ipairs(LoadOrder) do
-		task.spawn(LoadSystem, name)
+		if not systems[name].IsLoaded then
+			LoadSystem(name)
+		end
 	end
 	for name, system in pairs(systems) do
 		if systems[name].IsLoaded then
 			continue
 		end
-		task.spawn(LoadSystem, name)
+		LoadSystem(name)
 	end
 
 	if IsServer then
