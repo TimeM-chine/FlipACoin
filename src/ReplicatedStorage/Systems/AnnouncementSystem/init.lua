@@ -97,6 +97,11 @@ function AnnouncementSystem:HandleFlipResolved(sender, player, args)
 			tier = thresholdConfig.tier,
 			text = text,
 			textColor = thresholdConfig.color,
+			strokeColor = thresholdConfig.strokeColor,
+			duration = thresholdConfig.duration,
+			bannerText = thresholdConfig.bannerText,
+			soundName = thresholdConfig.soundName,
+			isJackpot = thresholdConfig.isJackpot == true,
 		})
 	end
 end
@@ -106,18 +111,7 @@ function AnnouncementSystem:PlayAnnouncement(sender, player, args)
 		return
 	end
 
-	if not uiController then
-		local localPlayer = Players.LocalPlayer
-		local playerGui = localPlayer:WaitForChild("PlayerGui")
-		local main = playerGui:WaitForChild("Main")
-		uiController = require(main:WaitForChild("uiController"))
-	end
-
-	uiController.SetNotification({
-		text = args.text,
-		lastTime = 2.2,
-		textColor = args.textColor,
-	})
+	AnnouncementUi.PlayAnnouncement(args)
 end
 
 return AnnouncementSystem

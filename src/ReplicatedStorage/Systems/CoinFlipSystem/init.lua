@@ -86,12 +86,11 @@ local function normalizeRunData(playerIns)
 end
 
 local function getSeatState(player)
-	local seatId = SystemMgr.systems.TableSeatSystem:GetPlayerSeatId(player)
+	local seatState = SystemMgr.systems.TableSeatSystem:GetClientSeatState(player) or {}
+	seatState.seatId = seatState.mySeatId
+	seatState.isSeated = seatState.mySeatId ~= nil
 
-	return {
-		isSeated = seatId ~= nil,
-		seatId = seatId,
-	}
+	return seatState
 end
 
 local function buildClientState(player)
@@ -195,10 +194,11 @@ function CoinFlipSystem:RequestFlip(sender, player)
 	if not IsServer then
 		return
 	end
-	if sender ~= SENDER then
+
+	player = player or sender
+	if sender ~= SENDER and sender ~= player then
 		return
 	end
-
 	local seatSystem = SystemMgr.systems.TableSeatSystem
 	if not seatSystem:IsPlayerSeated(player) then
 		return
@@ -245,6 +245,7 @@ function CoinFlipSystem:RequestFlip(sender, player)
 
 	seatSystem:RegisterActivity(SENDER, player)
 	refreshCashDisplays(player)
+	seatSystem:RefreshAudienceState(SENDER)
 
 	local observedPayload = {
 		userId = player.UserId,
@@ -269,7 +270,9 @@ function CoinFlipSystem:BuyUpgrade(sender, player, args)
 	if not IsServer then
 		return
 	end
-	if sender ~= SENDER then
+
+	player = player or sender
+	if sender ~= SENDER and sender ~= player then
 		return
 	end
 
@@ -306,6 +309,7 @@ function CoinFlipSystem:BuyUpgrade(sender, player, args)
 
 	seatSystem:RegisterActivity(SENDER, player)
 	refreshCashDisplays(player)
+	seatSystem:RefreshAudienceState(SENDER)
 	syncPlayerState(self, player, {
 		upgradePurchased = upgradeKey,
 	})

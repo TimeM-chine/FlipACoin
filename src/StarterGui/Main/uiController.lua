@@ -383,8 +383,7 @@ function controller.SetButtonHoverAndClick(btn, fun, playSound)
 		conns.MouseButton1Click = desBtn.MouseButton1Click:Connect(function()
 			if coolDown == false then
 				if guideButton and btn:IsDescendantOf(Main) then
-					local allowedByGuideButton =
-						guideButton == btn or guideButton:IsDescendantOf(btn)
+					local allowedByGuideButton = guideButton == btn or guideButton:IsDescendantOf(btn)
 					local allowedByGuideFrame = guideFrame and (btn == guideFrame or btn:IsDescendantOf(guideFrame))
 					if not (allowedByGuideButton or allowedByGuideFrame) then
 						return
@@ -951,56 +950,56 @@ function controller.AddReward(args: { icon: string, count: number })
 end
 
 ----[[ Countdown Modal ]]----
-local CountdownModal = Frames:WaitForChild("CountdownModal", 5)
-if CountdownModal then
-	function controller.OpenCountdownModal(args)
-		local countdown = args.countdown or 5
-		local confirmCallback = function()
-			if args.confirmCallback then
-				args.confirmCallback()
-			end
-			controller.CloseFrame("CountdownModal")
-			controller.CancelTimer({
-				textLabel = CountdownModal.countdown,
-			})
-		end
-		local cancelCallback = function()
-			if args.cancelCallback then
-				args.cancelCallback()
-			end
-			controller.CloseFrame("CountdownModal")
-			controller.CancelTimer({
-				textLabel = CountdownModal.countdown,
-			})
-		end
-		local description = args.description
+-- local CountdownModal = Frames:WaitForChild("CountdownModal", 5)
+-- if CountdownModal then
+-- 	function controller.OpenCountdownModal(args)
+-- 		local countdown = args.countdown or 5
+-- 		local confirmCallback = function()
+-- 			if args.confirmCallback then
+-- 				args.confirmCallback()
+-- 			end
+-- 			controller.CloseFrame("CountdownModal")
+-- 			controller.CancelTimer({
+-- 				textLabel = CountdownModal.countdown,
+-- 			})
+-- 		end
+-- 		local cancelCallback = function()
+-- 			if args.cancelCallback then
+-- 				args.cancelCallback()
+-- 			end
+-- 			controller.CloseFrame("CountdownModal")
+-- 			controller.CancelTimer({
+-- 				textLabel = CountdownModal.countdown,
+-- 			})
+-- 		end
+-- 		local description = args.description
 
-		if CountdownModal.Visible then
-			controller.CancelTimer({
-				textLabel = CountdownModal.countdown,
-			})
-		end
+-- 		if CountdownModal.Visible then
+-- 			controller.CancelTimer({
+-- 				textLabel = CountdownModal.countdown,
+-- 			})
+-- 		end
 
-		CountdownModal.description.Text = description
-		controller.OpenFrame("CountdownModal")
-		controller.AddTimerLabel({
-			textLabel = CountdownModal.countdown,
-			duration = countdown,
-			callback = function()
-				if cancelCallback then
-					cancelCallback()
-				end
-			end,
-			format = "number",
-		})
+-- 		CountdownModal.description.Text = description
+-- 		controller.OpenFrame("CountdownModal")
+-- 		controller.AddTimerLabel({
+-- 			textLabel = CountdownModal.countdown,
+-- 			duration = countdown,
+-- 			callback = function()
+-- 				if cancelCallback then
+-- 					cancelCallback()
+-- 				end
+-- 			end,
+-- 			format = "number",
+-- 		})
 
-		controller.SetButtonHoverAndClick(CountdownModal.confirm, function()
-			confirmCallback()
-		end)
-		controller.SetButtonHoverAndClick(CountdownModal.cancel, function()
-			cancelCallback()
-		end)
-	end
-end
+-- 		controller.SetButtonHoverAndClick(CountdownModal.confirm, function()
+-- 			confirmCallback()
+-- 		end)
+-- 		controller.SetButtonHoverAndClick(CountdownModal.cancel, function()
+-- 			cancelCallback()
+-- 		end)
+-- 	end
+-- end
 
 return controller

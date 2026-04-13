@@ -309,16 +309,11 @@ function SystemMgr.Start()
 		DataMgr = require(ServerStorage.modules.DataManager)
 		PlayerServerClass = require(ServerStorage.classes.PlayerServerClass)
 
-		-- Fix: use task.spawn for existing players (same as PlayerAdded event)
-		for _, player in ipairs(game.Players:GetPlayers()) do
-			for _, name in ipairs(ListenAdded) do
-				task.spawn(function()
-					systems[name]:PlayerAdded(SENDER, player)
-				end)
+		local function HandlePlayerAdded(player)
+			local playerIns = PlayerServerClass.GetIns(player, true)
+			if not playerIns then
+				return
 			end
-		end
-
-		game.Players.PlayerAdded:Connect(function(player)
 			for _, name in ipairs(ListenAdded) do
 				task.spawn(function()
 					systems[name]:PlayerAdded(SENDER, player)
@@ -328,6 +323,15 @@ function SystemMgr.Start()
 					table.insert(ListenMoving, name)
 				end
 			end
+		end
+
+		-- Fix: use task.spawn for existing players (same as PlayerAdded event)
+		for _, player in ipairs(game.Players:GetPlayers()) do
+			HandlePlayerAdded(player)
+		end
+
+		game.Players.PlayerAdded:Connect(function(player)
+			HandlePlayerAdded(player)
 		end)
 
 		-- Orchestrated PlayerRemoving lifecycle:

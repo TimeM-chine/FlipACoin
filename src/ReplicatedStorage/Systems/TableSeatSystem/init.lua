@@ -5,13 +5,32 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 ---- requires ----
+local Keys = require(Replicated.configs.Keys)
 local ScheduleModule = require(Replicated.modules.ScheduleModule)
 local Presets = require(script.Presets)
 local Types = require(Replicated.configs.Types)
+local Util = require(Replicated.modules.Util)
 
 ---- common variables ----
 local IsServer = RunService:IsServer()
 local SENDER, SystemMgr
+local dataKey = Keys.DataKey
+
+local BillboardColors = {
+	Background = Color3.fromRGB(20, 24, 30),
+	Stroke = Color3.fromRGB(255, 214, 124),
+	Title = Color3.fromRGB(255, 245, 213),
+	Name = Color3.fromRGB(248, 248, 248),
+	Detail = Color3.fromRGB(205, 214, 229),
+	Cash = Color3.fromRGB(134, 255, 178),
+	Open = Color3.fromRGB(145, 221, 160),
+	Warm = Color3.fromRGB(255, 210, 125),
+	Hot = Color3.fromRGB(255, 160, 110),
+	Jackpot = Color3.fromRGB(255, 113, 113),
+}
+
+---- server variables ----
+local PlayerServerClass
 
 ---- client variables ----
 local TableSeatUi = { pendingCalls = {} }
@@ -33,6 +52,8 @@ local TableSeatSystem: Types.System = {
 TableSeatSystem.__index = TableSeatSystem
 
 if IsServer then
+	local ServerStorage = game:GetService("ServerStorage")
+	PlayerServerClass = require(ServerStorage.classes.PlayerServerClass)
 	TableSeatSystem.Client = setmetatable({}, TableSeatSystem)
 else
 	TableSeatSystem.Server = setmetatable({}, TableSeatSystem)
@@ -47,24 +68,203 @@ local function GetSystemMgr()
 end
 
 local function buildSeatState(self, player)
+	self:_EnsureSeatCatalog()
+
 	local mySeatId = self._playerSeats[player.UserId]
 	local occupiedSeats = {}
 	local tablePlayerUserIds = {}
+	local seatOrder = self._seatOrder or {}
+	local seatDisplayEntries = {}
 
-	for _, seatId in ipairs(self._seatOrder or {}) do
+	for _, seatId in ipairs(seatOrder) do
 		local occupant = self._seatOwners[seatId]
 		if occupant and occupant:IsDescendantOf(Players) then
 			occupiedSeats[seatId] = occupant.UserId
 			table.insert(tablePlayerUserIds, occupant.UserId)
 		end
+
+		table.insert(seatDisplayEntries, self:_BuildSeatDisplayEntry(seatId, occupant))
 	end
 
 	return {
 		mySeatId = mySeatId,
+		seatId = mySeatId,
+		isSeated = mySeatId ~= nil,
 		occupiedSeats = occupiedSeats,
 		tablePlayerUserIds = tablePlayerUserIds,
+		seatOrder = table.clone(seatOrder),
+		seatDisplayEntries = seatDisplayEntries,
+		openSeatCount = math.max(#seatOrder - #tablePlayerUserIds, 0),
 		isSpectating = mySeatId == nil,
 	}
+end
+
+local function getSeatBillboardTone(streak)
+	if streak >= 10 then
+		return "Jackpot", BillboardColors.Jackpot
+	end
+	if streak >= 7 then
+		return "On Fire", BillboardColors.Hot
+	end
+	if streak >= 3 then
+		return "Heating Up", BillboardColors.Warm
+	end
+	return "Ready", BillboardColors.Open
+end
+
+local function getSeatBillboardAdornee(self, seatId)
+	local tableModel = Workspace:FindFirstChild(Presets.TableModelName)
+	local attachmentsFolder = tableModel and tableModel:FindFirstChild("Attachments")
+	local marker = attachmentsFolder and attachmentsFolder:FindFirstChild(`${seatId}Marker`)
+	local attachment = marker and marker:FindFirstChildWhichIsA("Attachment")
+	if attachment then
+		return attachment
+	end
+
+	local seatRecord = self._seats and self._seats[seatId]
+	return seatRecord and seatRecord.seat or nil
+end
+
+local function ensureSeatBillboard(self, seatId)
+	local seatRecord = self._seats and self._seats[seatId]
+	if not seatRecord or not seatRecord.seat then
+		return nil
+	end
+
+	if seatRecord.billboard and seatRecord.billboard.Parent then
+		seatRecord.billboard.Adornee = getSeatBillboardAdornee(self, seatId)
+		return seatRecord.billboard
+	end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "SeatInfoBillboard"
+	billboard.AlwaysOnTop = true
+	billboard.MaxDistance = 72
+	billboard.ResetOnSpawn = false
+	billboard.Size = UDim2.fromOffset(208, 92)
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, 4.25, 0)
+	billboard.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	billboard.Adornee = getSeatBillboardAdornee(self, seatId)
+	billboard.Parent = seatRecord.seat
+
+	local frame = Instance.new("Frame")
+	frame.Name = "Frame"
+	frame.BackgroundColor3 = BillboardColors.Background
+	frame.BackgroundTransparency = 0.18
+	frame.BorderSizePixel = 0
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.Parent = billboard
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 14)
+	corner.Parent = frame
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = BillboardColors.Stroke
+	stroke.Thickness = 1.5
+	stroke.Transparency = 0.22
+	stroke.Parent = frame
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingBottom = UDim.new(0, 10)
+	padding.PaddingLeft = UDim.new(0, 12)
+	padding.PaddingRight = UDim.new(0, 12)
+	padding.PaddingTop = UDim.new(0, 10)
+	padding.Parent = frame
+
+	local seatLabel = Instance.new("TextLabel")
+	seatLabel.Name = "SeatLabel"
+	seatLabel.BackgroundTransparency = 1
+	seatLabel.Font = Enum.Font.GothamBold
+	seatLabel.TextColor3 = BillboardColors.Title
+	seatLabel.TextSize = 13
+	seatLabel.TextXAlignment = Enum.TextXAlignment.Left
+	seatLabel.Position = UDim2.fromOffset(0, 0)
+	seatLabel.Size = UDim2.new(1, -78, 0, 16)
+	seatLabel.Parent = frame
+
+	local statusLabel = Instance.new("TextLabel")
+	statusLabel.Name = "StatusLabel"
+	statusLabel.AnchorPoint = Vector2.new(1, 0)
+	statusLabel.BackgroundTransparency = 1
+	statusLabel.Font = Enum.Font.GothamBold
+	statusLabel.TextSize = 13
+	statusLabel.TextXAlignment = Enum.TextXAlignment.Right
+	statusLabel.Position = UDim2.new(1, 0, 0, 0)
+	statusLabel.Size = UDim2.new(0, 78, 0, 16)
+	statusLabel.Parent = frame
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "NameLabel"
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Font = Enum.Font.GothamBlack
+	nameLabel.TextColor3 = BillboardColors.Name
+	nameLabel.TextScaled = true
+	nameLabel.TextWrapped = true
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Position = UDim2.fromOffset(0, 20)
+	nameLabel.Size = UDim2.new(1, 0, 0, 26)
+	nameLabel.Parent = frame
+
+	local detailLabel = Instance.new("TextLabel")
+	detailLabel.Name = "DetailLabel"
+	detailLabel.BackgroundTransparency = 1
+	detailLabel.Font = Enum.Font.GothamSemibold
+	detailLabel.TextColor3 = BillboardColors.Detail
+	detailLabel.TextSize = 14
+	detailLabel.TextWrapped = true
+	detailLabel.TextXAlignment = Enum.TextXAlignment.Left
+	detailLabel.Position = UDim2.fromOffset(0, 50)
+	detailLabel.Size = UDim2.new(1, 0, 0, 16)
+	detailLabel.Parent = frame
+
+	local cashLabel = Instance.new("TextLabel")
+	cashLabel.Name = "CashLabel"
+	cashLabel.BackgroundTransparency = 1
+	cashLabel.Font = Enum.Font.GothamBold
+	cashLabel.TextColor3 = BillboardColors.Cash
+	cashLabel.TextSize = 16
+	cashLabel.TextXAlignment = Enum.TextXAlignment.Left
+	cashLabel.Position = UDim2.fromOffset(0, 68)
+	cashLabel.Size = UDim2.new(1, 0, 0, 16)
+	cashLabel.Parent = frame
+
+	seatRecord.billboard = billboard
+	return billboard
+end
+
+local function refreshSeatBillboards(self)
+	if not IsServer then
+		return
+	end
+
+	self:_EnsureSeatCatalog()
+
+	for _, seatId in ipairs(self._seatOrder or {}) do
+		local entry = self:_BuildSeatDisplayEntry(seatId, self._seatOwners[seatId])
+		local billboard = ensureSeatBillboard(self, seatId)
+		if not billboard then
+			continue
+		end
+
+		local frame = billboard:FindFirstChild("Frame")
+		local seatLabel = frame and frame:FindFirstChild("SeatLabel")
+		local statusLabel = frame and frame:FindFirstChild("StatusLabel")
+		local nameLabel = frame and frame:FindFirstChild("NameLabel")
+		local detailLabel = frame and frame:FindFirstChild("DetailLabel")
+		local cashLabel = frame and frame:FindFirstChild("CashLabel")
+		if not frame or not seatLabel or not statusLabel or not nameLabel or not detailLabel or not cashLabel then
+			continue
+		end
+
+		seatLabel.Text = entry.seatId
+		statusLabel.Text = entry.statusText
+		statusLabel.TextColor3 = entry.statusColor
+		nameLabel.Text = entry.displayName
+		detailLabel.Text = entry.detailText
+		cashLabel.Text = entry.cashText
+		billboard.Enabled = true
+	end
 end
 
 local function refreshPromptAttributes(self, seatId)
@@ -106,16 +306,19 @@ local function syncCoinFlipSeatState(self, player, seatState)
 		return
 	end
 
+	local coinFlipSeatState = table.clone(seatState)
+	coinFlipSeatState.seatId = seatState.mySeatId
+	coinFlipSeatState.isSeated = seatState.mySeatId ~= nil
+
 	coinFlipSystem.Client:SeatStateChanged(player, {
-		seatState = {
-			isSeated = seatState.isSpectating == false,
-			seatId = seatState.mySeatId,
-		},
+		seatState = coinFlipSeatState,
 	})
 end
 
 local function broadcastSeatStates(self)
 	local systemMgr = GetSystemMgr()
+
+	refreshSeatBillboards(self)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		local seatState = buildSeatState(self, player)
@@ -243,6 +446,60 @@ function TableSeatSystem:_EnsureSeatCatalog()
 	end
 end
 
+function TableSeatSystem:_BuildSeatDisplayEntry(seatId, occupant)
+	if not IsServer then
+		return {
+			seatId = seatId,
+			displayName = "Open Seat",
+			coinName = "",
+			streak = 0,
+			cash = 0,
+			cashText = "",
+			statusText = "Available",
+			statusColor = BillboardColors.Open,
+			detailText = "Sit down to start flipping.",
+			isOccupied = false,
+		}
+	end
+
+	local entry = {
+		seatId = seatId,
+		displayName = "Open Seat",
+		coinName = "",
+		streak = 0,
+		cash = 0,
+		cashText = "",
+		statusText = "Available",
+		statusColor = BillboardColors.Open,
+		detailText = "Sit down to start flipping.",
+		isOccupied = false,
+	}
+
+	if not occupant or not occupant:IsDescendantOf(Players) then
+		return entry
+	end
+
+	local playerIns = PlayerServerClass.GetIns(occupant, false)
+	local runData = playerIns and playerIns:GetOneData(dataKey.runData) or {}
+	local streak = runData.currentStreak or 0
+	local equippedCoin = playerIns and (playerIns:GetOneData(dataKey.equippedCoin) or "Rusty Penny") or "Rusty Penny"
+	local cash = playerIns and (playerIns:GetOneData(dataKey.wins) or 0) or 0
+	local statusText, statusColor = getSeatBillboardTone(streak)
+
+	entry.userId = occupant.UserId
+	entry.displayName = occupant.DisplayName
+	entry.coinName = equippedCoin
+	entry.streak = streak
+	entry.cash = cash
+	entry.cashText = `$ {Util.FormatNumber(cash, true)}`
+	entry.statusText = statusText
+	entry.statusColor = statusColor
+	entry.detailText = `Streak {streak} | {equippedCoin}`
+	entry.isOccupied = true
+
+	return entry
+end
+
 function TableSeatSystem:Init()
 	GetSystemMgr()
 	self:_EnsureSeatCatalog()
@@ -308,6 +565,17 @@ function TableSeatSystem:GetClientSeatState(player)
 	return buildSeatState(self, player)
 end
 
+function TableSeatSystem:RefreshAudienceState(sender)
+	if not IsServer then
+		return
+	end
+	if sender ~= SENDER then
+		return
+	end
+
+	broadcastSeatStates(self)
+end
+
 function TableSeatSystem:PlayerAdded(sender, player, args)
 	if IsServer then
 		if sender ~= SENDER then
@@ -353,7 +621,9 @@ function TableSeatSystem:RequestSit(sender, player, args)
 	if not IsServer then
 		return
 	end
-	if sender ~= SENDER then
+
+	player = player or sender
+	if sender ~= SENDER and sender ~= player then
 		return
 	end
 
@@ -398,7 +668,9 @@ function TableSeatSystem:RequestStand(sender, player, args)
 	if not IsServer then
 		return
 	end
-	if sender ~= SENDER then
+
+	player = player or sender
+	if sender ~= SENDER and sender ~= player then
 		return
 	end
 

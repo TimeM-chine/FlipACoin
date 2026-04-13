@@ -9,7 +9,7 @@ GameConfig.UpdateLog = {
 	"🐛 BUG FIXES",
 }
 
-local IsDebug = false
+local IsDebug = true
 GameConfig.IsDebug = RunService:IsStudio() and IsDebug
 
 GameConfig.GroupId = 679281254 -- Beginning-of-Autumn

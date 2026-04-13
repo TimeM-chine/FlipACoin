@@ -5,7 +5,7 @@ local TableModule = require(Replicated.modules.TableModule)
 local DebugData = table.clone(DEFAULT_DATA) -- just for auto completion
 DebugData = TableModule.DeepCopy(DEFAULT_DATA)
 
--- DebugData.wins = 100000
+DebugData.wins = 100000000000000000
 
 -- DebugData.settingsData = {
 -- 	bgm = 1,

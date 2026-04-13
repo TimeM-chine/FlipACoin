@@ -1,7 +1,7 @@
 --!strict
 export type PlayerLevel = {
-	levelId: int,
-	levelUpExp: int,
+	levelId: number,
+	levelUpExp: number,
 }
 
 local PlayerLevel: { PlayerLevel } = {

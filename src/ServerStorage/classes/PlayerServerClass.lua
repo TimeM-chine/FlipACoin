@@ -55,7 +55,7 @@ end
 -- default: create instance if player is still in the game
 function PlayerServerClass.GetIns(player, createIfNil)
 	if not playerInsList[player.UserId] then
-		createIfNil = createIfNil == nil and true or false
+		-- createIfNil = createIfNil == nil and true or false
 		if createIfNil then
 			return CreatePlayerIns(player)
 		end
