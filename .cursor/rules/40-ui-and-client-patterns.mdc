@@ -1,0 +1,39 @@
+---
+description: Generic UI and client interaction rules
+globs:
+  - "src/StarterGui/**/*.lua"
+  - "src/ReplicatedStorage/Systems/**/ui.lua"
+  - "src/StarterPlayer/**/*.lua"
+alwaysApply: false
+---
+
+# UI And Client Patterns
+
+## UI interactions
+
+- Use `uiController` helper utilities for button interactions when available.
+- Reuse existing controller or helper patterns instead of creating parallel button or notification systems.
+- Do not manually duplicate button hover, click, or cleanup behavior if the framework already provides it.
+
+## Layout
+
+- For new responsive UI, prefer `UDim2.fromScale()` and keep offsets at `0` unless fixed-size behavior is intentional.
+- Keep UI behavior consistent with the repository's established screen and HUD structure.
+- Prefer scale-based layout over fixed offsets for cross-device behavior.
+- Use `TextScaled` when the repository already relies on it for responsive text in UI-heavy flows.
+
+## System UI split
+
+- Let entry modules handle bridge and lifecycle wiring.
+- Let UI-focused modules handle client rendering and local interactions.
+
+## Client guidance
+
+- Extend the repository's existing UI flow before introducing a new client architecture.
+- If using MCP tools to generate or edit UI, follow the same scale/layout and helper-usage rules.
+- Test UI on multiple screen sizes and input types when the feature affects layout or interaction.
+
+## Scheduled tasks and loops
+
+- Prefer the framework's scheduling utility over ad hoc `while true do task.wait()` loops when such a scheduler exists.
+- If the repository uses something like `ScheduleModule`, use it for periodic work and keep a cancellation path when needed.

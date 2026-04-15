@@ -267,11 +267,13 @@ function PlayerSystem:UpdatePlayerHeadGui(player: Player)
 	local seatId = SystemMgr.systems.TableSeatSystem:GetPlayerSeatId(player)
 	local streak = runData.currentStreak or 0
 	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin) or "Rusty Penny"
+	local isSeated = seatId ~= nil
 
 	onPlayerHead.vip.Visible = true
 	onPlayerHead.vip.Text = seatId or "Spectating"
 	onPlayerHead.cardPackOpened.Visible = true
-	onPlayerHead.cardPackOpened.Text = `Streak {streak} | {equippedCoin}`
+	onPlayerHead.cardPackOpened.Text = isSeated and (streak > 0 and `Streak {streak}` or equippedCoin) or equippedCoin
+	onPlayerHead.cash.Visible = not isSeated
 	onPlayerHead.cash.Text = `$ {Util.FormatNumber(playerIns:GetOneData(dataKey.wins), true)}`
 end
 

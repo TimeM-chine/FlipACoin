@@ -1,0 +1,27 @@
+---
+description: Generic Roblox Luau style and code-shape rules
+alwaysApply: true
+---
+
+# Roblox Luau Style
+
+## Strings
+
+- Prefer Roblox backtick interpolation.
+- Do not introduce `string.format` when interpolation is enough.
+
+```lua
+local text = `{player.Name} dealt {damage} damage`
+```
+
+## Code shape
+
+- Prefer direct, readable modules over unnecessary abstraction.
+- Keep lifecycle and entry methods easy to find near the top of entry modules.
+- Push pure logic into helper modules instead of growing entry files indefinitely.
+- Follow the repository's existing file layout instead of forcing a new one.
+
+## Consistency
+
+- Match the naming and structure already used by the surrounding system.
+- Reuse existing helpers and project conventions before adding new patterns.

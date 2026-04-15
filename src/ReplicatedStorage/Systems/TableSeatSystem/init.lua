@@ -103,10 +103,10 @@ local function getSeatBillboardTone(streak)
 	if streak >= 10 then
 		return "Jackpot", BillboardColors.Jackpot
 	end
-	if streak >= 7 then
+	if streak >= 8 then
 		return "On Fire", BillboardColors.Hot
 	end
-	if streak >= 3 then
+	if streak >= 4 then
 		return "Heating Up", BillboardColors.Warm
 	end
 	return "Ready", BillboardColors.Open
@@ -115,7 +115,7 @@ end
 local function getSeatBillboardAdornee(self, seatId)
 	local tableModel = Workspace:FindFirstChild(Presets.TableModelName)
 	local attachmentsFolder = tableModel and tableModel:FindFirstChild("Attachments")
-	local marker = attachmentsFolder and attachmentsFolder:FindFirstChild(`${seatId}Marker`)
+	local marker = attachmentsFolder and attachmentsFolder:FindFirstChild(`{seatId}Marker`)
 	local attachment = marker and marker:FindFirstChildWhichIsA("Attachment")
 	if attachment then
 		return attachment
@@ -136,98 +136,8 @@ local function ensureSeatBillboard(self, seatId)
 		return seatRecord.billboard
 	end
 
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "SeatInfoBillboard"
-	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 72
-	billboard.ResetOnSpawn = false
-	billboard.Size = UDim2.fromOffset(208, 92)
-	billboard.StudsOffsetWorldSpace = Vector3.new(0, 4.25, 0)
-	billboard.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	local billboard = seatRecord.seat:WaitForChild("SeatInfoBillboard")
 	billboard.Adornee = getSeatBillboardAdornee(self, seatId)
-	billboard.Parent = seatRecord.seat
-
-	local frame = Instance.new("Frame")
-	frame.Name = "Frame"
-	frame.BackgroundColor3 = BillboardColors.Background
-	frame.BackgroundTransparency = 0.18
-	frame.BorderSizePixel = 0
-	frame.Size = UDim2.fromScale(1, 1)
-	frame.Parent = billboard
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 14)
-	corner.Parent = frame
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = BillboardColors.Stroke
-	stroke.Thickness = 1.5
-	stroke.Transparency = 0.22
-	stroke.Parent = frame
-
-	local padding = Instance.new("UIPadding")
-	padding.PaddingBottom = UDim.new(0, 10)
-	padding.PaddingLeft = UDim.new(0, 12)
-	padding.PaddingRight = UDim.new(0, 12)
-	padding.PaddingTop = UDim.new(0, 10)
-	padding.Parent = frame
-
-	local seatLabel = Instance.new("TextLabel")
-	seatLabel.Name = "SeatLabel"
-	seatLabel.BackgroundTransparency = 1
-	seatLabel.Font = Enum.Font.GothamBold
-	seatLabel.TextColor3 = BillboardColors.Title
-	seatLabel.TextSize = 13
-	seatLabel.TextXAlignment = Enum.TextXAlignment.Left
-	seatLabel.Position = UDim2.fromOffset(0, 0)
-	seatLabel.Size = UDim2.new(1, -78, 0, 16)
-	seatLabel.Parent = frame
-
-	local statusLabel = Instance.new("TextLabel")
-	statusLabel.Name = "StatusLabel"
-	statusLabel.AnchorPoint = Vector2.new(1, 0)
-	statusLabel.BackgroundTransparency = 1
-	statusLabel.Font = Enum.Font.GothamBold
-	statusLabel.TextSize = 13
-	statusLabel.TextXAlignment = Enum.TextXAlignment.Right
-	statusLabel.Position = UDim2.new(1, 0, 0, 0)
-	statusLabel.Size = UDim2.new(0, 78, 0, 16)
-	statusLabel.Parent = frame
-
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Name = "NameLabel"
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Font = Enum.Font.GothamBlack
-	nameLabel.TextColor3 = BillboardColors.Name
-	nameLabel.TextScaled = true
-	nameLabel.TextWrapped = true
-	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	nameLabel.Position = UDim2.fromOffset(0, 20)
-	nameLabel.Size = UDim2.new(1, 0, 0, 26)
-	nameLabel.Parent = frame
-
-	local detailLabel = Instance.new("TextLabel")
-	detailLabel.Name = "DetailLabel"
-	detailLabel.BackgroundTransparency = 1
-	detailLabel.Font = Enum.Font.GothamSemibold
-	detailLabel.TextColor3 = BillboardColors.Detail
-	detailLabel.TextSize = 14
-	detailLabel.TextWrapped = true
-	detailLabel.TextXAlignment = Enum.TextXAlignment.Left
-	detailLabel.Position = UDim2.fromOffset(0, 50)
-	detailLabel.Size = UDim2.new(1, 0, 0, 16)
-	detailLabel.Parent = frame
-
-	local cashLabel = Instance.new("TextLabel")
-	cashLabel.Name = "CashLabel"
-	cashLabel.BackgroundTransparency = 1
-	cashLabel.Font = Enum.Font.GothamBold
-	cashLabel.TextColor3 = BillboardColors.Cash
-	cashLabel.TextSize = 16
-	cashLabel.TextXAlignment = Enum.TextXAlignment.Left
-	cashLabel.Position = UDim2.fromOffset(0, 68)
-	cashLabel.Size = UDim2.new(1, 0, 0, 16)
-	cashLabel.Parent = frame
 
 	seatRecord.billboard = billboard
 	return billboard
@@ -243,19 +153,12 @@ local function refreshSeatBillboards(self)
 	for _, seatId in ipairs(self._seatOrder or {}) do
 		local entry = self:_BuildSeatDisplayEntry(seatId, self._seatOwners[seatId])
 		local billboard = ensureSeatBillboard(self, seatId)
-		if not billboard then
-			continue
-		end
-
-		local frame = billboard:FindFirstChild("Frame")
-		local seatLabel = frame and frame:FindFirstChild("SeatLabel")
-		local statusLabel = frame and frame:FindFirstChild("StatusLabel")
-		local nameLabel = frame and frame:FindFirstChild("NameLabel")
-		local detailLabel = frame and frame:FindFirstChild("DetailLabel")
-		local cashLabel = frame and frame:FindFirstChild("CashLabel")
-		if not frame or not seatLabel or not statusLabel or not nameLabel or not detailLabel or not cashLabel then
-			continue
-		end
+		local frame = billboard.Frame
+		local seatLabel = frame.SeatLabel
+		local statusLabel = frame.StatusLabel
+		local nameLabel = frame.NameLabel
+		local detailLabel = frame.DetailLabel
+		local cashLabel = frame.CashLabel
 
 		seatLabel.Text = entry.seatId
 		statusLabel.Text = entry.statusText

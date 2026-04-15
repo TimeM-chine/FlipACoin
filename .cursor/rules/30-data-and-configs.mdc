@@ -1,0 +1,52 @@
+---
+description: Generic data, config, and table-driven content rules
+globs:
+  - "src/ReplicatedStorage/configs/**/*.lua"
+  - "src/ReplicatedStorage/ExcelConfig/**/*.lua"
+  - "src/ReplicatedStorage/Systems/**/Presets.lua"
+  - "src/ServerStorage/classes/**/*.lua"
+  - "src/ServerStorage/modules/**/*.lua"
+alwaysApply: false
+---
+
+# Data And Config Rules
+
+## Where data belongs
+
+- Put global constants in the repository's shared config layer.
+- Put feature-specific constants in the nearest feature-owned config or preset file.
+- Put table-driven gameplay content in the repository's existing data-table layer when one exists.
+- Prefer existing framework config files before creating new ones.
+- In framework-based projects, common shared config files often include:
+  - `GameConfig.lua` for global runtime settings
+  - `Keys.lua` for constants and identifiers
+  - `Types.lua` for Luau types
+  - per-system `Presets.lua` for feature-owned constants
+
+## Persistence
+
+- Use the repository's established persistence path.
+- Do not add ad hoc persistence paths that bypass existing data managers, profile wrappers, or save services.
+- When adding persisted fields, update every place the repository uses to define:
+  - default values
+  - key constants
+  - schema shape
+  - migration or reconciliation behavior
+
+## Client data flow
+
+- Use the repository's established client-side data mirror or state container.
+- Do not invent a parallel cache for the same persisted fields unless there is a clear reason.
+
+## Config integrity
+
+- Required config and preset fields should be complete.
+- Avoid defensive nil guards that hide missing or broken config during development.
+- When editing balance values, check the related presets, runtime consumers, UI display, and reward tables that depend on them.
+
+## Modifying configurations
+
+- Consider the impact of config changes on gameplay, UI, persistence, and initialization.
+- Follow the naming conventions already established in nearby config files.
+- Document non-obvious config fields and valid ranges with concise comments.
+- Update related config or schema definitions together when they represent the same concept in multiple places.

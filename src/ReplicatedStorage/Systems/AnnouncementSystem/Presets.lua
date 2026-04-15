@@ -3,37 +3,29 @@ local Presets = {}
 Presets.DebounceSeconds = 0.75
 
 Presets.Thresholds = {
-	[3] = {
-		tier = "3",
+	[4] = {
+		tier = "4",
 		color = Color3.fromRGB(198, 235, 255),
 		strokeColor = Color3.fromRGB(114, 190, 255),
 		duration = 2.1,
-		bannerText = "Nice Start",
+		bannerText = "Warm Up",
 		soundName = "streak3",
 	},
-	[5] = {
-		tier = "5",
+	[6] = {
+		tier = "6",
 		color = Color3.fromRGB(170, 255, 190),
 		strokeColor = Color3.fromRGB(70, 212, 122),
 		duration = 2.35,
 		bannerText = "Heating Up",
 		soundName = "streak5",
 	},
-	[7] = {
-		tier = "7",
+	[8] = {
+		tier = "8",
 		color = Color3.fromRGB(255, 225, 120),
 		strokeColor = Color3.fromRGB(255, 195, 61),
 		duration = 2.6,
 		bannerText = "On Fire",
 		soundName = "streak7",
-	},
-	[9] = {
-		tier = "9",
-		color = Color3.fromRGB(255, 179, 102),
-		strokeColor = Color3.fromRGB(255, 129, 72),
-		duration = 2.85,
-		bannerText = "Table Is Watching",
-		soundName = "streak9",
 	},
 	[10] = {
 		tier = "10",

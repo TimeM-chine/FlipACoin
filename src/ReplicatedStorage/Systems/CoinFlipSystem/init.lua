@@ -237,6 +237,12 @@ function CoinFlipSystem:RequestFlip(sender, player)
 			math.max(playerIns:GetOneData(dataKey.bestStreak), runData.bestStreakThisRun)
 		)
 	else
+		reward = Presets.GetTailsReward()
+		if reward > 0 then
+			runData.cashEarnedThisRun += reward
+			playerIns:SetOneData(dataKey.wins, playerIns:GetOneData(dataKey.wins) + reward)
+			playerIns:SetOneData(dataKey.lifetimeCashEarned, playerIns:GetOneData(dataKey.lifetimeCashEarned) + reward)
+		end
 		runData.currentStreak = 0
 	end
 

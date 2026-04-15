@@ -16,17 +16,36 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local Main = PlayerGui:WaitForChild("Main")
 local Elements = Main:WaitForChild("Elements")
-local ExpBar = Elements:WaitForChild("ExpBar")
-local bar = ExpBar:WaitForChild("Bar")
-local levelFrame = ExpBar:WaitForChild("Level")
-local levelText = levelFrame:WaitForChild("level")
-local expText = levelFrame:WaitForChild("exp")
 
 local uiController = require(Main:WaitForChild("uiController"))
 
 ---- logic variables ----
 local PlayerUi = {}
+local cashText = Elements:FindFirstChild("cash")
+local cashSyncStarted = false
 
-function PlayerUi.Init() end
+local function syncLegacyCashText()
+	if not cashText or not cashText.Parent then
+		return
+	end
+
+	cashText.Text = Util.FormatNumber(ClientData:GetOneData(dataKey.wins) or 0)
+end
+
+function PlayerUi.Init()
+	syncLegacyCashText()
+	if cashSyncStarted then
+		return
+	end
+
+	cashSyncStarted = true
+	task.spawn(function()
+		while cashText and cashText.Parent do
+			syncLegacyCashText()
+			task.wait(0.2)
+		end
+		cashSyncStarted = false
+	end)
+end
 
 return PlayerUi

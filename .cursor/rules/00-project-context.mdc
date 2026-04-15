@@ -1,0 +1,36 @@
+---
+description: Generic repository context and first-read guidance
+alwaysApply: true
+---
+
+# Repository Context
+
+Before making changes in a repository, first look for project guidance such as:
+
+- `AGENTS.md`
+- `README.md`
+- `docs/`
+- top-level architecture or workflow notes
+
+Use those files as the first orientation layer if they exist.
+
+## Discovery rules
+
+- Do not assume every directory is active just because it exists.
+- Find the real runtime entry points before making structural decisions.
+- Identify which modules are actually loaded, instantiated, or required at runtime.
+- Treat `SystemMgr.lua` as the source of truth for which systems are actually active at runtime.
+- Prefer current code paths over historical comments or stale docs.
+
+## Working priorities
+
+- Verify details in current source code before trusting older comments or historical docs.
+- If docs and code disagree, trust the current code and update docs if appropriate.
+- Keep changes aligned with the repository's existing architecture instead of inventing a parallel one.
+- Reuse established project conventions before introducing new patterns.
+
+## Validation mindset
+
+- Test new behavior in the environment the project normally uses first.
+- Check edge cases and cleanup behavior, not only the happy path.
+- Before considering work done, think through initialization, runtime behavior, teardown, and persistence impact where relevant.

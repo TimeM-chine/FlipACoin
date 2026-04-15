@@ -1,0 +1,34 @@
+---
+description: Generic testing and validation rules for framework-based Roblox projects
+globs:
+  - "src/**/*.lua"
+alwaysApply: false
+---
+
+# Testing And Validation
+
+## Primary validation
+
+- Test behavior in Roblox Studio first.
+- When a feature crosses the server-client boundary, validate both sides.
+- When possible, use multi-client or Team Test for features involving replication, combat, UI sync, matchmaking, or persistence.
+
+## What to verify
+
+- Initialization: the feature starts correctly from the existing framework entry points.
+- Runtime behavior: the happy path works in normal play.
+- Edge cases: invalid targets, missing state, teardown, player leaving, repeated calls, and cooldown or timer boundaries.
+- Cleanup: connections, scheduled work, cached state, and temporary instances do not linger after the feature ends.
+- Persistence: saved fields load, update, and reconcile correctly when persistence is involved.
+
+## Framework-specific validation
+
+- If a change touches `SystemMgr`, verify registration, startup order, and bridge behavior.
+- If a change touches shared config or preset data, verify runtime consumers and UI still agree on the same values.
+- If a change adds periodic work, verify the task has a clear owner and cancellation or shutdown path.
+
+## Pre-finish checks
+
+- Remove or disable noisy debug-only logging before considering work complete.
+- Prefer surfacing broken required config in testing rather than hiding it with defensive runtime guards.
+- Check for obvious performance regressions when adding per-frame, per-player, or per-instance work.

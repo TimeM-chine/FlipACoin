@@ -2,25 +2,34 @@ local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
+local Keys = require(Replicated.configs.Keys)
 local SystemMgr = require(Replicated.Systems.SystemMgr)
+local ClientData = require(Replicated.Systems.ClientData)
 local Presets = require(script.Parent.Presets)
 local Util = require(Replicated.modules.Util)
+local dataKey = Keys.DataKey
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local Main = PlayerGui:WaitForChild("Main")
 local Elements = Main:WaitForChild("Elements")
 local uiController = require(Main:WaitForChild("uiController"))
+local TableModel = Workspace:WaitForChild("CoinFlipTable")
+local TableAssets = TableModel:WaitForChild("Assets")
+local CoinVisualsFolder = TableAssets:WaitForChild("CoinVisuals")
 
 local CoinFlipSystem = SystemMgr.systems.CoinFlipSystem
 local TableSeatSystem = SystemMgr.systems.TableSeatSystem
 local VisualConfig = Presets.Visuals
+local LayoutConfig = Presets.UiLayout
 
 local Hud = Elements:WaitForChild("CoinFlipHUD")
 local Content = Hud:WaitForChild("Content")
 local StatsFrame = Content:WaitForChild("Stats")
+local StatsListLayout = StatsFrame:FindFirstChildOfClass("UIListLayout")
 local CashValue = StatsFrame:WaitForChild("CashCard"):WaitForChild("CashValue")
 local ChanceValue = StatsFrame:WaitForChild("ChanceCard"):WaitForChild("ChanceValue")
 local StreakValue = StatsFrame:WaitForChild("StreakCard"):WaitForChild("StreakValue")
@@ -29,6 +38,14 @@ local SeatValue = StatsFrame:WaitForChild("SeatCard"):WaitForChild("SeatValue")
 local ResultLabel = Content:WaitForChild("ResultLabel")
 local FlipButton = Content:WaitForChild("FlipButton")
 local UpgradeButtons = Content:WaitForChild("UpgradeButtons")
+local UpgradeGridLayout = UpgradeButtons:WaitForChild("UIGridLayout")
+local SpectatorFeed = Elements:WaitForChild("CoinFlipSpectatorFeed")
+local SpectatorFeedLabel = SpectatorFeed:WaitForChild("Label")
+local TableOverview = Elements:WaitForChild("CoinFlipTableOverview")
+local TableOverviewTitle = TableOverview:WaitForChild("Title")
+local TableOverviewSubtitle = TableOverview:WaitForChild("Subtitle")
+local TableOverviewList = TableOverview:WaitForChild("List")
+local TableOverviewEmptyLabel = TableOverview:WaitForChild("EmptyLabel")
 
 local UpgradeMap = {
 	valueLevel = UpgradeButtons:WaitForChild("ValueButton"),
@@ -45,11 +62,10 @@ local UpgradeTitles = {
 
 local CoinFlipUi = {}
 local initialized = false
-local spectatorFeed
+local spectatorFeed = SpectatorFeed
 local spectatorFeedToken = 0
-local tableOverview
+local tableOverview = TableOverview
 local tableOverviewRows = {}
-local visualFolder
 local activeVisuals = {}
 local currentSeatId
 local currentFlipInterval = 1.8
@@ -59,37 +75,444 @@ local awaitingFlipResponse = false
 local resultFlashToken = 0
 local defaultResultTextTransparency = ResultLabel.TextTransparency
 local defaultResultStrokeTransparency = ResultLabel.TextStrokeTransparency
+local currentSeatState
+local currentLayoutProfile
+local viewportChangedConnection
+local cameraChangedConnection
 
-local function ensureVisualFolder()
-	if visualFolder and visualFolder.Parent then
-		return visualFolder
+local StatsCards = {
+	{
+		key = "cash",
+		card = StatsFrame:WaitForChild("CashCard"),
+		label = StatsFrame.CashCard:WaitForChild("Label"),
+		value = CashValue,
+	},
+	{
+		key = "chance",
+		card = StatsFrame:WaitForChild("ChanceCard"),
+		label = StatsFrame.ChanceCard:WaitForChild("Label"),
+		value = ChanceValue,
+	},
+	{
+		key = "streak",
+		card = StatsFrame:WaitForChild("StreakCard"),
+		label = StatsFrame.StreakCard:WaitForChild("Label"),
+		value = StreakValue,
+	},
+	{
+		key = "speed",
+		card = StatsFrame:WaitForChild("SpeedCard"),
+		label = StatsFrame.SpeedCard:WaitForChild("Label"),
+		value = SpeedValue,
+	},
+	{
+		key = "seat",
+		card = StatsFrame:WaitForChild("SeatCard"),
+		label = StatsFrame.SeatCard:WaitForChild("Label"),
+		value = SeatValue,
+	},
+}
+
+for layoutOrder, entry in ipairs(StatsCards) do
+	entry.card.LayoutOrder = layoutOrder
+end
+
+local StatsGridLayout = StatsFrame:FindFirstChild("ResponsiveGridLayout")
+if not StatsGridLayout then
+	StatsGridLayout = Instance.new("UIGridLayout")
+	StatsGridLayout.Name = "ResponsiveGridLayout"
+	StatsGridLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	StatsGridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	StatsGridLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+	StatsGridLayout.Parent = StatsFrame
+end
+
+if StatsListLayout and StatsListLayout.Parent then
+	StatsListLayout:Destroy()
+	StatsListLayout = nil
+end
+
+for index = 1, 8 do
+	tableOverviewRows[index] = TableOverviewList:WaitForChild(string.format("SeatRow%02d", index))
+end
+
+local function getViewportSize()
+	local camera = Workspace.CurrentCamera
+	if camera then
+		return camera.ViewportSize
 	end
 
-	visualFolder = Workspace:FindFirstChild("CoinFlipClientVisuals")
-	if not visualFolder then
-		visualFolder = Instance.new("Folder")
-		visualFolder.Name = "CoinFlipClientVisuals"
-		visualFolder.Parent = Workspace
+	return Vector2.new(1920, 1080)
+end
+
+local function ensureSizeConstraint(guiObject, name)
+	local constraint = guiObject:FindFirstChild(name)
+	if constraint then
+		return constraint
 	end
 
-	return visualFolder
+	constraint = Instance.new("UISizeConstraint")
+	constraint.Name = name
+	constraint.Parent = guiObject
+	return constraint
+end
+
+local function ensureTextConstraint(label, name)
+	local constraint = label:FindFirstChild(name)
+	if constraint then
+		return constraint
+	end
+
+	constraint = Instance.new("UITextSizeConstraint")
+	constraint.Name = name
+	constraint.Parent = label
+	return constraint
+end
+
+local function applyClampConstraint(guiObject, name, minSize, maxSize)
+	local constraint = ensureSizeConstraint(guiObject, name)
+	constraint.MinSize = Vector2.new(minSize.X, minSize.Y)
+	constraint.MaxSize = Vector2.new(maxSize.X, maxSize.Y)
+	return constraint
+end
+
+local function getLayoutProfile()
+	local viewport = getViewportSize()
+	local aspect = viewport.X / math.max(viewport.Y, 1)
+	local isPortrait = aspect < 1
+	local isTouchDevice = UserInputService.TouchEnabled
+	local isMobile = isTouchDevice or viewport.X <= LayoutConfig.MobileMaxWidth or aspect <= LayoutConfig.MobileMaxAspect
+	local isNarrow = viewport.X <= LayoutConfig.NarrowWidth
+
+	local hudSize = LayoutConfig.Hud.DesktopSize
+	local hudY = LayoutConfig.Hud.DesktopY
+	if isMobile then
+		hudSize = isPortrait and LayoutConfig.Hud.MobilePortraitSize or LayoutConfig.Hud.MobileLandscapeSize
+		hudY = isPortrait and LayoutConfig.Hud.MobilePortraitY or LayoutConfig.Hud.MobileLandscapeY
+	elseif isNarrow then
+		hudSize = LayoutConfig.Hud.NarrowSize
+	end
+
+	local overviewSize = LayoutConfig.Overview.DesktopSize
+	local overviewPosition = LayoutConfig.Overview.DesktopPosition
+	if isMobile then
+		overviewSize = isPortrait and LayoutConfig.Overview.MobilePortraitSize or LayoutConfig.Overview.MobileLandscapeSize
+		overviewPosition = isPortrait and LayoutConfig.Overview.MobilePortraitPosition or LayoutConfig.Overview.MobileLandscapePosition
+	end
+
+	local feedSize = LayoutConfig.SpectatorFeed.DesktopSize
+	local feedPosition = LayoutConfig.SpectatorFeed.DesktopPosition
+	if isMobile then
+		feedSize = isPortrait and LayoutConfig.SpectatorFeed.MobilePortraitSize or LayoutConfig.SpectatorFeed.MobileLandscapeSize
+		feedPosition = isPortrait and LayoutConfig.SpectatorFeed.MobilePortraitPosition or LayoutConfig.SpectatorFeed.MobileLandscapePosition
+	end
+
+	return {
+		viewport = viewport,
+		aspect = aspect,
+		isPortrait = isPortrait,
+		isTouchDevice = isTouchDevice,
+		isMobile = isMobile,
+		isNarrow = isNarrow,
+		hudSize = hudSize,
+		hudY = hudY,
+		overviewSize = overviewSize,
+		overviewPosition = overviewPosition,
+		feedSize = feedSize,
+		feedPosition = feedPosition,
+		hudMinSize = isMobile and LayoutConfig.Hud.MobileMinSize or LayoutConfig.Hud.MinSize,
+		hudMaxSize = isMobile and LayoutConfig.Hud.MobileMaxSize or LayoutConfig.Hud.MaxSize,
+		overviewMinSize = isMobile and LayoutConfig.Overview.MobileMinSize or LayoutConfig.Overview.MinSize,
+		overviewMaxSize = isMobile and LayoutConfig.Overview.MobileMaxSize or LayoutConfig.Overview.MaxSize,
+		statsColumns = isMobile and 2 or 5,
+		statsCellSize = isMobile and UDim2.fromScale(0.48, 0.44) or UDim2.fromScale(0.192, 1),
+		statsCellPadding = isMobile and UDim2.fromScale(0.03, 0.06) or UDim2.fromScale(0.01, 0),
+		upgradeColumns = isMobile and 2 or 4,
+		upgradeCellSize = isMobile and UDim2.fromScale(0.48, 0.42) or UDim2.fromScale(0.235, 1),
+		upgradeCellPadding = isMobile and UDim2.fromScale(0.03, 0.08) or UDim2.fromScale(0.02, 0),
+		overviewRowHeight = isMobile and 34 or 56,
+		overviewRowPadding = isMobile and 3 or 6,
+	}
+end
+
+local function getSeatOrderDistance(seatOrder, seatIdA, seatIdB)
+	if not seatOrder or not seatIdA or not seatIdB then
+		return nil
+	end
+
+	local indexA
+	local indexB
+	for index, seatId in ipairs(seatOrder) do
+		if seatId == seatIdA then
+			indexA = index
+		elseif seatId == seatIdB then
+			indexB = index
+		end
+	end
+
+	if not indexA or not indexB then
+		return nil
+	end
+
+	local rawDistance = math.abs(indexA - indexB)
+	return math.min(rawDistance, #seatOrder - rawDistance)
+end
+
+local function getWorldBillboardVariant(seatState, entry)
+	if not entry or not entry.seatId then
+		return "hidden"
+	end
+
+	local profile = currentLayoutProfile or getLayoutProfile()
+	if profile.isMobile and LayoutConfig.Mobile.HideWorldBillboards then
+		return "hidden"
+	end
+
+	if not seatState or not seatState.isSeated then
+		return entry.isOccupied and "full" or "hidden"
+	end
+
+	if entry.seatId == seatState.seatId then
+		return "full"
+	end
+
+	local seatDistance = getSeatOrderDistance(seatState.seatOrder, seatState.seatId, entry.seatId)
+	if entry.isOccupied then
+		if (entry.streak or 0) >= LayoutConfig.WorldBillboard.HighlightStreak then
+			return "full"
+		end
+		if seatDistance and seatDistance <= LayoutConfig.WorldBillboard.HighlightOccupiedNeighborDistance then
+			return "full"
+		end
+		return "compact"
+	end
+
+	if seatDistance and seatDistance <= LayoutConfig.WorldBillboard.HighlightNeighborDistance then
+		return "compact"
+	end
+
+	return "hidden"
 end
 
 local function getTableModel()
-	return Workspace:FindFirstChild("CoinFlipTable")
+	return TableModel
 end
 
 local function getSeatAttachment(seatId)
-	local tableModel = getTableModel()
-	local attachmentsFolder = tableModel and tableModel:FindFirstChild("Attachments")
-	local marker = attachmentsFolder and attachmentsFolder:FindFirstChild(`${seatId}Marker`)
-	return marker and marker:FindFirstChildWhichIsA("Attachment")
+	local marker = TableModel.Attachments:WaitForChild(`{seatId}Marker`)
+	return marker:FindFirstChildWhichIsA("Attachment")
 end
 
 local function getSeatPart(seatId)
-	local tableModel = getTableModel()
-	local seatsFolder = tableModel and tableModel:FindFirstChild("Seats")
-	return seatsFolder and seatsFolder:FindFirstChild(seatId)
+	return TableModel.Seats:WaitForChild(seatId)
+end
+
+local function applyStatCardLayout(profile)
+	local nextLayoutOrder = 1
+	for _, entry in ipairs(StatsCards) do
+		local labelConstraint = ensureTextConstraint(entry.label, "ResponsiveConstraint")
+		local valueConstraint = ensureTextConstraint(entry.value, "ResponsiveConstraint")
+		local isSeatCard = entry.key == "seat"
+
+		entry.card.Visible = not (profile.isMobile and isSeatCard)
+		if entry.card.Visible then
+			entry.card.LayoutOrder = nextLayoutOrder
+			nextLayoutOrder += 1
+		end
+
+		entry.card.BackgroundTransparency = profile.isMobile and 0.12 or 0.08
+		entry.label.TextSize = profile.isMobile and 11 or 14
+		entry.label.Position = UDim2.new(0, 8, 0, profile.isMobile and 5 or 7)
+		entry.label.Size = UDim2.new(1, -16, 0, profile.isMobile and 12 or 18)
+		labelConstraint.MinTextSize = profile.isMobile and 8 or 11
+		labelConstraint.MaxTextSize = profile.isMobile and 14 or 20
+
+		entry.value.TextScaled = true
+		entry.value.Position = UDim2.new(0, 8, 0, profile.isMobile and 17 or 28)
+		entry.value.Size = UDim2.new(1, -16, 0, profile.isMobile and 18 or 22)
+		valueConstraint.MinTextSize = profile.isMobile and 10 or 14
+		valueConstraint.MaxTextSize = profile.isMobile and 20 or 32
+	end
+end
+
+local function applyUpgradeButtonLayout(profile)
+	for _, button in pairs(UpgradeMap) do
+		local titleConstraint = ensureTextConstraint(button.Title, "ResponsiveConstraint")
+		local levelConstraint = ensureTextConstraint(button.Level, "ResponsiveConstraint")
+		local costConstraint = ensureTextConstraint(button.Cost, "ResponsiveConstraint")
+
+		button.Text = ""
+		button.TextScaled = false
+		button.ClipsDescendants = true
+		button.Title.TextScaled = true
+		button.Level.TextScaled = true
+		button.Cost.TextScaled = true
+
+		if profile.isMobile then
+			button.Title.Position = UDim2.new(0, 8, 0, 8)
+			button.Title.Size = UDim2.new(1, -16, 0, 14)
+			button.Level.Position = UDim2.new(0, 8, 0, 22)
+			button.Level.Size = UDim2.new(1, -16, 0, 12)
+			button.Cost.Position = UDim2.new(0, 8, 0, 36)
+			button.Cost.Size = UDim2.new(1, -16, 0, 14)
+
+			titleConstraint.MinTextSize = 9
+			titleConstraint.MaxTextSize = 16
+			levelConstraint.MinTextSize = 8
+			levelConstraint.MaxTextSize = 12
+			costConstraint.MinTextSize = 8
+			costConstraint.MaxTextSize = 13
+		else
+			button.Title.Position = UDim2.new(0, 8, 0, 8)
+			button.Title.Size = UDim2.new(1, -16, 0, 22)
+			button.Level.Position = UDim2.new(0, 8, 0, 34)
+			button.Level.Size = UDim2.new(1, -16, 0, 22)
+			button.Cost.Position = UDim2.new(0, 8, 0, 58)
+			button.Cost.Size = UDim2.new(1, -16, 0, 22)
+
+			titleConstraint.MinTextSize = 13
+			titleConstraint.MaxTextSize = 24
+			levelConstraint.MinTextSize = 11
+			levelConstraint.MaxTextSize = 19
+			costConstraint.MinTextSize = 11
+			costConstraint.MaxTextSize = 21
+		end
+	end
+
+	local flipConstraint = ensureTextConstraint(FlipButton, "ResponsiveConstraint")
+	FlipButton.TextScaled = true
+	flipConstraint.MinTextSize = profile.isMobile and 14 or 22
+	flipConstraint.MaxTextSize = profile.isMobile and 30 or 64
+
+	local resultConstraint = ensureTextConstraint(ResultLabel, "ResponsiveConstraint")
+	ResultLabel.TextScaled = true
+	ResultLabel.TextWrapped = true
+	resultConstraint.MinTextSize = profile.isMobile and 10 or 16
+	resultConstraint.MaxTextSize = profile.isMobile and 18 or 34
+end
+
+local function applyHudLayout(profile)
+	StatsGridLayout.FillDirectionMaxCells = profile.statsColumns
+	StatsGridLayout.CellSize = profile.statsCellSize
+	StatsGridLayout.CellPadding = profile.statsCellPadding
+
+	Hud.AnchorPoint = Vector2.new(0.5, 1)
+	Hud.Position = UDim2.fromScale(0.5, profile.hudY)
+	Hud.Size = UDim2.fromScale(profile.hudSize.X, profile.hudSize.Y)
+	applyClampConstraint(Hud, "ResponsiveHudConstraint", profile.hudMinSize, profile.hudMaxSize)
+
+	Content.Size = UDim2.fromScale(1, 1)
+
+	if profile.isMobile then
+		StatsFrame.Position = UDim2.fromScale(0.04, 0.08)
+		StatsFrame.Size = UDim2.fromScale(0.5, 0.36)
+		ResultLabel.Position = UDim2.fromScale(0.58, 0.09)
+		ResultLabel.Size = UDim2.fromScale(0.36, 0.16)
+		FlipButton.Position = UDim2.fromScale(0.04, 0.48)
+		FlipButton.Size = UDim2.fromScale(0.43, 0.16)
+		UpgradeButtons.Position = UDim2.fromScale(0.04, 0.7)
+		UpgradeButtons.Size = UDim2.fromScale(0.92, 0.2)
+	else
+		StatsFrame.Position = UDim2.fromScale(0.02, 0.05)
+		StatsFrame.Size = UDim2.fromScale(0.76, 0.22)
+		ResultLabel.Position = UDim2.fromScale(0.02, 0.31)
+		ResultLabel.Size = UDim2.fromScale(0.96, 0.1)
+		FlipButton.Position = UDim2.fromScale(0.02, 0.45)
+		FlipButton.Size = UDim2.fromScale(0.24, 0.25)
+		UpgradeButtons.Position = UDim2.fromScale(0.29, 0.44)
+		UpgradeButtons.Size = UDim2.fromScale(0.69, 0.46)
+	end
+
+	UpgradeGridLayout.FillDirectionMaxCells = profile.upgradeColumns
+	UpgradeGridLayout.CellSize = profile.upgradeCellSize
+	UpgradeGridLayout.CellPadding = profile.upgradeCellPadding
+
+	local leaveButton = Content:FindFirstChild("LeaveSeatButton")
+	if leaveButton then
+		local leaveConstraint = ensureTextConstraint(leaveButton, "ResponsiveConstraint")
+		leaveButton.TextScaled = true
+		leaveConstraint.MinTextSize = profile.isMobile and 12 or 11
+		leaveConstraint.MaxTextSize = profile.isMobile and 22 or 18
+
+		if profile.isMobile then
+			leaveButton.AnchorPoint = Vector2.new(0, 0)
+			leaveButton.Position = UDim2.fromScale(0.53, 0.48)
+			leaveButton.Size = UDim2.fromScale(0.43, 0.16)
+		else
+			leaveButton.AnchorPoint = Vector2.new(1, 0)
+			leaveButton.Position = UDim2.fromScale(0.98, 0.05)
+			leaveButton.Size = UDim2.fromScale(0.16, 0.14)
+		end
+	end
+
+	applyStatCardLayout(profile)
+	applyUpgradeButtonLayout(profile)
+end
+
+local function getSeatBillboard(seatId)
+	return getSeatPart(seatId):WaitForChild("SeatInfoBillboard")
+end
+
+local function applyWorldBillboardStyle(billboard, variant, entry)
+	local frame = billboard.Frame
+	local seatLabel = frame.SeatLabel
+	local statusLabel = frame.StatusLabel
+	local nameLabel = frame.NameLabel
+	local detailLabel = frame.DetailLabel
+	local cashLabel = frame.CashLabel
+
+	if variant == "hidden" then
+		billboard.Enabled = false
+		return
+	end
+
+	local billboardConfig = LayoutConfig.WorldBillboard
+	billboard.Enabled = true
+	if variant == "compact" then
+		billboard.Size = UDim2.fromOffset(billboardConfig.CompactSize.X, billboardConfig.CompactSize.Y)
+		billboard.StudsOffsetWorldSpace = billboardConfig.CompactOffset
+		frame.BackgroundTransparency = 0.32
+		seatLabel.TextSize = 10
+		statusLabel.TextSize = 10
+		nameLabel.TextSize = 14
+		nameLabel.Position = UDim2.fromOffset(0, 16)
+		nameLabel.Size = UDim2.new(1, 0, 0, 16)
+		detailLabel.Visible = false
+		cashLabel.Visible = false
+		nameLabel.Text = entry.isOccupied and entry.displayName or "Open"
+		statusLabel.Text = entry.isOccupied and (entry.statusText or "Ready") or "Open"
+	else
+		billboard.Size = UDim2.fromOffset(billboardConfig.FullSize.X, billboardConfig.FullSize.Y)
+		billboard.StudsOffsetWorldSpace = billboardConfig.FullOffset
+		frame.BackgroundTransparency = 0.18
+		seatLabel.TextSize = 11
+		statusLabel.TextSize = 11
+		nameLabel.TextSize = 17
+		nameLabel.Position = UDim2.fromOffset(0, 18)
+		nameLabel.Size = UDim2.new(1, 0, 0, 20)
+		detailLabel.Visible = entry.isOccupied
+		cashLabel.Visible = entry.isOccupied
+		nameLabel.Text = entry.displayName
+		statusLabel.Text = entry.statusText or ""
+	end
+
+	seatLabel.Text = entry.seatId or ""
+	statusLabel.TextColor3 = entry.statusColor or Color3.fromRGB(145, 221, 160)
+	detailLabel.Text = entry.detailText or ""
+	cashLabel.Text = entry.cashText or ""
+end
+
+local function applyWorldBillboardFocus(seatState)
+	if not seatState or not seatState.seatDisplayEntries then
+		return
+	end
+
+	for _, entry in ipairs(seatState.seatDisplayEntries) do
+		local billboard = getSeatBillboard(entry.seatId)
+		if billboard then
+			applyWorldBillboardStyle(billboard, getWorldBillboardVariant(seatState, entry), entry)
+		end
+	end
 end
 
 local function getTableSurfaceData(tableTop)
@@ -120,18 +543,9 @@ local function getTableSurfaceData(tableTop)
 	return normal, axisRecords[1].size * 0.5
 end
 
-local function getFlipPositions(seatId)
-	local tableModel = getTableModel()
-	if not tableModel then
-		return nil, nil, nil
-	end
-
-	local tableTop = tableModel:FindFirstChild("TableTop")
-	local centerAttachment = tableTop and tableTop:FindFirstChild("TableCenterAttachment")
-	if not tableTop or not centerAttachment then
-		return nil, nil, nil
-	end
-
+local function getFlipPositions(seatId, coinSize)
+	local tableTop = TableModel.TableTop
+	local centerAttachment = tableTop.TableCenterAttachment
 	local seatAttachment = getSeatAttachment(seatId)
 	local seatPart = getSeatPart(seatId)
 	local startPos
@@ -156,96 +570,21 @@ local function getFlipPositions(seatId)
 
 	local endPos = centerPos
 		+ (outward * VisualConfig.LandingRadius)
-		+ (tableNormal * ((VisualConfig.CoinSize.X * 0.5) + VisualConfig.CoinSurfaceGap))
+		+ (tableNormal * ((coinSize.X * 0.5) + VisualConfig.CoinSurfaceGap))
 
 	return startPos, endPos, tableNormal
 end
 
-local function createCoinFace(coin, face, text, backgroundColor, accentColor)
-	local surfaceGui = Instance.new("SurfaceGui")
-	surfaceGui.Name = `{face.Name}Face`
-	surfaceGui.Face = face
-	surfaceGui.AlwaysOnTop = false
-	surfaceGui.LightInfluence = 1
-	surfaceGui.CanvasSize = Vector2.new(256, 256)
-	surfaceGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	surfaceGui.PixelsPerStud = 240
-	surfaceGui.Parent = coin
-
-	local badge = Instance.new("Frame")
-	badge.Name = "Badge"
-	badge.AnchorPoint = Vector2.new(0.5, 0.5)
-	badge.BackgroundColor3 = backgroundColor
-	badge.BorderSizePixel = 0
-	badge.Position = UDim2.fromScale(0.5, 0.5)
-	badge.Size = UDim2.fromScale(0.84, 0.84)
-	badge.Parent = surfaceGui
-
-	local badgeCorner = Instance.new("UICorner")
-	badgeCorner.CornerRadius = UDim.new(1, 0)
-	badgeCorner.Parent = badge
-
-	local badgeStroke = Instance.new("UIStroke")
-	badgeStroke.Color = accentColor
-	badgeStroke.Thickness = 4
-	badgeStroke.Parent = badge
-
-	local label = Instance.new("TextLabel")
-	label.Name = "FaceLabel"
-	label.AnchorPoint = Vector2.new(0.5, 0.5)
-	label.BackgroundTransparency = 1
-	label.Position = UDim2.fromScale(0.5, 0.5)
-	label.Size = UDim2.fromScale(0.82, 0.82)
-	label.Font = Enum.Font.GothamBlack
-	label.Text = text
-	label.TextColor3 = accentColor
-	label.TextScaled = true
-	label.Parent = badge
-
-	local labelStroke = Instance.new("UIStroke")
-	labelStroke.Color = Color3.fromRGB(255, 248, 221)
-	labelStroke.Thickness = 2
-	labelStroke.Transparency = 0.35
-	labelStroke.Parent = label
+local function getCoinVisual(seatId)
+	local visualModel = CoinVisualsFolder:WaitForChild(`{seatId}CoinVisual`)
+	return visualModel, visualModel:WaitForChild("Coin"), visualModel:WaitForChild("Shadow")
 end
 
-local function createCoinPart(seatId)
-	local coin = Instance.new("Part")
-	coin.Name = `${seatId}CoinVisual`
-	coin.Anchored = true
-	coin.CanCollide = false
-	coin.CanQuery = false
-	coin.CanTouch = false
-	coin.CastShadow = false
-	coin.Material = VisualConfig.RimMaterial
-	coin.Reflectance = VisualConfig.RimReflectance
-	coin.Color = VisualConfig.RimColor
-	coin.Shape = Enum.PartType.Cylinder
-	coin.Size = VisualConfig.CoinSize
-	coin.Parent = ensureVisualFolder()
-
-	createCoinFace(coin, Enum.NormalId.Top, "HEADS", VisualConfig.HeadsColor, VisualConfig.HeadsAccentColor)
-	createCoinFace(coin, Enum.NormalId.Bottom, "TAILS", VisualConfig.TailsColor, VisualConfig.TailsAccentColor)
-
-	return coin
-end
-
-local function createCoinShadow(seatId)
-	local shadow = Instance.new("Part")
-	shadow.Name = `${seatId}CoinShadow`
-	shadow.Anchored = true
-	shadow.CanCollide = false
-	shadow.CanQuery = false
-	shadow.CanTouch = false
-	shadow.CastShadow = false
-	shadow.Material = Enum.Material.SmoothPlastic
-	shadow.Color = VisualConfig.ShadowColor
-	shadow.Shape = Enum.PartType.Cylinder
-	shadow.Transparency = VisualConfig.ShadowBaseTransparency
-	shadow.Size = Vector3.new(VisualConfig.ShadowHeight, VisualConfig.CoinSize.Y, VisualConfig.CoinSize.Z)
-	shadow.Parent = ensureVisualFolder()
-
-	return shadow
+local function setCoinVisualEnabled(coin, shadow, enabled)
+	coin.Transparency = enabled and 0 or 1
+	shadow.Transparency = enabled and VisualConfig.ShadowBaseTransparency or 1
+	coin.TopFace.Enabled = enabled
+	coin.BottomFace.Enabled = enabled
 end
 
 local function spawnLandingPulse(position, color)
@@ -262,7 +601,7 @@ local function spawnLandingPulse(position, color)
 	pulse.Transparency = 0.18
 	pulse.Size = Vector3.new(VisualConfig.ShadowHeight, VisualConfig.PulseStartSize, VisualConfig.PulseStartSize)
 	pulse.CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90))
-	pulse.Parent = ensureVisualFolder()
+	pulse.Parent = CoinVisualsFolder
 
 	local tween = TweenService:Create(
 		pulse,
@@ -318,12 +657,8 @@ local function clearCoinVisual(seatId)
 	if visual.connection then
 		visual.connection:Disconnect()
 	end
-	if visual.coin then
-		visual.coin:Destroy()
-	end
-	if visual.shadow then
-		visual.shadow:Destroy()
-	end
+	visual.shadow.Size = visual.baseShadowSize
+	setCoinVisualEnabled(visual.coin, visual.shadow, false)
 end
 
 local function playCoinVisual(seatId, result, landedCallback)
@@ -334,7 +669,10 @@ local function playCoinVisual(seatId, result, landedCallback)
 		return
 	end
 
-	local startPos, endPos, tableNormal = getFlipPositions(seatId)
+	local visualModel, coin, shadow = getCoinVisual(seatId)
+	local baseCoinSize = coin.Size
+	local baseShadowSize = shadow.Size
+	local startPos, endPos, tableNormal = getFlipPositions(seatId, baseCoinSize)
 	if not startPos or not endPos or not tableNormal then
 		if landedCallback then
 			landedCallback()
@@ -343,13 +681,14 @@ local function playCoinVisual(seatId, result, landedCallback)
 	end
 
 	clearCoinVisual(seatId)
-
-	local coin = createCoinPart(seatId)
-	local shadow = createCoinShadow(seatId)
+	setCoinVisualEnabled(coin, shadow, true)
+	shadow.Size = baseShadowSize
 
 	local visual = {
+		model = visualModel,
 		coin = coin,
 		shadow = shadow,
+		baseShadowSize = baseShadowSize,
 	}
 	activeVisuals[seatId] = visual
 
@@ -361,8 +700,8 @@ local function playCoinVisual(seatId, result, landedCallback)
 	local finalRotation = math.rad(VisualConfig.SpinTurns * 360) + (result == "Tails" and math.pi or 0)
 	local airborneRotation = math.rad((VisualConfig.SpinTurns + 0.35) * 360) + (result == "Tails" and math.pi or 0)
 	local shadowPos = endPos
-		- (tableNormal * ((VisualConfig.CoinSize.X * 0.5) + VisualConfig.CoinSurfaceGap))
-		+ (tableNormal * ((VisualConfig.ShadowHeight * 0.5) + VisualConfig.ShadowSurfaceGap))
+		- (tableNormal * ((baseCoinSize.X * 0.5) + VisualConfig.CoinSurfaceGap))
+		+ (tableNormal * ((baseShadowSize.X * 0.5) + VisualConfig.ShadowSurfaceGap))
 
 	coin.CFrame = CFrame.new(startPos) * CFrame.Angles(0, 0, math.rad(90))
 	shadow.CFrame = CFrame.new(startPos.X, shadowPos.Y, startPos.Z) * CFrame.Angles(0, 0, math.rad(90))
@@ -390,9 +729,9 @@ local function playCoinVisual(seatId, result, landedCallback)
 		coin.CFrame = CFrame.new(position) * CFrame.Angles(flipAngle, 0, math.rad(90)) * CFrame.Angles(0, bankAngle, 0)
 		shadow.CFrame = CFrame.new(position.X, shadowPos.Y, position.Z) * CFrame.Angles(0, 0, math.rad(90))
 		shadow.Size = Vector3.new(
-			VisualConfig.ShadowHeight,
-			VisualConfig.CoinSize.Y * shadowScale,
-			VisualConfig.CoinSize.Z * shadowScale
+			baseShadowSize.X,
+			baseCoinSize.Y * shadowScale,
+			baseCoinSize.Z * shadowScale
 		)
 		shadow.Transparency = shadowTransparency
 
@@ -420,7 +759,7 @@ local function playCoinVisual(seatId, result, landedCallback)
 			TweenInfo.new(VisualConfig.LandingDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{
 				CFrame = CFrame.new(shadowPos) * CFrame.Angles(0, 0, math.rad(90)),
-				Size = Vector3.new(VisualConfig.ShadowHeight, VisualConfig.CoinSize.Y, VisualConfig.CoinSize.Z),
+				Size = baseShadowSize,
 				Transparency = VisualConfig.ShadowBaseTransparency,
 			}
 		)
@@ -477,197 +816,78 @@ local function requestStand()
 end
 
 local function ensureSpectatorFeed()
-	if spectatorFeed then
-		return spectatorFeed
-	end
-
-	spectatorFeed = Instance.new("TextLabel")
-	spectatorFeed.Name = "CoinFlipSpectatorFeed"
-	spectatorFeed.AnchorPoint = Vector2.new(0.5, 1)
-	spectatorFeed.BackgroundColor3 = Color3.fromRGB(17, 20, 26)
-	spectatorFeed.BackgroundTransparency = 0.15
-	spectatorFeed.BorderSizePixel = 0
-	spectatorFeed.Font = Enum.Font.GothamSemibold
-	spectatorFeed.TextColor3 = Color3.fromRGB(245, 245, 245)
-	spectatorFeed.TextScaled = true
-	spectatorFeed.Visible = false
-	spectatorFeed.Size = UDim2.new(0, 420, 0, 38)
-	spectatorFeed.Position = UDim2.new(0.5, 0, 0.9, 0)
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = spectatorFeed
-	spectatorFeed.Parent = Elements
 	return spectatorFeed
 end
 
 local function showSpectatorFeed(text)
-	local label = ensureSpectatorFeed()
+	local panel = ensureSpectatorFeed()
 	spectatorFeedToken += 1
 	local token = spectatorFeedToken
-	label.Text = text
-	label.Visible = true
+	SpectatorFeedLabel.Text = text
+	panel.Visible = true
 	task.delay(2.2, function()
 		if spectatorFeedToken ~= token then
 			return
 		end
-		label.Visible = false
+		panel.Visible = false
 	end)
 end
 
-local function createOverviewRow(parent)
-	local row = Instance.new("Frame")
-	row.Name = "SeatRow"
-	row.BackgroundColor3 = Color3.fromRGB(23, 27, 35)
-	row.BackgroundTransparency = 0.1
-	row.BorderSizePixel = 0
-	row.Size = UDim2.new(1, 0, 0, 52)
-	row.Parent = parent
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = row
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(255, 214, 124)
-	stroke.Thickness = 1
-	stroke.Transparency = 0.6
-	stroke.Parent = row
-
-	local seatLabel = Instance.new("TextLabel")
-	seatLabel.Name = "SeatLabel"
-	seatLabel.BackgroundTransparency = 1
-	seatLabel.Font = Enum.Font.GothamBold
-	seatLabel.TextColor3 = Color3.fromRGB(255, 233, 186)
-	seatLabel.TextSize = 13
-	seatLabel.TextXAlignment = Enum.TextXAlignment.Left
-	seatLabel.Position = UDim2.fromOffset(10, 6)
-	seatLabel.Size = UDim2.new(0, 64, 0, 14)
-	seatLabel.Parent = row
-
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Name = "NameLabel"
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextColor3 = Color3.fromRGB(245, 247, 250)
-	nameLabel.TextSize = 15
-	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	nameLabel.Position = UDim2.fromOffset(10, 20)
-	nameLabel.Size = UDim2.new(1, -92, 0, 16)
-	nameLabel.Parent = row
-
-	local detailLabel = Instance.new("TextLabel")
-	detailLabel.Name = "DetailLabel"
-	detailLabel.BackgroundTransparency = 1
-	detailLabel.Font = Enum.Font.GothamSemibold
-	detailLabel.TextColor3 = Color3.fromRGB(194, 204, 219)
-	detailLabel.TextSize = 12
-	detailLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	detailLabel.TextXAlignment = Enum.TextXAlignment.Left
-	detailLabel.Position = UDim2.fromOffset(10, 36)
-	detailLabel.Size = UDim2.new(1, -20, 0, 12)
-	detailLabel.Parent = row
-
-	local statusLabel = Instance.new("TextLabel")
-	statusLabel.Name = "StatusLabel"
-	statusLabel.AnchorPoint = Vector2.new(1, 0)
-	statusLabel.BackgroundTransparency = 1
-	statusLabel.Font = Enum.Font.GothamBold
-	statusLabel.TextSize = 13
-	statusLabel.TextXAlignment = Enum.TextXAlignment.Right
-	statusLabel.Position = UDim2.new(1, -10, 0, 6)
-	statusLabel.Size = UDim2.new(0, 84, 0, 14)
-	statusLabel.Parent = row
-
-	return row
-end
-
 local function ensureTableOverview()
-	if tableOverview then
-		return tableOverview
-	end
-
-	tableOverview = Instance.new("Frame")
-	tableOverview.Name = "CoinFlipTableOverview"
-	tableOverview.AnchorPoint = Vector2.new(1, 0)
-	tableOverview.BackgroundColor3 = Color3.fromRGB(15, 18, 24)
-	tableOverview.BackgroundTransparency = 0.08
-	tableOverview.BorderSizePixel = 0
-	tableOverview.Position = UDim2.new(1, -18, 0, 92)
-	tableOverview.Size = UDim2.fromOffset(338, 278)
-	tableOverview.Parent = Elements
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 14)
-	corner.Parent = tableOverview
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(255, 214, 124)
-	stroke.Thickness = 1.4
-	stroke.Transparency = 0.38
-	stroke.Parent = tableOverview
-
-	local title = Instance.new("TextLabel")
-	title.Name = "Title"
-	title.BackgroundTransparency = 1
-	title.Font = Enum.Font.GothamBlack
-	title.Text = "Table View"
-	title.TextColor3 = Color3.fromRGB(255, 245, 213)
-	title.TextSize = 18
-	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Position = UDim2.fromOffset(14, 12)
-	title.Size = UDim2.new(1, -28, 0, 20)
-	title.Parent = tableOverview
-
-	local subtitle = Instance.new("TextLabel")
-	subtitle.Name = "Subtitle"
-	subtitle.BackgroundTransparency = 1
-	subtitle.Font = Enum.Font.GothamSemibold
-	subtitle.Text = "Live seats, streaks, and equipped coins."
-	subtitle.TextColor3 = Color3.fromRGB(187, 198, 214)
-	subtitle.TextSize = 13
-	subtitle.TextXAlignment = Enum.TextXAlignment.Left
-	subtitle.Position = UDim2.fromOffset(14, 36)
-	subtitle.Size = UDim2.new(1, -28, 0, 16)
-	subtitle.Parent = tableOverview
-
-	local list = Instance.new("Frame")
-	list.Name = "List"
-	list.BackgroundTransparency = 1
-	list.Position = UDim2.fromOffset(14, 62)
-	list.Size = UDim2.new(1, -28, 1, -76)
-	list.Parent = tableOverview
-
-	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, 6)
-	layout.Parent = list
-
-	local emptyLabel = Instance.new("TextLabel")
-	emptyLabel.Name = "EmptyLabel"
-	emptyLabel.BackgroundTransparency = 1
-	emptyLabel.Font = Enum.Font.GothamSemibold
-	emptyLabel.Text = "No one is seated yet. Walk to any open seat to start."
-	emptyLabel.TextColor3 = Color3.fromRGB(194, 204, 219)
-	emptyLabel.TextSize = 14
-	emptyLabel.TextWrapped = true
-	emptyLabel.TextXAlignment = Enum.TextXAlignment.Left
-	emptyLabel.TextYAlignment = Enum.TextYAlignment.Top
-	emptyLabel.Position = UDim2.fromOffset(14, 62)
-	emptyLabel.Size = UDim2.new(1, -28, 0, 40)
-	emptyLabel.Parent = tableOverview
-
 	return tableOverview
 end
 
+local function applyOverviewLayout(profile, panel)
+	panel = panel or ensureTableOverview()
+	local title = panel.Title
+	local subtitle = panel.Subtitle
+	local list = panel.List
+	local emptyLabel = panel.EmptyLabel
+	local stroke = panel:FindFirstChildOfClass("UIStroke")
+
+	panel.Position = UDim2.fromScale(profile.overviewPosition.X, profile.overviewPosition.Y)
+	panel.Size = UDim2.fromScale(profile.overviewSize.X, profile.overviewSize.Y)
+	applyClampConstraint(panel, "ResponsiveOverviewConstraint", profile.overviewMinSize, profile.overviewMaxSize)
+
+	if title then
+		title.TextSize = profile.isMobile and 12 or 18
+	end
+	if subtitle then
+		subtitle.TextSize = profile.isMobile and 9 or 13
+	end
+	if stroke then
+		stroke.Thickness = profile.isMobile and 1.1 or 1.4
+	end
+	if list then
+		list.Position = UDim2.fromOffset(12, profile.isMobile and 48 or 62)
+		list.Size = UDim2.new(1, profile.isMobile and -24 or -28, 1, profile.isMobile and -58 or -90)
+		list.ScrollBarThickness = profile.isMobile and 3 or 6
+
+		local layout = list:FindFirstChildOfClass("UIListLayout")
+		if layout then
+			layout.Padding = UDim.new(0, profile.overviewRowPadding)
+		end
+	end
+	if emptyLabel then
+		emptyLabel.TextSize = profile.isMobile and 10 or 14
+		emptyLabel.Position = UDim2.fromOffset(12, profile.isMobile and 48 or 62)
+	end
+end
+
 local function updateTableOverview(seatState)
+	currentSeatState = seatState
 	local panel = ensureTableOverview()
-	local list = panel:FindFirstChild("List")
-	local title = panel:FindFirstChild("Title")
-	local subtitle = panel:FindFirstChild("Subtitle")
-	local emptyLabel = panel:FindFirstChild("EmptyLabel")
+	local list = TableOverviewList
+	local title = TableOverviewTitle
+	local subtitle = TableOverviewSubtitle
+	local emptyLabel = TableOverviewEmptyLabel
+	local profile = currentLayoutProfile or getLayoutProfile()
 	local seatDisplayEntries = seatState and seatState.seatDisplayEntries or {}
+	local visibleEntries = seatDisplayEntries
 	local occupiedCount = 0
 	local totalSeatCount = seatState and seatState.seatOrder and #seatState.seatOrder or #seatDisplayEntries
+
+	applyOverviewLayout(profile, panel)
 
 	for _, entry in ipairs(seatDisplayEntries) do
 		if entry.isOccupied then
@@ -675,46 +895,94 @@ local function updateTableOverview(seatState)
 		end
 	end
 
+	if profile.isMobile and LayoutConfig.Mobile.ShowOnlyOccupiedOverview then
+		visibleEntries = {}
+		for _, entry in ipairs(seatDisplayEntries) do
+			if entry.isOccupied then
+				table.insert(visibleEntries, entry)
+			end
+		end
+	end
+
 	if title then
-		title.Text = seatState and seatState.isSeated and `Seat {seatState.seatId} Live Table` or "Spectator View"
+		if profile.isMobile then
+			title.Text = seatState and seatState.isSeated and (seatState.seatId or "Seat") or "Spectator"
+		else
+			title.Text = seatState and seatState.isSeated and `Seat {seatState.seatId} Live Table` or "Spectator View"
+		end
 	end
 
 	if subtitle then
 		if seatState and seatState.isSeated then
-			subtitle.Text = `${occupiedCount}/{math.max(totalSeatCount, occupiedCount)} seats occupied. Space flips, click upgrades.`
+			subtitle.Text = profile.isMobile
+				and `{occupiedCount}/{math.max(totalSeatCount, occupiedCount)} seated.`
+				or `{occupiedCount}/{math.max(totalSeatCount, occupiedCount)} seats occupied. Space flips, click upgrades.`
 		else
-			subtitle.Text = occupiedCount > 0 and `Watching {occupiedCount} active seats in real time.` or "The table is empty right now."
+			subtitle.Text = occupiedCount > 0
+				and (profile.isMobile and `Watching {occupiedCount}.` or `Watching {occupiedCount} active seats in real time.`)
+				or (profile.isMobile and "Table empty right now." or "The table is empty right now.")
 		end
 	end
 
 	if emptyLabel then
-		emptyLabel.Visible = occupiedCount == 0
+		local shouldShowEmpty = false
+		if profile.isMobile then
+			shouldShowEmpty = #visibleEntries == 0 and not (LayoutConfig.Mobile.HideOverviewWhenEmpty and occupiedCount == 0)
+		else
+			shouldShowEmpty = occupiedCount == 0
+		end
+		emptyLabel.Visible = shouldShowEmpty
 	end
 
-	for index, entry in ipairs(seatDisplayEntries) do
-		local row = tableOverviewRows[index]
-		if not row then
-			row = createOverviewRow(list)
-			tableOverviewRows[index] = row
-		end
+	if profile.isMobile and LayoutConfig.Mobile.HideOverviewWhenEmpty and occupiedCount == 0 then
+		panel.Visible = false
+		applyWorldBillboardFocus(seatState)
+		return
+	end
 
+	for index, entry in ipairs(visibleEntries) do
+		local row = tableOverviewRows[index]
+
+		row.LayoutOrder = index
 		row.Visible = true
+		row.Size = UDim2.new(1, 0, 0, profile.overviewRowHeight)
+		row.SeatLabel.TextSize = profile.isMobile and 9 or 12
+		row.SeatLabel.Size = UDim2.new(0, profile.isMobile and 42 or 64, 0, 14)
+		row.NameLabel.TextSize = profile.isMobile and 10 or 15
+		row.NameLabel.Position = UDim2.fromOffset(10, profile.isMobile and 14 or 20)
+		row.NameLabel.Size = UDim2.new(1, profile.isMobile and -72 or -92, 0, profile.isMobile and 12 or 18)
+		row.StatusLabel.TextSize = profile.isMobile and 9 or 13
+		row.StatusLabel.Size = UDim2.new(0, profile.isMobile and 58 or 84, 0, 14)
+		row.DetailLabel.TextSize = profile.isMobile and 8 or 12
+		row.DetailLabel.Position = UDim2.fromOffset(10, profile.isMobile and 24 or 36)
+		row.DetailLabel.Size = UDim2.new(1, -20, 0, profile.isMobile and 8 or 12)
 		row.SeatLabel.Text = entry.seatId or `Seat {index}`
 		row.NameLabel.Text = entry.displayName or "Open Seat"
 		row.StatusLabel.Text = entry.statusText or ""
 		row.StatusLabel.TextColor3 = entry.statusColor or Color3.fromRGB(145, 221, 160)
 
 		if entry.isOccupied then
-			row.DetailLabel.Text = `Streak {entry.streak or 0} | {entry.coinName or "Rusty Penny"} | $ {Util.FormatNumber(entry.cash or 0, true)}`
+			local detailText
+			if profile.isMobile and seatState and entry.seatId ~= seatState.seatId then
+				detailText = entry.coinName or "Rusty Penny"
+			else
+				detailText = profile.isMobile
+					and `Streak {entry.streak or 0}`
+					or `Streak {entry.streak or 0} | {entry.coinName or "Rusty Penny"} | $ {Util.FormatNumber(entry.cash or 0, true)}`
+			end
+			row.DetailLabel.Text = detailText
+			row.DetailLabel.Visible = true
 		else
-			row.DetailLabel.Text = "Open seat. Walk up and sit to start flipping."
+			row.DetailLabel.Text = profile.isMobile and "" or "Walk up to sit."
+			row.DetailLabel.Visible = not profile.isMobile
 		end
 	end
 
-	for index = #seatDisplayEntries + 1, #tableOverviewRows do
+	for index = #visibleEntries + 1, #tableOverviewRows do
 		tableOverviewRows[index].Visible = false
 	end
 
+	applyWorldBillboardFocus(seatState)
 	panel.Visible = true
 end
 
@@ -766,6 +1034,52 @@ local function ensureLeaveButton()
 	return leaveButton
 end
 
+local function applyResponsiveLayout()
+	currentLayoutProfile = getLayoutProfile()
+	applyHudLayout(currentLayoutProfile)
+	applyOverviewLayout(currentLayoutProfile, tableOverview)
+
+	if spectatorFeed then
+		spectatorFeed.Position =
+			UDim2.fromScale(currentLayoutProfile.feedPosition.X, currentLayoutProfile.feedPosition.Y)
+		spectatorFeed.Size = UDim2.fromScale(currentLayoutProfile.feedSize.X, currentLayoutProfile.feedSize.Y)
+	end
+
+	if currentSeatState then
+		updateTableOverview(currentSeatState)
+	end
+end
+
+local function bindViewportLayout()
+	if cameraChangedConnection then
+		cameraChangedConnection:Disconnect()
+	end
+	if viewportChangedConnection then
+		viewportChangedConnection:Disconnect()
+	end
+
+	local function connectViewport(camera)
+		if viewportChangedConnection then
+			viewportChangedConnection:Disconnect()
+			viewportChangedConnection = nil
+		end
+
+		if camera then
+			viewportChangedConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+				applyResponsiveLayout()
+			end)
+		end
+
+		applyResponsiveLayout()
+	end
+
+	cameraChangedConnection = Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+		connectViewport(Workspace.CurrentCamera)
+	end)
+
+	connectViewport(Workspace.CurrentCamera)
+end
+
 function CoinFlipUi.Init()
 	if initialized then
 		return
@@ -775,6 +1089,7 @@ function CoinFlipUi.Init()
 	setVisible(false)
 	uiController.HideUnitWhenPush(Hud)
 	local leaveButton = ensureLeaveButton()
+	bindViewportLayout()
 
 	uiController.SetButtonHoverAndClick(FlipButton, function()
 		requestFlip()
@@ -796,10 +1111,13 @@ end
 function CoinFlipUi.SyncRunState(args)
 	currentSeatId = args.seatState and args.seatState.seatId or nil
 	currentFlipInterval = (args.derivedStats and args.derivedStats.flipInterval) or currentFlipInterval
-	CashValue.Text = `$ {Util.FormatNumber(args.cash or args.wins or 0, true)}`
-	ChanceValue.Text = `${math.round((args.derivedStats.headsChance or 0) * 1000) / 10}%`
+	local cash = args.cash or args.wins or 0
+	ClientData:SetOneData(dataKey.wins, cash)
+	ClientData:SetOneData(dataKey.runData, args.runData)
+	CashValue.Text = `$ {Util.FormatNumber(cash, true)}`
+	ChanceValue.Text = `{math.round((args.derivedStats.headsChance or 0) * 1000) / 10}%`
 	StreakValue.Text = tostring(args.runData.currentStreak or 0)
-	SpeedValue.Text = `${math.round((args.derivedStats.flipInterval or 0) * 100) / 100}s`
+	SpeedValue.Text = `{math.round((args.derivedStats.flipInterval or 0) * 100) / 100}s`
 	SeatValue.Text = args.seatState.seatId or "--"
 
 	for upgradeKey, button in pairs(UpgradeMap) do
@@ -818,6 +1136,8 @@ function CoinFlipUi.FlipResolved(args)
 
 		if args.result == "Heads" then
 			updateResultText(`Heads! +$ {Util.FormatNumber(args.reward or 0, true)}`, "Heads")
+		elseif (args.reward or 0) > 0 then
+			updateResultText(`Tails! +$ {Util.FormatNumber(args.reward, true)} | Streak reset.`, "Tails")
 		else
 			updateResultText("Tails! Streak reset.", "Tails")
 		end
@@ -856,6 +1176,8 @@ function CoinFlipUi.ObservedFlip(args)
 		if (args.streak or 0) > 1 then
 			text ..= ` | {args.streak} streak`
 		end
+	elseif (args.reward or 0) > 0 then
+		text = `{actorName} hit Tails at {args.seatId} | +$ {Util.FormatNumber(args.reward, true)}`
 	else
 		text = `{actorName} hit Tails at {args.seatId}`
 	end

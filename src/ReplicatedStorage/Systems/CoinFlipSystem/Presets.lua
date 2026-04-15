@@ -73,6 +73,62 @@ Presets.Visuals = table.freeze({
 	PulseDuration = 0.26,
 })
 
+Presets.UiLayout = table.freeze({
+	MobileMaxWidth = 980,
+	MobileMaxAspect = 1.55,
+	NarrowWidth = 1400,
+	Hud = {
+		DesktopSize = Vector2.new(0.58, 0.23),
+		NarrowSize = Vector2.new(0.66, 0.245),
+		MobileLandscapeSize = Vector2.new(0.72, 0.26),
+		MobilePortraitSize = Vector2.new(0.88, 0.34),
+		DesktopY = 0.965,
+		MobileLandscapeY = 0.98,
+		MobilePortraitY = 0.985,
+		MinSize = Vector2.new(520, 210),
+		MaxSize = Vector2.new(1120, 460),
+		MobileMinSize = Vector2.new(320, 144),
+		MobileMaxSize = Vector2.new(560, 260),
+	},
+	Overview = {
+		DesktopSize = Vector2.new(0.19, 0.34),
+		MobileLandscapeSize = Vector2.new(0.2, 0.28),
+		MobilePortraitSize = Vector2.new(0.28, 0.3),
+		DesktopPosition = Vector2.new(0.986, 0.095),
+		MobileLandscapePosition = Vector2.new(0.985, 0.18),
+		MobilePortraitPosition = Vector2.new(0.985, 0.11),
+		MinSize = Vector2.new(190, 230),
+		MaxSize = Vector2.new(390, 520),
+		MobileMinSize = Vector2.new(160, 120),
+		MobileMaxSize = Vector2.new(220, 200),
+	},
+	SpectatorFeed = {
+		DesktopSize = Vector2.new(0.24, 0.045),
+		MobileLandscapeSize = Vector2.new(0.5, 0.055),
+		MobilePortraitSize = Vector2.new(0.72, 0.05),
+		DesktopPosition = Vector2.new(0.5, 0.92),
+		MobileLandscapePosition = Vector2.new(0.5, 0.865),
+		MobilePortraitPosition = Vector2.new(0.5, 0.83),
+		MinSize = Vector2.new(260, 32),
+		MaxSize = Vector2.new(560, 64),
+	},
+	WorldBillboard = {
+		FullSize = Vector2.new(168, 74),
+		CompactSize = Vector2.new(132, 44),
+		FullOffset = Vector3.new(0, 3.7, 0),
+		CompactOffset = Vector3.new(0, 3.3, 0),
+		CompactOpenLimit = 1,
+		HighlightNeighborDistance = 1,
+		HighlightOccupiedNeighborDistance = 2,
+		HighlightStreak = 3,
+	},
+	Mobile = {
+		HideWorldBillboards = true,
+		ShowOnlyOccupiedOverview = true,
+		HideOverviewWhenEmpty = true,
+	},
+})
+
 function Presets.ResolveUpgradeKey(upgradeType)
 	if typeof(upgradeType) ~= "string" then
 		return nil
@@ -126,6 +182,10 @@ end
 function Presets.GetHeadsReward(runData)
 	local comboMultiplier = 1 + math.max(runData.currentStreak - 1, 0) * Presets.GetComboStep(runData)
 	return math.round(FlipConfig.BaseReward * Presets.GetValueMultiplier(runData) * comboMultiplier)
+end
+
+function Presets.GetTailsReward()
+	return FlipConfig.BaseTailsReward or 0
 end
 
 function Presets.GetNextCosts(runData)

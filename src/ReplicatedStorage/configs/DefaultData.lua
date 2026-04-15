@@ -18,7 +18,7 @@ local DefaultData = {
 	lifetimeHeads = 0,
 	lifetimeCashEarned = 0,
 	---- currency ---
-	wins = 100,
+	wins = 30,
 	gems = 0,
 	redeemCode = {},
 	donated = 0,
