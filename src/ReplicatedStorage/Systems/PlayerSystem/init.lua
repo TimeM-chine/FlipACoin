@@ -14,6 +14,7 @@ local TweenService = game:GetService("TweenService")
 local TeleportService = game:GetService("TeleportService")
 
 ---- requires ----
+local Onboarding = require(Replicated.Systems.CoinFlipSystem.Modules.Onboarding)
 local PlayerPresets = require(script.Presets)
 local Types = require(Replicated.configs.Types)
 local Keys = require(Replicated.configs.Keys)
@@ -264,17 +265,30 @@ function PlayerSystem:UpdatePlayerHeadGui(player: Player)
 	onPlayerHead.name.Text = player.DisplayName
 
 	local runData = playerIns:GetOneData(dataKey.runData) or {}
+	local onboarding = Onboarding.BuildState(playerIns)
 	local seatId = SystemMgr.systems.TableSeatSystem:GetPlayerSeatId(player)
 	local streak = runData.currentStreak or 0
 	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin) or "Rusty Penny"
 	local isSeated = seatId ~= nil
+	local cash = playerIns:GetOneData(dataKey.wins) or 0
 
 	onPlayerHead.vip.Visible = true
 	onPlayerHead.vip.Text = seatId or "Spectating"
 	onPlayerHead.cardPackOpened.Visible = true
-	onPlayerHead.cardPackOpened.Text = isSeated and (streak > 0 and `Streak {streak}` or equippedCoin) or equippedCoin
-	onPlayerHead.cash.Visible = not isSeated
-	onPlayerHead.cash.Text = `$ {Util.FormatNumber(playerIns:GetOneData(dataKey.wins), true)}`
+	if onboarding.isComplete then
+		onPlayerHead.cardPackOpened.Text = isSeated and (streak > 0 and `Streak {streak}` or equippedCoin) or equippedCoin
+		onPlayerHead.cash.Visible = not isSeated
+		onPlayerHead.cash.Text = `$ {Util.FormatNumber(cash, true)}`
+	else
+		onPlayerHead.cardPackOpened.Text = Onboarding.BuildActionText(onboarding, {
+			streak = streak,
+		})
+		onPlayerHead.cash.Visible = true
+		onPlayerHead.cash.Text = Onboarding.BuildHeadSecondaryText(onboarding, {
+			cash = Util.FormatNumber(cash, true),
+			streak = streak,
+		})
+	end
 end
 
 table.insert(PlayerSystem.whiteList, "InitData")

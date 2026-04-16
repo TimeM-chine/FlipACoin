@@ -332,6 +332,7 @@ function TableSeatSystem:_EnsureSeatCatalog()
 						refreshPromptAttributes(self, seatId)
 						GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(occupantPlayer)
 						broadcastSeatStates(self)
+						GetSystemMgr().systems.CoinFlipSystem:HandleGuideSit(SENDER, occupantPlayer)
 					end
 					return
 				end

@@ -4,6 +4,7 @@ local RunService = game:GetService("RunService")
 
 ---- requires ----
 local Keys = require(Replicated.configs.Keys)
+local Onboarding = require(script.Modules.Onboarding)
 local Presets = require(script.Presets)
 local Types = require(Replicated.configs.Types)
 
@@ -20,7 +21,9 @@ local CoinFlipUi = { pendingCalls = {} }
 setmetatable(CoinFlipUi, Types.mt)
 
 local CoinFlipSystem: Types.System = {
-	whiteList = {},
+	whiteList = {
+		"HandleGuideSit",
+	},
 	players = {},
 	tasks = {},
 	IsLoaded = false,
@@ -109,6 +112,7 @@ local function buildClientState(player)
 		derivedStats = Presets.BuildDerivedStats(runData),
 		nextCosts = Presets.GetNextCosts(runData),
 		seatState = getSeatState(player),
+		onboarding = Onboarding.BuildState(playerIns),
 	}
 end
 
@@ -134,6 +138,50 @@ end
 local function refreshCashDisplays(player)
 	SystemMgr.systems.PlayerSystem:UpdateLeaderStats(player)
 	SystemMgr.systems.PlayerSystem:UpdatePlayerHeadGui(player)
+end
+
+local function pushOnboardingState(self, player)
+	local playerIns = GetPlayerIns(player, false)
+	if not playerIns then
+		return
+	end
+
+	self.Client:UpdateOnboarding(player, {
+		onboarding = Onboarding.BuildState(playerIns),
+	})
+end
+
+local function applyOnboardingAction(self, player, action, context, shouldPushImmediately)
+	local playerIns = GetPlayerIns(player, false)
+	if not playerIns then
+		return false
+	end
+
+	local changed, milestones = Onboarding.ApplyAction(playerIns, action, context)
+	if not changed then
+		return false
+	end
+
+	for _, milestone in ipairs(milestones) do
+		playerIns:LogOnboarding(milestone.analyticsStep, milestone.analyticsName)
+	end
+
+	local latestMilestone = milestones[#milestones]
+	if latestMilestone and latestMilestone.toastText then
+		SystemMgr.systems.GuiSystem:SetNotification(SENDER, player, {
+			text = latestMilestone.toastText,
+			lastTime = 2.8,
+			textColor = Color3.fromRGB(255, 231, 163),
+		})
+	end
+
+	SystemMgr.systems.PlayerSystem:UpdatePlayerHeadGui(player)
+
+	if shouldPushImmediately then
+		pushOnboardingState(self, player)
+	end
+
+	return true
 end
 
 local function emitObservedFlip(self, player, args)
@@ -248,6 +296,12 @@ function CoinFlipSystem:RequestFlip(sender, player)
 
 	playerState.nextFlipAt = now + Presets.GetFlipInterval(runData)
 	playerIns:SetOneData(dataKey.runData, runData)
+	applyOnboardingAction(self, player, "flip", {
+		flipCount = runData.flipsThisRun,
+	})
+	applyOnboardingAction(self, player, "streak", {
+		streak = runData.currentStreak,
+	})
 
 	seatSystem:RegisterActivity(SENDER, player)
 	refreshCashDisplays(player)
@@ -312,6 +366,7 @@ function CoinFlipSystem:BuyUpgrade(sender, player, args)
 	playerIns:SetOneData(dataKey.wins, wins - cost)
 	runData[upgradeKey] += 1
 	playerIns:SetOneData(dataKey.runData, runData)
+	applyOnboardingAction(self, player, "buyUpgrade")
 
 	seatSystem:RegisterActivity(SENDER, player)
 	refreshCashDisplays(player)
@@ -351,6 +406,45 @@ function CoinFlipSystem:ObservedFlip(sender, player, args)
 	end
 
 	CoinFlipUi.ObservedFlip(args)
+end
+
+function CoinFlipSystem:ReportGuideAction(sender, player, args)
+	if not IsServer then
+		return
+	end
+
+	player = player or sender
+	if sender ~= player then
+		return
+	end
+	if typeof(args) ~= "table" or typeof(args.action) ~= "string" then
+		return
+	end
+
+	if args.action ~= "approachSeat" then
+		return
+	end
+
+	applyOnboardingAction(self, player, args.action, args, true)
+end
+
+function CoinFlipSystem:HandleGuideSit(sender, player)
+	if not IsServer then
+		return
+	end
+	if sender ~= SENDER then
+		return
+	end
+
+	applyOnboardingAction(self, player, "sitDown", nil, true)
+end
+
+function CoinFlipSystem:UpdateOnboarding(sender, player, args)
+	if IsServer then
+		return
+	end
+
+	CoinFlipUi.UpdateOnboarding(args and args.onboarding)
 end
 
 return CoinFlipSystem

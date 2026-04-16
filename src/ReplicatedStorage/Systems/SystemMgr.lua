@@ -15,6 +15,9 @@ local IsServer = RunService:IsServer()
 local IsStudio = RunService:IsStudio()
 local ListenAdded = {}
 local ListenMoving = {}
+local RuntimeFolderName = "SystemMgrRuntime"
+local RemoteEventName = "RemoteEvent"
+local UnreliableRemoteEventName = "UnreliableRemoteEvent"
 
 local SENDER = math.random(1, 18965235)
 
@@ -99,6 +102,26 @@ local SystemMgr = {}
 SystemMgr.systems = systems
 
 local RemoteEvent, UnreliableRemoteEvent, BindableEvent
+local RuntimeFolder
+
+local function getRuntimeFolder()
+	if RuntimeFolder and RuntimeFolder.Parent then
+		return RuntimeFolder
+	end
+
+	if IsServer then
+		RuntimeFolder = Replicated.Systems:FindFirstChild(RuntimeFolderName)
+		if not RuntimeFolder then
+			RuntimeFolder = Instance.new("Folder")
+			RuntimeFolder.Name = RuntimeFolderName
+			RuntimeFolder.Parent = Replicated.Systems
+		end
+	else
+		RuntimeFolder = Replicated.Systems:WaitForChild(RuntimeFolderName)
+	end
+
+	return RuntimeFolder
+end
 
 -- Helper: process a server remote event with player-alive guard
 local function HandleServerRemote(args)
@@ -132,23 +155,33 @@ local function HandleServerRemote(args)
 end
 
 if IsServer then
-	RemoteEvent = Instance.new("RemoteEvent")
-	RemoteEvent.Parent = script
+	RuntimeFolder = getRuntimeFolder()
+	RemoteEvent = RuntimeFolder:FindFirstChild(RemoteEventName)
+	if not RemoteEvent then
+		RemoteEvent = Instance.new("RemoteEvent")
+		RemoteEvent.Name = RemoteEventName
+		RemoteEvent.Parent = RuntimeFolder
+	end
 
 	RemoteEvent.OnServerEvent:Connect(function(...)
 		HandleServerRemote({ ... })
 	end)
 
-	UnreliableRemoteEvent = Instance.new("UnreliableRemoteEvent")
-	UnreliableRemoteEvent.Parent = script
+	UnreliableRemoteEvent = RuntimeFolder:FindFirstChild(UnreliableRemoteEventName)
+	if not UnreliableRemoteEvent then
+		UnreliableRemoteEvent = Instance.new("UnreliableRemoteEvent")
+		UnreliableRemoteEvent.Name = UnreliableRemoteEventName
+		UnreliableRemoteEvent.Parent = RuntimeFolder
+	end
 	UnreliableRemoteEvent.OnServerEvent:Connect(function(...)
 		HandleServerRemote({ ... })
 	end)
 
 	BindableEvent = Instance.new("BindableEvent")
 else
-	RemoteEvent = script:WaitForChild("RemoteEvent")
-	UnreliableRemoteEvent = script:WaitForChild("UnreliableRemoteEvent")
+	RuntimeFolder = getRuntimeFolder()
+	RemoteEvent = RuntimeFolder:WaitForChild(RemoteEventName)
+	UnreliableRemoteEvent = RuntimeFolder:WaitForChild(UnreliableRemoteEventName)
 
 	RemoteEvent.OnClientEvent:Connect(function(...)
 		local args = { ... }

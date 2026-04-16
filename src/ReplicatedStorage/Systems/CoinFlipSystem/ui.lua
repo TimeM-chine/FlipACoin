@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -46,6 +47,14 @@ local TableOverviewTitle = TableOverview:WaitForChild("Title")
 local TableOverviewSubtitle = TableOverview:WaitForChild("Subtitle")
 local TableOverviewList = TableOverview:WaitForChild("List")
 local TableOverviewEmptyLabel = TableOverview:WaitForChild("EmptyLabel")
+local OnboardingPanel = Elements:WaitForChild("CoinFlipOnboarding")
+local OnboardingTitle = OnboardingPanel:WaitForChild("Title")
+local OnboardingProgressText = OnboardingPanel:WaitForChild("ProgressText")
+local OnboardingTaskLabel = OnboardingPanel:WaitForChild("TaskLabel")
+local OnboardingHintLabel = OnboardingPanel:WaitForChild("HintLabel")
+local OnboardingProgressBar = OnboardingPanel:WaitForChild("ProgressBar")
+local OnboardingProgressFill = OnboardingProgressBar:WaitForChild("Fill")
+local OnboardingSteps = OnboardingPanel:WaitForChild("Steps")
 
 local UpgradeMap = {
 	valueLevel = UpgradeButtons:WaitForChild("ValueButton"),
@@ -79,6 +88,16 @@ local currentSeatState
 local currentLayoutProfile
 local viewportChangedConnection
 local cameraChangedConnection
+local promptShownConnection
+local currentOnboardingState
+local currentRunSnapshot = {
+	cash = 0,
+	runData = {},
+	nextCosts = {},
+	derivedStats = {},
+}
+local onboardingPromptReported = false
+local lastOnboardingStepKey
 
 local StatsCards = {
 	{
@@ -134,6 +153,11 @@ end
 
 for index = 1, 8 do
 	tableOverviewRows[index] = TableOverviewList:WaitForChild(string.format("SeatRow%02d", index))
+end
+
+local OnboardingStepLabels = {}
+for index = 1, 5 do
+	OnboardingStepLabels[index] = OnboardingSteps:WaitForChild(string.format("Step%02d", index))
 end
 
 local function getViewportSize()
@@ -235,6 +259,202 @@ local function getLayoutProfile()
 	}
 end
 
+local function getRecommendedUpgradeKey()
+	local runData = currentRunSnapshot.runData or {}
+	local nextCosts = currentRunSnapshot.nextCosts or Presets.GetNextCosts(runData)
+	local cash = currentRunSnapshot.cash or 0
+
+	for _, upgradeKey in ipairs(Presets.UpgradeOrder or {}) do
+		local cost = nextCosts[upgradeKey]
+		if cost and cash >= cost then
+			return upgradeKey
+		end
+	end
+
+	return nil
+end
+
+local function buildFailureFollowUpText()
+	local seatState = currentSeatState or {}
+	local suggestedUpgrade = getRecommendedUpgradeKey()
+
+	if currentOnboardingState and not currentOnboardingState.isComplete then
+		local step = currentOnboardingState.currentStep
+		if step == "flipThree" then
+			local requiredFlips = currentOnboardingState.requiredFlips or 3
+			local flipCount = math.min(currentOnboardingState.flipCount or 0, requiredFlips)
+			return `Next: keep flipping to reach {requiredFlips}. ({flipCount}/{requiredFlips})`
+		end
+		if step == "buyUpgrade" then
+			local buttonLabel = suggestedUpgrade and UpgradeTitles[suggestedUpgrade] or "an upgrade"
+			return `Next: buy {buttonLabel}.`
+		end
+		if step == "reachTwoStreak" then
+			local streak = math.min(
+				(currentRunSnapshot.runData and currentRunSnapshot.runData.currentStreak or 0),
+				currentOnboardingState.requiredStreak or 2
+			)
+			return `Next: rebuild to 2 Heads. ({streak}/{currentOnboardingState.requiredStreak or 2})`
+		end
+	end
+
+	if not seatState.isSeated then
+		return "Next: take a seat and start again."
+	end
+
+	if suggestedUpgrade then
+		return `Next: buy {UpgradeTitles[suggestedUpgrade]} or flip again.`
+	end
+
+	return "Next: flip again and rebuild your streak."
+end
+
+local function maybeShowFailureFollowUpNotification(text)
+	if typeof(text) ~= "string" or text == "" then
+		return
+	end
+
+	uiController.SetNotification({
+		text = text,
+		lastTime = 2.4,
+		textColor = Color3.fromRGB(255, 223, 153),
+	})
+end
+
+local function buildOnboardingHint()
+	if not currentOnboardingState or currentOnboardingState.isComplete then
+		return ""
+	end
+
+	local step = currentOnboardingState.currentStep
+	local seatState = currentSeatState or {}
+	local streak = currentRunSnapshot.runData and (currentRunSnapshot.runData.currentStreak or 0) or 0
+
+	if step == "approachSeat" then
+		if (seatState.openSeatCount or 0) > 0 then
+			return currentLayoutProfile and currentLayoutProfile.isMobile
+				and "Walk to any open seat, then press E."
+				or "Walk to any open seat, then press E or ButtonX to take it."
+		end
+		return "Wait for an open seat, then jump in as soon as one frees up."
+	end
+
+	if step == "sitDown" then
+		return seatState.isSeated and "Seat locked in. You're ready to start flipping."
+			or "Use the table prompt to sit down and begin your first run."
+	end
+
+	if step == "flipThree" then
+		local flipCount = math.min(currentOnboardingState.flipCount or 0, currentOnboardingState.requiredFlips or 3)
+		if seatState.isSeated then
+			return `Flip from this seat 3 times to warm up. {flipCount}/{currentOnboardingState.requiredFlips or 3} done.`
+		end
+		return `Sit at any open seat, then flip 3 times. {flipCount}/{currentOnboardingState.requiredFlips or 3} done.`
+	end
+
+	if step == "buyUpgrade" then
+		local suggestedUpgrade = getRecommendedUpgradeKey()
+		local buttonLabel = suggestedUpgrade and UpgradeTitles[suggestedUpgrade] or "any upgrade"
+		if seatState.isSeated then
+			return `Spend your Cash on {buttonLabel} to keep the run moving.`
+		end
+		return "Sit back down, then buy your first upgrade with the Cash you earned."
+	end
+
+	if step == "reachTwoStreak" then
+		if seatState.isSeated then
+			return `Chain 2 Heads in a row to finish the guide. Current streak: {streak}.`
+		end
+		return "Sit back down and chain 2 Heads in a row to finish the guide."
+	end
+
+	return ""
+end
+
+local function refreshGuideButtonHighlight()
+	if not currentOnboardingState or currentOnboardingState.isComplete then
+		uiController.SetGuideButton(nil)
+		return
+	end
+
+	if currentOnboardingState.currentStep == "flipThree" and currentSeatState and currentSeatState.isSeated then
+		uiController.SetGuideButton(FlipButton)
+		return
+	end
+
+	if currentOnboardingState.currentStep == "buyUpgrade" and currentSeatState and currentSeatState.isSeated then
+		local upgradeKey = getRecommendedUpgradeKey()
+		local button = upgradeKey and UpgradeMap[upgradeKey] or UpgradeMap.valueLevel
+		if button then
+			uiController.SetGuideButton(button)
+			return
+		end
+	end
+
+	uiController.SetGuideButton(nil)
+end
+
+local function updateOnboardingPanel()
+	if not currentOnboardingState or currentOnboardingState.isComplete then
+		OnboardingPanel.Visible = false
+		refreshGuideButtonHighlight()
+		onboardingPromptReported = false
+		return
+	end
+
+	local completedCount = currentOnboardingState.completedCount or 0
+	local totalSteps = math.max(currentOnboardingState.totalSteps or 5, 1)
+	local progressValue = completedCount
+	if currentOnboardingState.currentStep == "flipThree" then
+		progressValue += math.min((currentOnboardingState.flipCount or 0) / math.max(currentOnboardingState.requiredFlips or 3, 1), 0.95)
+	end
+
+	OnboardingTitle.Text = "First Run Guide"
+	OnboardingProgressText.Text = `{completedCount} / {totalSteps}`
+	OnboardingTaskLabel.Text = currentOnboardingState.currentTitle or "Keep going"
+	OnboardingHintLabel.Text = buildOnboardingHint()
+	OnboardingProgressFill.Size = UDim2.fromScale(math.clamp(progressValue / totalSteps, 0, 1), 1)
+
+	for index, step in ipairs(currentOnboardingState.steps or {}) do
+		local chip = OnboardingStepLabels[index]
+		chip.Text = step.label or chip.Text
+		if step.isComplete then
+			chip.BackgroundColor3 = Color3.fromRGB(63, 96, 67)
+			chip.TextColor3 = Color3.fromRGB(226, 255, 229)
+			chip.UIStroke.Transparency = 0.1
+		elseif step.key == currentOnboardingState.currentStep then
+			chip.BackgroundColor3 = Color3.fromRGB(90, 66, 25)
+			chip.TextColor3 = Color3.fromRGB(255, 239, 188)
+			chip.UIStroke.Transparency = 0.02
+		else
+			chip.BackgroundColor3 = Color3.fromRGB(28, 33, 42)
+			chip.TextColor3 = Color3.fromRGB(174, 184, 198)
+			chip.UIStroke.Transparency = 0.78
+		end
+	end
+
+	OnboardingPanel.Visible = true
+	refreshGuideButtonHighlight()
+end
+
+local function applyOnboardingLayout(profile)
+	if profile.isMobile then
+		OnboardingPanel.Position = profile.isPortrait and UDim2.fromScale(0.02, 0.085) or UDim2.fromScale(0.02, 0.12)
+		OnboardingPanel.Size = profile.isPortrait and UDim2.fromOffset(230, 140) or UDim2.fromOffset(250, 132)
+		OnboardingTitle.TextSize = profile.isPortrait and 14 or 15
+		OnboardingProgressText.TextSize = profile.isPortrait and 12 or 13
+		OnboardingTaskLabel.TextSize = profile.isPortrait and 14 or 15
+		OnboardingHintLabel.TextSize = 11
+	else
+		OnboardingPanel.Position = UDim2.fromScale(0.016, 0.11)
+		OnboardingPanel.Size = UDim2.fromOffset(328, 154)
+		OnboardingTitle.TextSize = 18
+		OnboardingProgressText.TextSize = 14
+		OnboardingTaskLabel.TextSize = 17
+		OnboardingHintLabel.TextSize = 13
+	end
+end
+
 local function getSeatOrderDistance(seatOrder, seatIdA, seatIdB)
 	if not seatOrder or not seatIdA or not seatIdB then
 		return nil
@@ -269,6 +489,12 @@ local function getWorldBillboardVariant(seatState, entry)
 	end
 
 	if not seatState or not seatState.isSeated then
+		if currentOnboardingState and not currentOnboardingState.isComplete then
+			local step = currentOnboardingState.currentStep
+			if step == "approachSeat" or step == "sitDown" then
+				return entry.isOccupied and "compact" or "full"
+			end
+		end
 		return entry.isOccupied and "full" or "hidden"
 	end
 
@@ -292,6 +518,62 @@ local function getWorldBillboardVariant(seatState, entry)
 	end
 
 	return "hidden"
+end
+
+local function getWorldBillboardGuideOverride(seatState, entry)
+	if not currentOnboardingState or currentOnboardingState.isComplete or not entry then
+		return nil
+	end
+
+	local step = currentOnboardingState.currentStep
+	local profile = currentLayoutProfile or getLayoutProfile()
+
+	if (not seatState or not seatState.isSeated) and (step == "approachSeat" or step == "sitDown") then
+		if not entry.isOccupied then
+			return {
+				statusText = "Take Seat",
+				statusColor = Color3.fromRGB(255, 214, 124),
+				nameText = "Start Here",
+				detailText = profile.isMobile and "" or "Press E or ButtonX to sit down.",
+				forceDetail = not profile.isMobile,
+				forceCash = false,
+			}
+		end
+
+		return nil
+	end
+
+	if seatState and seatState.isSeated and entry.seatId == seatState.seatId then
+		if step == "flipThree" then
+			return {
+				statusText = "Next Up",
+				statusColor = Color3.fromRGB(255, 214, 124),
+				detailText = `Flip {math.min(currentOnboardingState.flipCount or 0, currentOnboardingState.requiredFlips or 3)}/{currentOnboardingState.requiredFlips or 3}`,
+				forceDetail = true,
+				forceCash = true,
+			}
+		end
+		if step == "buyUpgrade" then
+			return {
+				statusText = "Next Up",
+				statusColor = Color3.fromRGB(255, 214, 124),
+				detailText = "Buy your first upgrade.",
+				forceDetail = true,
+				forceCash = true,
+			}
+		end
+		if step == "reachTwoStreak" then
+			return {
+				statusText = "Next Up",
+				statusColor = Color3.fromRGB(255, 214, 124),
+				detailText = `Hit 2 streak | {math.min(currentRunSnapshot.runData.currentStreak or 0, currentOnboardingState.requiredStreak or 2)}/{currentOnboardingState.requiredStreak or 2}`,
+				forceDetail = true,
+				forceCash = true,
+			}
+		end
+	end
+
+	return nil
 end
 
 local function getTableModel()
@@ -453,13 +735,14 @@ local function getSeatBillboard(seatId)
 	return getSeatPart(seatId):WaitForChild("SeatInfoBillboard")
 end
 
-local function applyWorldBillboardStyle(billboard, variant, entry)
+local function applyWorldBillboardStyle(billboard, variant, entry, seatState)
 	local frame = billboard.Frame
 	local seatLabel = frame.SeatLabel
 	local statusLabel = frame.StatusLabel
 	local nameLabel = frame.NameLabel
 	local detailLabel = frame.DetailLabel
 	local cashLabel = frame.CashLabel
+	local guideOverride = getWorldBillboardGuideOverride(seatState, entry)
 
 	if variant == "hidden" then
 		billboard.Enabled = false
@@ -477,10 +760,10 @@ local function applyWorldBillboardStyle(billboard, variant, entry)
 		nameLabel.TextSize = 14
 		nameLabel.Position = UDim2.fromOffset(0, 16)
 		nameLabel.Size = UDim2.new(1, 0, 0, 16)
-		detailLabel.Visible = false
-		cashLabel.Visible = false
-		nameLabel.Text = entry.isOccupied and entry.displayName or "Open"
-		statusLabel.Text = entry.isOccupied and (entry.statusText or "Ready") or "Open"
+		detailLabel.Visible = guideOverride and guideOverride.forceDetail or false
+		cashLabel.Visible = guideOverride and guideOverride.forceCash or false
+		nameLabel.Text = guideOverride and guideOverride.nameText or (entry.isOccupied and entry.displayName or "Open")
+		statusLabel.Text = guideOverride and guideOverride.statusText or (entry.isOccupied and (entry.statusText or "Ready") or "Open")
 	else
 		billboard.Size = UDim2.fromOffset(billboardConfig.FullSize.X, billboardConfig.FullSize.Y)
 		billboard.StudsOffsetWorldSpace = billboardConfig.FullOffset
@@ -490,16 +773,16 @@ local function applyWorldBillboardStyle(billboard, variant, entry)
 		nameLabel.TextSize = 17
 		nameLabel.Position = UDim2.fromOffset(0, 18)
 		nameLabel.Size = UDim2.new(1, 0, 0, 20)
-		detailLabel.Visible = entry.isOccupied
-		cashLabel.Visible = entry.isOccupied
-		nameLabel.Text = entry.displayName
-		statusLabel.Text = entry.statusText or ""
+		detailLabel.Visible = (guideOverride and guideOverride.forceDetail) or entry.isOccupied
+		cashLabel.Visible = guideOverride and guideOverride.forceCash or entry.isOccupied
+		nameLabel.Text = guideOverride and guideOverride.nameText or entry.displayName
+		statusLabel.Text = guideOverride and guideOverride.statusText or entry.statusText or ""
 	end
 
 	seatLabel.Text = entry.seatId or ""
-	statusLabel.TextColor3 = entry.statusColor or Color3.fromRGB(145, 221, 160)
-	detailLabel.Text = entry.detailText or ""
-	cashLabel.Text = entry.cashText or ""
+	statusLabel.TextColor3 = guideOverride and guideOverride.statusColor or entry.statusColor or Color3.fromRGB(145, 221, 160)
+	detailLabel.Text = guideOverride and guideOverride.detailText or entry.detailText or ""
+	cashLabel.Text = guideOverride and guideOverride.cashText or entry.cashText or ""
 end
 
 local function applyWorldBillboardFocus(seatState)
@@ -510,7 +793,7 @@ local function applyWorldBillboardFocus(seatState)
 	for _, entry in ipairs(seatState.seatDisplayEntries) do
 		local billboard = getSeatBillboard(entry.seatId)
 		if billboard then
-			applyWorldBillboardStyle(billboard, getWorldBillboardVariant(seatState, entry), entry)
+			applyWorldBillboardStyle(billboard, getWorldBillboardVariant(seatState, entry), entry, seatState)
 		end
 	end
 end
@@ -1038,6 +1321,7 @@ local function applyResponsiveLayout()
 	currentLayoutProfile = getLayoutProfile()
 	applyHudLayout(currentLayoutProfile)
 	applyOverviewLayout(currentLayoutProfile, tableOverview)
+	applyOnboardingLayout(currentLayoutProfile)
 
 	if spectatorFeed then
 		spectatorFeed.Position =
@@ -1048,6 +1332,7 @@ local function applyResponsiveLayout()
 	if currentSeatState then
 		updateTableOverview(currentSeatState)
 	end
+	updateOnboardingPanel()
 end
 
 local function bindViewportLayout()
@@ -1087,9 +1372,34 @@ function CoinFlipUi.Init()
 	initialized = true
 
 	setVisible(false)
+	OnboardingPanel.Visible = false
 	uiController.HideUnitWhenPush(Hud)
 	local leaveButton = ensureLeaveButton()
 	bindViewportLayout()
+
+	if promptShownConnection then
+		promptShownConnection:Disconnect()
+	end
+	promptShownConnection = ProximityPromptService.PromptShown:Connect(function(prompt)
+		if not currentOnboardingState or currentOnboardingState.isComplete then
+			return
+		end
+		if currentOnboardingState.currentStep ~= "approachSeat" or onboardingPromptReported then
+			return
+		end
+		if prompt:GetAttribute("Occupied") == true then
+			return
+		end
+		if typeof(prompt:GetAttribute("SeatId")) ~= "string" then
+			return
+		end
+
+		onboardingPromptReported = true
+		CoinFlipSystem.Server:ReportGuideAction({
+			action = "approachSeat",
+			seatId = prompt:GetAttribute("SeatId"),
+		})
+	end)
 
 	uiController.SetButtonHoverAndClick(FlipButton, function()
 		requestFlip()
@@ -1112,6 +1422,12 @@ function CoinFlipUi.SyncRunState(args)
 	currentSeatId = args.seatState and args.seatState.seatId or nil
 	currentFlipInterval = (args.derivedStats and args.derivedStats.flipInterval) or currentFlipInterval
 	local cash = args.cash or args.wins or 0
+	currentRunSnapshot = {
+		cash = cash,
+		runData = args.runData or {},
+		nextCosts = args.nextCosts or {},
+		derivedStats = args.derivedStats or {},
+	}
 	ClientData:SetOneData(dataKey.wins, cash)
 	ClientData:SetOneData(dataKey.runData, args.runData)
 	CashValue.Text = `$ {Util.FormatNumber(cash, true)}`
@@ -1127,19 +1443,26 @@ function CoinFlipUi.SyncRunState(args)
 	end
 
 	updateTableOverview(args.seatState)
+	CoinFlipUi.UpdateOnboarding(args.onboarding)
 end
 
 function CoinFlipUi.FlipResolved(args)
 	awaitingFlipResponse = false
 	playCoinVisual(args.seatState and args.seatState.seatId, args.result, function()
 		CoinFlipUi.SyncRunState(args)
+		local failureFollowUpText = buildFailureFollowUpText()
 
 		if args.result == "Heads" then
 			updateResultText(`Heads! +$ {Util.FormatNumber(args.reward or 0, true)}`, "Heads")
 		elseif (args.reward or 0) > 0 then
-			updateResultText(`Tails! +$ {Util.FormatNumber(args.reward, true)} | Streak reset.`, "Tails")
+			updateResultText(
+				`Tails! +$ {Util.FormatNumber(args.reward, true)} | Streak reset. {failureFollowUpText}`,
+				"Tails"
+			)
+			maybeShowFailureFollowUpNotification(failureFollowUpText)
 		else
-			updateResultText("Tails! Streak reset.", "Tails")
+			updateResultText(`Tails! Streak reset. {failureFollowUpText}`, "Tails")
+			maybeShowFailureFollowUpNotification(failureFollowUpText)
 		end
 	end)
 end
@@ -1155,11 +1478,33 @@ function CoinFlipUi.SeatStateChanged(args)
 	setVisible(isSeated)
 	leaveButton.Visible = isSeated == true
 	updateTableOverview(args and args.seatState)
+	updateOnboardingPanel()
 	if isSeated then
 		SeatValue.Text = args.seatState.seatId or "--"
 		if ResultLabel.Text == "Approach a seat to reveal the flip HUD." then
 			updateResultText("Click FLIP to flip. Jump to leave the seat.", "Neutral")
 		end
+	end
+end
+
+function CoinFlipUi.UpdateOnboarding(onboarding)
+	currentOnboardingState = onboarding
+	if not onboarding or onboarding.isComplete then
+		lastOnboardingStepKey = nil
+	else
+		if lastOnboardingStepKey ~= onboarding.currentStep then
+			uiController.SetUnitJump(OnboardingPanel, 0.08)
+		end
+		lastOnboardingStepKey = onboarding.currentStep
+	end
+
+	if not onboarding or onboarding.currentStep ~= "approachSeat" then
+		onboardingPromptReported = false
+	end
+
+	updateOnboardingPanel()
+	if currentSeatState then
+		applyWorldBillboardFocus(currentSeatState)
 	end
 end
 

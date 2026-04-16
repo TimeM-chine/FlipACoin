@@ -1,6 +1,6 @@
 # PROJECT_LOGIC
 
-更新时间：2026-04-15
+更新时间：2026-04-16
 
 ## 1. 这份文档的定位
 
@@ -9,9 +9,10 @@
 新窗口建议按这个顺序读：
 
 1. `docs/PROJECT_LOGIC.md`
-2. `docs/FlipACoin_首发路线图与进度.md`
-3. `docs/FlipACoin_Roblox多人化改造策划案.md`
-4. 需要落代码时，再回到对应系统源码核实
+2. `docs/FlipACoin_首发优化执行与进度.md`
+3. `docs/FlipACoin_首发路线图与进度.md`
+4. `docs/FlipACoin_Roblox多人化改造策划案.md`
+5. 需要落代码时，再回到对应系统源码核实
 
 如果文档和代码冲突：
 
@@ -226,6 +227,12 @@ FlipACoin
 
 也就是说，项目通常不是手写一堆 RemoteEvent，而是靠系统函数自动桥接。
 
+当前还要额外记住：
+
+- 运行时桥接实例现在统一放在 `ReplicatedStorage.Systems.SystemMgrRuntime`
+- 不要再假设 `RemoteEvent / UnreliableRemoteEvent` 会直接挂在 `SystemMgr.lua` 这个 `ModuleScript` 下面
+- 这样做是为了避免 Studio Play 补测时客户端卡在 `WaitForChild("RemoteEvent")`
+
 ### 6.4 `whiteList` 的真实语义
 
 `whiteList` 不是“允许远端调用”的名单，实际含义相反：
@@ -340,6 +347,7 @@ FlipACoin
 文件：
 
 - `src/ReplicatedStorage/Systems/CoinFlipSystem/init.lua`
+- `src/ReplicatedStorage/Systems/CoinFlipSystem/Modules/Onboarding.lua`
 - `src/ReplicatedStorage/Systems/CoinFlipSystem/Presets.lua`
 - `src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua`
 
@@ -351,6 +359,7 @@ FlipACoin
 - 处理 `RequestFlip`
 - 按 `GameConfig.FlipACoin` 计算正面概率、奖励、速度
 - 写入 `runData`
+- 维护首局 `coinFlipOnboarding` 引导状态
 - 累积 `wins / bestStreak / lifetimeFlips / lifetimeHeads / lifetimeCashEarned`
 - 刷新 `leaderstats` 与头顶 UI
 - 广播本次 flip 给旁观者
@@ -360,6 +369,8 @@ FlipACoin
 客户端当前负责：
 
 - 显示 Flip HUD
+- 显示首局引导面板与按钮聚焦
+- 本地改写 `SeatInfoBillboard`，把世界提示对齐到当前首局步骤
 - 响应式布局
 - 展示桌况 overview
 - 展示观战 feed
@@ -378,6 +389,22 @@ FlipACoin
 
 - `GameConfig.FlipACoin`
 - `CoinFlipSystem/Presets.lua`
+
+当前额外要记住：
+
+- 首局引导链已经接到真实玩法事件：
+  - 靠近空位 prompt
+  - 入座
+  - flip `3` 次
+  - 购买首次升级
+  - 达成 `2 streak`
+- `CoinFlipSystem/ui.lua` 还会根据当前引导步骤本地重写世界 Billboard：
+  - 未入座时把空位改成 `Take Seat / Start Here`
+  - 已入座后把自己的座位改成 `Next Up`
+- `PlayerSystem:UpdatePlayerHeadGui()` 现在也会在引导期间把头顶文案切到当前下一步动作
+- 引导细状态写在 `guideData.coinFlipOnboarding`
+- 漏斗埋点仍继续沿用 `onboardingFunnelStep`
+- 这两个字段现在是“引导状态”和“分析节点”两条线，不要再混写
 
 ### 7.5 `AnnouncementSystem`
 
@@ -561,12 +588,15 @@ FlipACoin
 - `autoFlipUnlocked`
 - `rebirthTree`
 - `runData`
+- `guideData`
 - `settingsData`
 
 其中要特别记住：
 
 - 底层仍用 `wins`
 - 对玩家展示时普遍叫 `Cash`
+- `guideData.coinFlipOnboarding` 是首局引导专用状态
+- `onboardingFunnelStep` 现在只承担漏斗节点记录，不再直接代表 UI 引导进度
 
 ### 9.5 修改存档结构时必须同步的地方
 
@@ -688,8 +718,10 @@ FlipACoin
 
 - `docs/PROJECT_LOGIC.md`
   - 运行地图，优先级最高
+- `docs/FlipACoin_首发优化执行与进度.md`
+  - 当前全链路首发优化的唯一续接文档
 - `docs/FlipACoin_首发路线图与进度.md`
-  - 当前开发阶段和已完成事项
+  - 旧的首发推进历史和已完成事项
 - `docs/FlipACoin_Roblox多人化改造策划案.md`
   - 产品目标和玩法定位
 - `docs/FlipACoin_开发优先级清单与系统任务表.md`
