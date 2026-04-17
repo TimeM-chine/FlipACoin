@@ -17,4 +17,13 @@ Presets.Billboard = table.freeze({
 	CompactStudsOffset = Vector3.new(0, 3.35, 0),
 })
 
+Presets.HotSeat = table.freeze({
+	StreakWeight = 100,
+	RecentActivityWindow = 12,
+	RecentActivityWeight = 6,
+	CashBonusDivisor = 500,
+	MaxCashBonus = 12,
+	RecentSeatWindow = 5,
+})
+
 return Presets

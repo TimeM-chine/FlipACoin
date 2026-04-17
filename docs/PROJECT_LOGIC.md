@@ -1,6 +1,6 @@
 # PROJECT_LOGIC
 
-更新时间：2026-04-16
+更新时间：2026-04-17
 
 ## 1. 这份文档的定位
 
@@ -328,6 +328,7 @@ FlipACoin
 - AFK 超时踢座
 - 同步座位状态给客户端
 - 维护桌边 Billboard 信息
+- 统一计算当前 `featured seat / 热门座位`
 - 通知 `CoinFlipSystem` 当前座位态变化
 
 依赖的场景约定：
@@ -341,6 +342,21 @@ FlipACoin
 
 - `GetAudiencePlayers()` 现在直接返回 `Players:GetPlayers()`
 - 所以“观战同步”和“播报接收范围”目前其实是全服，而不是严格只限同桌
+- `seatDisplayEntries` 现在除了基础座位信息，还会附带：
+  - `isFeatured`
+  - `featuredBadgeText`
+  - `featuredBadgeColor`
+  - `featuredDetailText`
+- `featured seat` 当前判定口径是：
+  - 先看当前 streak
+  - 再看最近活动时间
+  - 最后用少量现金规模做平分
+- `buildSeatState()` 顶层还会额外给客户端：
+  - `featuredSeatId`
+  - `featuredSeatPlayerName`
+  - `featuredSeatLabel`
+  - `featuredSeatStreak`
+  - `featuredSeatReason`
 
 ### 7.4 `CoinFlipSystem`
 
@@ -374,6 +390,7 @@ FlipACoin
 - 响应式布局
 - 展示桌况 overview
 - 展示观战 feed
+- 把 `featured seat` 从座位状态映射成世界 Billboard 和 overview 的焦点高亮
 - 播放 coin flip 可视表现
 
 关键玩法数据：
@@ -401,6 +418,8 @@ FlipACoin
 - `CoinFlipSystem/ui.lua` 还会根据当前引导步骤本地重写世界 Billboard：
   - 未入座时把空位改成 `Take Seat / Start Here`
   - 已入座后把自己的座位改成 `Next Up`
+- 非引导状态下，未入座观战者现在默认只把 `featured seat` 保持为完整 Billboard，其余占座位降成 compact，减少“全桌都一样吵”的问题
+- `CoinFlipTableOverview` 的 subtitle 和座位行样式也会跟着 `featured seat` 一起高亮，帮助旁观者更快知道“最值得看哪里”
 - `PlayerSystem:UpdatePlayerHeadGui()` 现在也会在引导期间把头顶文案切到当前下一步动作
 - 引导细状态写在 `guideData.coinFlipOnboarding`
 - 漏斗埋点仍继续沿用 `onboardingFunnelStep`

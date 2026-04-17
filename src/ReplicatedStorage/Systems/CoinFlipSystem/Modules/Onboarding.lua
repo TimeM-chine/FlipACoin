@@ -126,8 +126,20 @@ function Onboarding.GetCurrentStepConfig(state)
 	return Onboarding.GetStepConfig(Onboarding.GetCurrentStepKey(state))
 end
 
+local function getCurrentStepKeyFromState(state)
+	if typeof(state) ~= "table" then
+		return nil
+	end
+
+	if typeof(state.currentStep) == "string" then
+		return state.currentStep
+	end
+
+	return Onboarding.GetCurrentStepKey(state)
+end
+
 function Onboarding.BuildActionText(state, context)
-	local stepKey = Onboarding.GetCurrentStepKey(state)
+	local stepKey = getCurrentStepKeyFromState(state)
 	if not stepKey then
 		return "Free Play"
 	end
@@ -154,7 +166,7 @@ function Onboarding.BuildActionText(state, context)
 end
 
 function Onboarding.BuildHeadSecondaryText(state, context)
-	local stepKey = Onboarding.GetCurrentStepKey(state)
+	local stepKey = getCurrentStepKeyFromState(state)
 	if not stepKey then
 		local cash = context and context.cash
 		if typeof(cash) == "number" then

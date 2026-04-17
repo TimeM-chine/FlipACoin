@@ -99,6 +99,26 @@ local currentRunSnapshot = {
 local onboardingPromptReported = false
 local lastOnboardingStepKey
 
+local WorldBillboardTheme = table.freeze({
+	Background = Color3.fromRGB(20, 24, 30),
+	FeaturedBackground = Color3.fromRGB(45, 31, 21),
+	Stroke = Color3.fromRGB(255, 214, 124),
+	Seat = Color3.fromRGB(255, 245, 213),
+	Name = Color3.fromRGB(248, 248, 248),
+	Detail = Color3.fromRGB(205, 214, 229),
+	Cash = Color3.fromRGB(134, 255, 178),
+	Status = Color3.fromRGB(145, 221, 160),
+})
+
+local OverviewRowTheme = table.freeze({
+	Background = Color3.fromRGB(23, 27, 35),
+	FeaturedBackground = Color3.fromRGB(48, 34, 24),
+	Stroke = Color3.fromRGB(255, 214, 124),
+	Seat = Color3.fromRGB(255, 233, 186),
+	Name = Color3.fromRGB(245, 247, 250),
+	Detail = Color3.fromRGB(194, 204, 219),
+})
+
 local StatsCards = {
 	{
 		key = "cash",
@@ -495,10 +515,17 @@ local function getWorldBillboardVariant(seatState, entry)
 				return entry.isOccupied and "compact" or "full"
 			end
 		end
-		return entry.isOccupied and "full" or "hidden"
+		if not entry.isOccupied then
+			return "hidden"
+		end
+		return entry.isFeatured and "full" or "compact"
 	end
 
 	if entry.seatId == seatState.seatId then
+		return "full"
+	end
+
+	if entry.isFeatured then
 		return "full"
 	end
 
@@ -735,6 +762,42 @@ local function getSeatBillboard(seatId)
 	return getSeatPart(seatId):WaitForChild("SeatInfoBillboard")
 end
 
+local function buildFeaturedSeatSummary(seatState, profile)
+	if not seatState or not seatState.featuredSeatId or not seatState.featuredSeatPlayerName then
+		return nil
+	end
+
+	local label = seatState.featuredSeatLabel or "Featured"
+	local playerName = seatState.featuredSeatPlayerName
+	local seatId = seatState.featuredSeatId
+	local streak = seatState.featuredSeatStreak or 0
+	local streakText = streak > 0 and (profile.isMobile and ` S{streak}` or ` with {streak} streak`) or ""
+
+	if profile.isMobile then
+		return `{label}: {playerName}{streakText}`
+	end
+
+	return `{label}: {playerName} at {seatId}{streakText}.`
+end
+
+local function applyOverviewRowStyle(row, entry, profile)
+	local stroke = row:FindFirstChildOfClass("UIStroke")
+	local highlightColor = entry and (entry.featuredBadgeColor or entry.statusColor) or OverviewRowTheme.Stroke
+	local isFeatured = entry and entry.isFeatured
+
+	row.BackgroundColor3 = isFeatured and OverviewRowTheme.FeaturedBackground or OverviewRowTheme.Background
+	row.BackgroundTransparency = isFeatured and 0.02 or 0.1
+	row.SeatLabel.TextColor3 = isFeatured and highlightColor or OverviewRowTheme.Seat
+	row.NameLabel.TextColor3 = OverviewRowTheme.Name
+	row.DetailLabel.TextColor3 = OverviewRowTheme.Detail
+
+	if stroke then
+		stroke.Color = isFeatured and highlightColor or OverviewRowTheme.Stroke
+		stroke.Transparency = isFeatured and 0.08 or 0.6
+		stroke.Thickness = isFeatured and (profile.isMobile and 1.35 or 1.6) or 1
+	end
+end
+
 local function applyWorldBillboardStyle(billboard, variant, entry, seatState)
 	local frame = billboard.Frame
 	local seatLabel = frame.SeatLabel
@@ -743,6 +806,9 @@ local function applyWorldBillboardStyle(billboard, variant, entry, seatState)
 	local detailLabel = frame.DetailLabel
 	local cashLabel = frame.CashLabel
 	local guideOverride = getWorldBillboardGuideOverride(seatState, entry)
+	local stroke = frame:FindFirstChildOfClass("UIStroke")
+	local isFeatured = entry and entry.isFeatured and not guideOverride
+	local highlightColor = isFeatured and (entry.featuredBadgeColor or entry.statusColor) or WorldBillboardTheme.Stroke
 
 	if variant == "hidden" then
 		billboard.Enabled = false
@@ -751,10 +817,22 @@ local function applyWorldBillboardStyle(billboard, variant, entry, seatState)
 
 	local billboardConfig = LayoutConfig.WorldBillboard
 	billboard.Enabled = true
+	frame.BackgroundColor3 = isFeatured and WorldBillboardTheme.FeaturedBackground or WorldBillboardTheme.Background
+	seatLabel.TextColor3 = isFeatured and highlightColor or WorldBillboardTheme.Seat
+	nameLabel.TextColor3 = WorldBillboardTheme.Name
+	detailLabel.TextColor3 = WorldBillboardTheme.Detail
+	cashLabel.TextColor3 = WorldBillboardTheme.Cash
+
+	if stroke then
+		stroke.Color = highlightColor
+		stroke.Transparency = isFeatured and 0.02 or 0.22
+		stroke.Thickness = isFeatured and 1.65 or 1.25
+	end
+
 	if variant == "compact" then
 		billboard.Size = UDim2.fromOffset(billboardConfig.CompactSize.X, billboardConfig.CompactSize.Y)
 		billboard.StudsOffsetWorldSpace = billboardConfig.CompactOffset
-		frame.BackgroundTransparency = 0.32
+		frame.BackgroundTransparency = isFeatured and 0.18 or 0.32
 		seatLabel.TextSize = 10
 		statusLabel.TextSize = 10
 		nameLabel.TextSize = 14
@@ -763,11 +841,12 @@ local function applyWorldBillboardStyle(billboard, variant, entry, seatState)
 		detailLabel.Visible = guideOverride and guideOverride.forceDetail or false
 		cashLabel.Visible = guideOverride and guideOverride.forceCash or false
 		nameLabel.Text = guideOverride and guideOverride.nameText or (entry.isOccupied and entry.displayName or "Open")
-		statusLabel.Text = guideOverride and guideOverride.statusText or (entry.isOccupied and (entry.statusText or "Ready") or "Open")
+		statusLabel.Text = guideOverride and guideOverride.statusText
+			or (entry.isOccupied and (isFeatured and (entry.featuredBadgeText or entry.statusText) or entry.statusText or "Ready") or "Open")
 	else
 		billboard.Size = UDim2.fromOffset(billboardConfig.FullSize.X, billboardConfig.FullSize.Y)
 		billboard.StudsOffsetWorldSpace = billboardConfig.FullOffset
-		frame.BackgroundTransparency = 0.18
+		frame.BackgroundTransparency = isFeatured and 0.08 or 0.18
 		seatLabel.TextSize = 11
 		statusLabel.TextSize = 11
 		nameLabel.TextSize = 17
@@ -776,12 +855,15 @@ local function applyWorldBillboardStyle(billboard, variant, entry, seatState)
 		detailLabel.Visible = (guideOverride and guideOverride.forceDetail) or entry.isOccupied
 		cashLabel.Visible = guideOverride and guideOverride.forceCash or entry.isOccupied
 		nameLabel.Text = guideOverride and guideOverride.nameText or entry.displayName
-		statusLabel.Text = guideOverride and guideOverride.statusText or entry.statusText or ""
+		statusLabel.Text = guideOverride and guideOverride.statusText
+			or (isFeatured and (entry.featuredBadgeText or entry.statusText) or entry.statusText or "")
 	end
 
 	seatLabel.Text = entry.seatId or ""
-	statusLabel.TextColor3 = guideOverride and guideOverride.statusColor or entry.statusColor or Color3.fromRGB(145, 221, 160)
-	detailLabel.Text = guideOverride and guideOverride.detailText or entry.detailText or ""
+	statusLabel.TextColor3 = guideOverride and guideOverride.statusColor
+		or (isFeatured and (entry.featuredBadgeColor or entry.statusColor) or entry.statusColor or WorldBillboardTheme.Status)
+	detailLabel.Text = guideOverride and guideOverride.detailText
+		or (isFeatured and (entry.featuredDetailText or entry.detailText) or entry.detailText or "")
 	cashLabel.Text = guideOverride and guideOverride.cashText or entry.cashText or ""
 end
 
@@ -1197,12 +1279,25 @@ local function updateTableOverview(seatState)
 
 	if subtitle then
 		if seatState and seatState.isSeated then
-			subtitle.Text = profile.isMobile
-				and `{occupiedCount}/{math.max(totalSeatCount, occupiedCount)} seated.`
-				or `{occupiedCount}/{math.max(totalSeatCount, occupiedCount)} seats occupied. Space flips, click upgrades.`
+			local featuredSummary = buildFeaturedSeatSummary(seatState, profile)
+			if seatState.featuredSeatId == seatState.seatId and seatState.featuredSeatLabel then
+				subtitle.Text = profile.isMobile
+					and `You are {seatState.featuredSeatLabel}.`
+					or `You're the {string.lower(seatState.featuredSeatLabel)}. Keep the table watching.`
+			elseif featuredSummary then
+				subtitle.Text = profile.isMobile
+					and featuredSummary
+					or `{featuredSummary} {occupiedCount}/{math.max(totalSeatCount, occupiedCount)} seats occupied.`
+			else
+				subtitle.Text = profile.isMobile
+					and `{occupiedCount}/{math.max(totalSeatCount, occupiedCount)} seated.`
+					or `{occupiedCount}/{math.max(totalSeatCount, occupiedCount)} seats occupied. Space flips, click upgrades.`
+			end
 		else
+			local featuredSummary = buildFeaturedSeatSummary(seatState, profile)
 			subtitle.Text = occupiedCount > 0
-				and (profile.isMobile and `Watching {occupiedCount}.` or `Watching {occupiedCount} active seats in real time.`)
+				and (featuredSummary
+					or (profile.isMobile and `Watching {occupiedCount}.` or `Watching {occupiedCount} active seats in real time.`))
 				or (profile.isMobile and "Table empty right now." or "The table is empty right now.")
 		end
 	end
@@ -1239,10 +1334,13 @@ local function updateTableOverview(seatState)
 		row.DetailLabel.TextSize = profile.isMobile and 8 or 12
 		row.DetailLabel.Position = UDim2.fromOffset(10, profile.isMobile and 24 or 36)
 		row.DetailLabel.Size = UDim2.new(1, -20, 0, profile.isMobile and 8 or 12)
+		applyOverviewRowStyle(row, entry, profile)
 		row.SeatLabel.Text = entry.seatId or `Seat {index}`
 		row.NameLabel.Text = entry.displayName or "Open Seat"
-		row.StatusLabel.Text = entry.statusText or ""
-		row.StatusLabel.TextColor3 = entry.statusColor or Color3.fromRGB(145, 221, 160)
+		row.StatusLabel.Text = entry.isFeatured and (entry.featuredBadgeText or entry.statusText) or entry.statusText or ""
+		row.StatusLabel.TextColor3 = entry.isFeatured and (entry.featuredBadgeColor or entry.statusColor)
+			or entry.statusColor
+			or WorldBillboardTheme.Status
 
 		if entry.isOccupied then
 			local detailText
