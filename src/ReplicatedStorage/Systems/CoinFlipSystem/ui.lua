@@ -1,5 +1,5 @@
 local Players = game:GetService("Players")
-local ProximityPromptService = game:GetService("ProximityPromptService")
+local ContextActionService = game:GetService("ContextActionService")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -402,6 +402,7 @@ local UpgradeTitles = {
 
 local CoinFlipUi = {}
 local initialized = false
+local flipInputBound = false
 local spectatorFeed = SpectatorFeed
 local spectatorFeedToken = 0
 local tableOverview = TableOverview
@@ -419,7 +420,6 @@ local currentSeatState
 local currentLayoutProfile
 local viewportChangedConnection
 local cameraChangedConnection
-local promptShownConnection
 local currentOnboardingState
 local currentRunSnapshot = {
 	cash = 0,
@@ -427,8 +427,8 @@ local currentRunSnapshot = {
 	nextCosts = {},
 	derivedStats = {},
 }
-local onboardingPromptReported = false
 local lastOnboardingStepKey
+local FlipInputActionName = "COIN_FLIP_REQUEST"
 
 local WorldBillboardTheme = table.freeze({
 	Background = Color3.fromRGB(20, 24, 30),
@@ -739,17 +739,15 @@ local function buildOnboardingHint()
 	local streak = currentRunSnapshot.runData and (currentRunSnapshot.runData.currentStreak or 0) or 0
 
 	if step == "approachSeat" then
-		if (seatState.openSeatCount or 0) > 0 then
-			return currentLayoutProfile and currentLayoutProfile.isMobile
-				and "Walk to any open seat, then press E."
-				or "Walk to any open seat, then press E or ButtonX to take it."
+		if seatState.isSeated then
+			return "Seat found. Locking you into the table now."
 		end
-		return "Wait for an open seat, then jump in as soon as one frees up."
+		return "Finding an open seat for you now."
 	end
 
 	if step == "sitDown" then
 		return seatState.isSeated and "Seat locked in. You're ready to start flipping."
-			or "Use the table prompt to sit down and begin your first run."
+			or "Dropping you into the table automatically."
 	end
 
 	if step == "flipThree" then
@@ -757,7 +755,7 @@ local function buildOnboardingHint()
 		if seatState.isSeated then
 			return `Flip from this seat 3 times to warm up. {flipCount}/{currentOnboardingState.requiredFlips or 3} done.`
 		end
-		return `Sit at any open seat, then flip 3 times. {flipCount}/{currentOnboardingState.requiredFlips or 3} done.`
+		return `Seat assignment in progress, then flip 3 times. {flipCount}/{currentOnboardingState.requiredFlips or 3} done.`
 	end
 
 	if step == "buyUpgrade" then
@@ -766,14 +764,14 @@ local function buildOnboardingHint()
 		if seatState.isSeated then
 			return `Spend your Cash on {buttonLabel} to keep the run moving.`
 		end
-		return "Sit back down, then buy your first upgrade with the Cash you earned."
+		return "Seat assignment in progress, then buy your first upgrade with the Cash you earned."
 	end
 
 	if step == "reachTwoStreak" then
 		if seatState.isSeated then
 			return `Chain 2 Heads in a row to finish the guide. Current streak: {streak}.`
 		end
-		return "Sit back down and chain 2 Heads in a row to finish the guide."
+		return "Seat assignment in progress, then chain 2 Heads in a row to finish the guide."
 	end
 
 	return ""
@@ -806,7 +804,6 @@ local function updateOnboardingPanel()
 	if not currentOnboardingState or currentOnboardingState.isComplete then
 		OnboardingPanel.Visible = false
 		refreshGuideButtonHighlight()
-		onboardingPromptReported = false
 		return
 	end
 
@@ -972,7 +969,7 @@ local function getWorldBillboardGuideOverride(seatState, entry)
 				statusText = "Take Seat",
 				statusColor = Color3.fromRGB(255, 214, 124),
 				nameText = "Start Here",
-				detailText = profile.isMobile and "" or "Press E or ButtonX to sit down.",
+				detailText = profile.isMobile and "" or "Seat assignment happens automatically.",
 				forceDetail = not profile.isMobile,
 				forceCash = false,
 			}
@@ -1612,6 +1609,35 @@ local function requestFlip()
 	end)
 end
 
+local function handleFlipInput(_, inputState)
+	if inputState ~= Enum.UserInputState.Begin then
+		return Enum.ContextActionResult.Pass
+	end
+
+	if UserInputService:GetFocusedTextBox() then
+		return Enum.ContextActionResult.Pass
+	end
+
+	requestFlip()
+	return Enum.ContextActionResult.Sink
+end
+
+local function bindFlipInput()
+	if flipInputBound then
+		return
+	end
+
+	flipInputBound = true
+	ContextActionService:BindActionAtPriority(
+		FlipInputActionName,
+		handleFlipInput,
+		false,
+		3,
+		Enum.KeyCode.Space,
+		Enum.KeyCode.ButtonR2
+	)
+end
+
 local function requestStand()
 	return
 end
@@ -1934,30 +1960,7 @@ function CoinFlipUi.Init()
 	uiController.HideUnitWhenPush(Hud)
 	local leaveButton = ensureLeaveButton()
 	bindViewportLayout()
-
-	if promptShownConnection then
-		promptShownConnection:Disconnect()
-	end
-	promptShownConnection = ProximityPromptService.PromptShown:Connect(function(prompt)
-		if not currentOnboardingState or currentOnboardingState.isComplete then
-			return
-		end
-		if currentOnboardingState.currentStep ~= "approachSeat" or onboardingPromptReported then
-			return
-		end
-		if prompt:GetAttribute("Occupied") == true then
-			return
-		end
-		if typeof(prompt:GetAttribute("SeatId")) ~= "string" then
-			return
-		end
-
-		onboardingPromptReported = true
-		CoinFlipSystem.Server:ReportGuideAction({
-			action = "approachSeat",
-			seatId = prompt:GetAttribute("SeatId"),
-		})
-	end)
+	bindFlipInput()
 
 	uiController.SetButtonHoverAndClick(FlipButton, function()
 		requestFlip()
@@ -2036,7 +2039,7 @@ function CoinFlipUi.SeatStateChanged(args)
 	if isSeated then
 		SeatValue.Text = args.seatState.seatId or "--"
 		if ResultLabel.Text == "Waiting for seat assignment..." then
-			updateResultText("Click FLIP to flip.", "Neutral")
+			updateResultText("Click FLIP, press Space, or press RT to flip.", "Neutral")
 		end
 	end
 end
@@ -2050,10 +2053,6 @@ function CoinFlipUi.UpdateOnboarding(onboarding)
 			uiController.SetUnitJump(OnboardingPanel, 0.08)
 		end
 		lastOnboardingStepKey = onboarding.currentStep
-	end
-
-	if not onboarding or onboarding.currentStep ~= "approachSeat" then
-		onboardingPromptReported = false
 	end
 
 	updateOnboardingPanel()

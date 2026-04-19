@@ -1,14 +1,9 @@
-local Replicated = game:GetService("ReplicatedStorage")
-
-local GameConfig = require(Replicated.configs.GameConfig)
-
 local Presets = {
 	TableModelName = "CoinFlipTable",
 	SeatsFolderName = "Seats",
 	AfkCheckInterval = 1,
 }
 
-Presets.AfkKickSeconds = GameConfig.FlipACoin.AfkKickSeconds
 Presets.AutoSeatRetryInterval = 0.15
 Presets.AutoSeatMaxAttempts = 40
 Presets.Billboard = table.freeze({

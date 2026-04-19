@@ -256,7 +256,7 @@ local function broadcastSeatStates(self)
 	end
 end
 
-local function clearSeatOwnership(self, player, notifyReason)
+local function clearSeatOwnership(self, player)
 	local seatId = self._playerSeats[player.UserId]
 	if not seatId then
 		return
@@ -279,14 +279,6 @@ local function clearSeatOwnership(self, player, notifyReason)
 
 	refreshPromptAttributes(self, seatId)
 	GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(player)
-
-	if notifyReason == "afk" then
-		GetSystemMgr().systems.GuiSystem:SetNotification(SENDER, player, {
-			text = "You were removed from the seat for inactivity.",
-			lastTime = 2.5,
-			textColor = Color3.fromRGB(255, 216, 128),
-		})
-	end
 
 	broadcastSeatStates(self)
 end
@@ -623,7 +615,6 @@ function TableSeatSystem:Init()
 
 	if IsServer then
 		self._afkScheduleId = ScheduleModule.AddSchedule(Presets.AfkCheckInterval, function()
-			local now = os.clock()
 			for userId, seatId in pairs(self._playerSeats) do
 				local player = Players:GetPlayerByUserId(userId)
 				if not player then
@@ -631,8 +622,6 @@ function TableSeatSystem:Init()
 					self._playerSeats[userId] = nil
 					self._lastActivity[userId] = nil
 					refreshPromptAttributes(self, seatId)
-				elseif now - (self._lastActivity[userId] or now) >= Presets.AfkKickSeconds then
-					clearSeatOwnership(self, player, "afk")
 				end
 			end
 		end)
