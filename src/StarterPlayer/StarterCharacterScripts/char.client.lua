@@ -107,6 +107,8 @@
 local character = script.Parent
 local humanoid = character:WaitForChild("Humanoid")
 local rootPart = character:WaitForChild("HumanoidRootPart")
--- humanoid.UseJumpPower = true
-humanoid.JumpHeight = 12
+humanoid.AutoJumpEnabled = false
+humanoid.UseJumpPower = false
+humanoid.JumpHeight = 0
+humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
 -- warn(humanoid.UseJumpPower, humanoid.JumpHeight)

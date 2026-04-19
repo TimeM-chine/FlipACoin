@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flip A Coin - UI Design Mockups</title>
+    <style>
+        :root {
+            --bg-dark: #1a1a1c;
+            --panel-bg: rgba(30, 30, 35, 0.85);
+            --panel-border: rgba(255, 255, 255, 0.1);
+            --text-main: #ffffff;
+            --text-muted: #a0a0a5;
+            --accent-gold: #ffd700;
+            --accent-blue: #4da6ff;
+            --accent-green: #4dff88;
+            --accent-red: #ff4d4d;
+            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #2c2f33;
+            color: var(--text-main);
+            font-family: var(--font-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+        }
+
+        h1, h2 {
+            text-align: center;
+            color: var(--accent-gold);
+            margin-bottom: 10px;
+        }
+
+        .description {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 30px;
+        }
+
+        .ui-container {
+            background-image: linear-gradient(45deg, #1a1a1d, #2a2d34);
+            border: 2px solid #3a3d45;
+            border-radius: 16px;
+            padding: 40px;
+            position: relative;
+            min-height: 400px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .ui-title {
+            position: absolute;
+            top: 10px;
+            left: 20px;
+            font-size: 14px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* 1. CoinFlipHUD */
+        .hud-wrapper {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            height: 100%;
+            margin-top: 50px;
+        }
+
+        .stats-panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 20px;
+            min-width: 200px;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-item {
+            margin-bottom: 15px;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--accent-gold);
+        }
+        .stat-value.streak {
+            color: var(--accent-red);
+            text-shadow: 0 0 10px rgba(255, 77, 77, 0.5);
+        }
+
+        .action-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .flip-btn {
+            background: linear-gradient(135deg, #ffd700, #ffaa00);
+            border: none;
+            border-radius: 50%;
+            width: 120px;
+            height: 120px;
+            font-size: 28px;
+            font-weight: bold;
+            color: #000;
+            cursor: pointer;
+            box-shadow: 0 10px 20px rgba(255, 215, 0, 0.3), inset 0 -5px 15px rgba(0,0,0,0.2);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .flip-btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 5px 10px rgba(255, 215, 0, 0.3);
+        }
+        .flip-hint {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .upgrades-panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            backdrop-filter: blur(10px);
+        }
+
+        .upgrade-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 10px 15px;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 250px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .upgrade-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .upgrade-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .upgrade-name {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .upgrade-lvl {
+            font-size: 12px;
+            color: var(--accent-blue);
+        }
+        .upgrade-cost {
+            color: var(--accent-green);
+            font-weight: bold;
+        }
+
+        /* 2. CoinFlipTableOverview */
+        .overview-panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 20px;
+            width: 300px;
+            margin: 40px auto;
+            backdrop-filter: blur(10px);
+        }
+        .overview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 10px;
+        }
+        .hype-bar-container {
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+        .hype-bar-fill {
+            height: 100%;
+            width: 75%;
+            background: linear-gradient(90deg, #ff4d4d, #ffd700);
+            box-shadow: 0 0 10px #ff4d4d;
+        }
+        .seat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .seat-row.featured {
+            background: rgba(255, 215, 0, 0.1);
+            border-radius: 6px;
+            padding: 8px;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+        }
+        .seat-player {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .seat-streak {
+            font-weight: bold;
+            color: var(--accent-gold);
+        }
+
+        /* 3. SeatInfoBillboard */
+        .billboard-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 300px;
+        }
+        .billboard {
+            background: rgba(20, 20, 25, 0.9);
+            border: 2px solid var(--accent-gold);
+            border-radius: 16px;
+            padding: 20px 30px;
+            text-align: center;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.6), 0 0 20px rgba(255, 215, 0, 0.2);
+            transform: perspective(500px) rotateX(5deg);
+        }
+        .bb-name {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .bb-streak {
+            font-size: 36px;
+            font-weight: 900;
+            color: var(--accent-red);
+            text-shadow: 0 0 15px rgba(255, 77, 77, 0.6);
+            margin-bottom: 10px;
+        }
+        .bb-coin {
+            font-size: 14px;
+            color: var(--accent-blue);
+            background: rgba(77, 166, 255, 0.1);
+            padding: 4px 10px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+
+        /* 4. AnnouncementBanner */
+        .banner-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            height: 200px;
+            padding-top: 40px;
+        }
+        .announcement-banner {
+            background: linear-gradient(90deg, transparent, rgba(255, 77, 77, 0.8), transparent);
+            padding: 15px 60px;
+            text-align: center;
+            animation: pulse 2s infinite;
+        }
+        .banner-text {
+            font-size: 28px;
+            font-weight: 900;
+            color: white;
+            text-shadow: 0 0 10px #fff, 0 0 20px #ff4d4d;
+            letter-spacing: 2px;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.05); opacity: 1; text-shadow: 0 0 20px #fff, 0 0 30px #ff4d4d; }
+            100% { transform: scale(1); opacity: 0.9; }
+        }
+
+        /* 5. SpectatorFeed */
+        .feed-panel {
+            background: transparent;
+            width: 350px;
+            margin-top: 40px;
+        }
+        .feed-item {
+            background: rgba(0,0,0,0.4);
+            border-left: 3px solid var(--text-muted);
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            border-radius: 0 8px 8px 0;
+            font-size: 14px;
+            animation: slideIn 0.3s ease-out;
+        }
+        .feed-item.highlight {
+            border-left-color: var(--accent-gold);
+            background: rgba(255, 215, 0, 0.1);
+        }
+        @keyframes slideIn {
+            from { transform: translateX(-20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Flip A Coin - UI Mockups</h1>
+    <div class="description">Based on the Roblox Multiplayer Redesign Document</div>
+
+    <!-- 1. Main HUD -->
+    <div class="ui-container">
+        <div class="ui-title">1. CoinFlipHUD (Main Player Interface)</div>
+        <div class="hud-wrapper">
+            <!-- Left: Stats -->
+            <div class="stats-panel">
+                <div class="stat-item">
+                    <div class="stat-label">Current Cash</div>
+                    <div class="stat-value">$ 1,240</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Current Streak</div>
+                    <div class="stat-value streak">🔥 4</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Best Streak</div>
+                    <div class="stat-value" style="color: #fff; font-size: 18px;">7</div>
+                </div>
+            </div>
+
+            <!-- Center: Action -->
+            <div class="action-panel">
+                <button class="flip-btn">FLIP</button>
+                <div class="flip-hint">Press [SPACE] to Flip</div>
+            </div>
+
+            <!-- Right: Upgrades -->
+            <div class="upgrades-panel">
+                <div class="stat-label" style="margin-bottom: 5px;">Upgrades</div>
+                <button class="upgrade-btn">
+                    <div class="upgrade-info">
+                        <span class="upgrade-name">Value</span>
+                        <span class="upgrade-lvl">Lvl 3</span>
+                    </div>
+                    <span class="upgrade-cost">$ 24</span>
+                </button>
+                <button class="upgrade-btn">
+                    <div class="upgrade-info">
+                        <span class="upgrade-name">Combo</span>
+                        <span class="upgrade-lvl">Lvl 1</span>
+                    </div>
+                    <span class="upgrade-cost">$ 32</span>
+                </button>
+                <button class="upgrade-btn">
+                    <div class="upgrade-info">
+                        <span class="upgrade-name">Speed</span>
+                        <span class="upgrade-lvl">Lvl 2</span>
+                    </div>
+                    <span class="upgrade-cost">$ 68</span>
+                </button>
+                <button class="upgrade-btn">
+                    <div class="upgrade-info">
+                        <span class="upgrade-name">Bias</span>
+                        <span class="upgrade-lvl">Lvl 0</span>
+                    </div>
+                    <span class="upgrade-cost">$ 40</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Table Overview -->
+    <div class="ui-container">
+        <div class="ui-title">2. CoinFlipTableOverview (Table Status & Hype)</div>
+        <div class="overview-panel">
+            <div class="overview-header">
+                <span style="font-weight: bold;">Table Status</span>
+                <span style="color: var(--accent-gold); font-size: 12px;">8/8 Seated</span>
+            </div>
+            
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 5px; display: flex; justify-content: space-between;">
+                <span>Table Hype</span>
+                <span style="color: var(--accent-red);">90/120</span>
+            </div>
+            <div class="hype-bar-container">
+                <div class="hype-bar-fill"></div>
+            </div>
+
+            <div class="seat-row">
+                <div class="seat-player">🪑 PlayerOne</div>
+                <div class="seat-streak">🔥 2</div>
+            </div>
+            <div class="seat-row featured">
+                <div class="seat-player">👑 <span style="color: var(--accent-gold); font-weight: bold;">LuckyGuy99</span></div>
+                <div class="seat-streak">🔥 7</div>
+            </div>
+            <div class="seat-row">
+                <div class="seat-player">🪑 NoobMaster</div>
+                <div class="seat-streak">0</div>
+            </div>
+            <div class="seat-row">
+                <div class="seat-player">🪑 CoinFlipper</div>
+                <div class="seat-streak">🔥 1</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Billboard GUI -->
+    <div class="ui-container">
+        <div class="ui-title">3. SeatInfoBillboard (Floating above seats in 3D Workspace)</div>
+        <div class="billboard-wrapper">
+            <div class="billboard">
+                <div class="bb-name">LuckyGuy99</div>
+                <div class="bb-streak">🔥 7 STREAK</div>
+                <div class="bb-coin">🪙 Lucky Nickel</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Announcement Banner -->
+    <div class="ui-container">
+        <div class="ui-title">4. AnnouncementBanner (Global High-Streak Broadcast)</div>
+        <div class="banner-wrapper">
+            <div class="announcement-banner">
+                <div class="banner-text">🔥 LUCKYGUY99 HIT A 7 STREAK! 🔥</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. Spectator Feed -->
+    <div class="ui-container">
+        <div class="ui-title">5. CoinFlipSpectatorFeed (Live Event Feed)</div>
+        <div class="feed-panel">
+            <div class="feed-item">
+                <span style="color: var(--accent-blue);">PlayerOne</span> flipped Tails. Streak lost!
+            </div>
+            <div class="feed-item highlight">
+                <span style="color: var(--accent-gold); font-weight: bold;">LuckyGuy99</span> flipped Heads! (🔥 8)
+            </div>
+            <div class="feed-item">
+                <span style="color: var(--accent-blue);">NoobMaster</span> bought Value Upgrade Lvl 1.
+            </div>
+            <div class="feed-item">
+                <span style="color: var(--accent-green);">CoinFlipper</span> took a seat.
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

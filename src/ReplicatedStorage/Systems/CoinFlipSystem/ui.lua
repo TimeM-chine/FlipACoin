@@ -27,40 +27,371 @@ local TableSeatSystem = SystemMgr.systems.TableSeatSystem
 local VisualConfig = Presets.Visuals
 local LayoutConfig = Presets.UiLayout
 
+local function findFirstByNames(parent, names)
+	for _, name in ipairs(names) do
+		local child = parent:FindFirstChild(name)
+		if child then
+			return child
+		end
+	end
+
+	return nil
+end
+
+local function ensureCorner(guiObject, radius)
+	local corner = guiObject:FindFirstChildOfClass("UICorner")
+	if corner then
+		return corner
+	end
+
+	corner = Instance.new("UICorner")
+	corner.CornerRadius = radius or UDim.new(0, 12)
+	corner.Parent = guiObject
+	return corner
+end
+
+local function ensureStroke(guiObject, color, thickness, transparency)
+	local stroke = guiObject:FindFirstChildOfClass("UIStroke")
+	if stroke then
+		return stroke
+	end
+
+	stroke = Instance.new("UIStroke")
+	stroke.Color = color or Color3.fromRGB(255, 214, 124)
+	stroke.Thickness = thickness or 1.2
+	stroke.Transparency = transparency or 0.4
+	stroke.Parent = guiObject
+	return stroke
+end
+
+local function ensureTextLabel(parent, name, config)
+	local label = parent:FindFirstChild(name)
+	if label and label:IsA("TextLabel") then
+		return label
+	end
+
+	label = Instance.new("TextLabel")
+	label.Name = name
+	label.BackgroundTransparency = 1
+	label.BorderSizePixel = 0
+	label.Font = (config and config.font) or Enum.Font.GothamMedium
+	label.Text = (config and config.text) or ""
+	label.TextColor3 = (config and config.textColor) or Color3.fromRGB(245, 247, 250)
+	label.TextSize = (config and config.textSize) or 14
+	label.TextWrapped = config and config.textWrapped == true or false
+	label.TextXAlignment = (config and config.textXAlignment) or Enum.TextXAlignment.Left
+	label.TextYAlignment = (config and config.textYAlignment) or Enum.TextYAlignment.Center
+	label.Visible = config == nil or config.visible ~= false
+	if config and config.layoutOrder then
+		label.LayoutOrder = config.layoutOrder
+	end
+	if config and config.size then
+		label.Size = config.size
+	end
+	if config and config.position then
+		label.Position = config.position
+	end
+	label.Parent = parent
+	return label
+end
+
 local Hud = Elements:WaitForChild("CoinFlipHUD")
 local Content = Hud:WaitForChild("Content")
+local ContentListLayout = Content:FindFirstChildOfClass("UIListLayout")
 local StatsFrame = Content:WaitForChild("Stats")
 local StatsListLayout = StatsFrame:FindFirstChildOfClass("UIListLayout")
-local CashValue = StatsFrame:WaitForChild("CashCard"):WaitForChild("CashValue")
-local ChanceValue = StatsFrame:WaitForChild("ChanceCard"):WaitForChild("ChanceValue")
-local StreakValue = StatsFrame:WaitForChild("StreakCard"):WaitForChild("StreakValue")
-local SpeedValue = StatsFrame:WaitForChild("SpeedCard"):WaitForChild("SpeedValue")
-local SeatValue = StatsFrame:WaitForChild("SeatCard"):WaitForChild("SeatValue")
-local ResultLabel = Content:WaitForChild("ResultLabel")
-local FlipButton = Content:WaitForChild("FlipButton")
-local UpgradeButtons = Content:WaitForChild("UpgradeButtons")
-local UpgradeGridLayout = UpgradeButtons:WaitForChild("UIGridLayout")
+local ActionsFrame = Content:FindFirstChild("Actions")
+local UpgradeButtons
+
+local function ensureStatCard(cardName, legacyName, titleText)
+	local card = findFirstByNames(StatsFrame, { cardName, legacyName })
+	if card then
+		return card
+	end
+
+	local template = findFirstByNames(StatsFrame, {
+		"Cash",
+		"Chance",
+		"Streak",
+		"Speed",
+		"CashCard",
+		"ChanceCard",
+		"StreakCard",
+		"SpeedCard",
+	})
+	if template and template:IsA("Frame") then
+		card = template:Clone()
+		card.Name = cardName
+		card.Visible = true
+		card.Parent = StatsFrame
+
+		local title = findFirstByNames(card, { "Title", "Label" })
+		if title and title:IsA("TextLabel") then
+			title.Name = "Title"
+			title.Text = titleText
+		end
+
+		local value = findFirstByNames(card, { "Value", "CashValue", "ChanceValue", "StreakValue", "SpeedValue", "SeatValue" })
+		if value and value:IsA("TextLabel") then
+			value.Name = "Value"
+			value.Text = "--"
+		end
+
+		return card
+	end
+
+	card = Instance.new("Frame")
+	card.Name = cardName
+	card.BackgroundColor3 = Color3.fromRGB(24, 30, 39)
+	card.BackgroundTransparency = 0.08
+	card.BorderSizePixel = 0
+	card.Parent = StatsFrame
+	ensureCorner(card, UDim.new(0, 12))
+
+	local title = ensureTextLabel(card, "Title", {
+		text = titleText,
+		font = Enum.Font.GothamBold,
+		textColor = Color3.fromRGB(201, 208, 220),
+		textSize = 14,
+	})
+	title.Size = UDim2.new(1, -16, 0, 16)
+	title.Position = UDim2.fromOffset(8, 8)
+
+	local value = ensureTextLabel(card, "Value", {
+		text = "--",
+		font = Enum.Font.GothamBold,
+		textColor = Color3.fromRGB(245, 247, 250),
+		textSize = 20,
+	})
+	value.Size = UDim2.new(1, -16, 0, 22)
+	value.Position = UDim2.fromOffset(8, 28)
+
+	return card
+end
+
+local function resolveStatLabel(card)
+	return findFirstByNames(card, { "Title", "Label" })
+end
+
+local function resolveStatValue(card)
+	return findFirstByNames(card, { "Value", "CashValue", "ChanceValue", "StreakValue", "SpeedValue", "SeatValue" })
+end
+
+local CashCard = ensureStatCard("Cash", "CashCard", "CASH")
+local ChanceCard = ensureStatCard("Chance", "ChanceCard", "CHANCE")
+local StreakCard = ensureStatCard("Streak", "StreakCard", "STREAK")
+local SpeedCard = ensureStatCard("Speed", "SpeedCard", "SPEED")
+local SeatCard = ensureStatCard("Seat", "SeatCard", "SEAT")
+
+local CashValue = resolveStatValue(CashCard)
+local ChanceValue = resolveStatValue(ChanceCard)
+local StreakValue = resolveStatValue(StreakCard)
+local SpeedValue = resolveStatValue(SpeedCard)
+local SeatValue = resolveStatValue(SeatCard)
+
+local function ensureResultLabel()
+	local resultLabel = Content:FindFirstChild("ResultLabel")
+	if resultLabel and resultLabel:IsA("TextLabel") then
+		return resultLabel
+	end
+
+	resultLabel = ensureTextLabel(Content, "ResultLabel", {
+		text = "Waiting for seat assignment...",
+		font = Enum.Font.GothamSemibold,
+		textColor = Color3.fromRGB(232, 236, 242),
+		textSize = 16,
+		textWrapped = true,
+		textXAlignment = Enum.TextXAlignment.Left,
+		layoutOrder = 2,
+	})
+	resultLabel.Size = UDim2.new(1, 0, 0, 32)
+	return resultLabel
+end
+
+local ResultLabel = ensureResultLabel()
+local FlipButton = (ActionsFrame and ActionsFrame:FindFirstChild("FlipButton")) or Content:FindFirstChild("FlipButton")
+if not FlipButton or not FlipButton:IsA("GuiButton") then
+	error("CoinFlipHUD is missing FlipButton")
+end
+
+local function ensureUpgradeButton(buttonName, titleText)
+	local button = UpgradeButtons:FindFirstChild(buttonName)
+	if button and button:IsA("GuiButton") then
+		return button
+	end
+
+	button = Instance.new("TextButton")
+	button.Name = buttonName
+	button.AutoButtonColor = true
+	button.BackgroundColor3 = Color3.fromRGB(30, 37, 48)
+	button.BackgroundTransparency = 0.04
+	button.BorderSizePixel = 0
+	button.Font = Enum.Font.GothamBold
+	button.Text = ""
+	button.TextSize = 1
+	button.Parent = UpgradeButtons
+	ensureCorner(button, UDim.new(0, 12))
+	ensureStroke(button, Color3.fromRGB(255, 214, 124), 1.1, 0.72)
+
+	local title = ensureTextLabel(button, "Title", {
+		text = titleText,
+		font = Enum.Font.GothamBold,
+		textColor = Color3.fromRGB(245, 247, 250),
+		textSize = 14,
+	})
+	title.Size = UDim2.new(1, -16, 0, 18)
+	title.Position = UDim2.fromOffset(8, 8)
+
+	local level = ensureTextLabel(button, "Level", {
+		text = "Lv.0",
+		font = Enum.Font.GothamMedium,
+		textColor = Color3.fromRGB(205, 214, 229),
+		textSize = 12,
+	})
+	level.Size = UDim2.new(1, -16, 0, 14)
+	level.Position = UDim2.fromOffset(8, 28)
+
+	local cost = ensureTextLabel(button, "Cost", {
+		text = "$ 0",
+		font = Enum.Font.GothamBold,
+		textColor = Color3.fromRGB(255, 226, 150),
+		textSize = 13,
+	})
+	cost.Size = UDim2.new(1, -16, 0, 16)
+	cost.Position = UDim2.fromOffset(8, 46)
+
+	return button
+end
+
+local function ensureUpgradeButtons()
+	local frame = Content:FindFirstChild("UpgradeButtons")
+	if frame and frame:IsA("Frame") then
+		return frame
+	end
+
+	frame = Instance.new("Frame")
+	frame.Name = "UpgradeButtons"
+	frame.BackgroundTransparency = 1
+	frame.LayoutOrder = 4
+	frame.Size = UDim2.new(1, 0, 0, 96)
+	frame.Parent = Content
+	return frame
+end
+
+UpgradeButtons = ensureUpgradeButtons()
+local UpgradeGridLayout = UpgradeButtons:FindFirstChildOfClass("UIGridLayout")
+if not UpgradeGridLayout then
+	UpgradeGridLayout = Instance.new("UIGridLayout")
+	UpgradeGridLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	UpgradeGridLayout.Parent = UpgradeButtons
+end
+
 local SpectatorFeed = Elements:WaitForChild("CoinFlipSpectatorFeed")
 local SpectatorFeedLabel = SpectatorFeed:WaitForChild("Label")
 local TableOverview = Elements:WaitForChild("CoinFlipTableOverview")
 local TableOverviewTitle = TableOverview:WaitForChild("Title")
-local TableOverviewSubtitle = TableOverview:WaitForChild("Subtitle")
+
+local function ensureOverviewSubtitle()
+	local subtitle = TableOverview:FindFirstChild("Subtitle")
+	if subtitle and subtitle:IsA("TextLabel") then
+		return subtitle
+	end
+
+	subtitle = ensureTextLabel(TableOverview, "Subtitle", {
+		font = Enum.Font.GothamMedium,
+		textColor = Color3.fromRGB(194, 204, 219),
+		textSize = 13,
+		textWrapped = true,
+		textYAlignment = Enum.TextYAlignment.Top,
+	})
+	subtitle.ZIndex = TableOverviewTitle.ZIndex
+	return subtitle
+end
+
+local TableOverviewSubtitle = ensureOverviewSubtitle()
 local TableOverviewList = TableOverview:WaitForChild("List")
-local TableOverviewEmptyLabel = TableOverview:WaitForChild("EmptyLabel")
+local TableOverviewEmptyLabel = TableOverview:FindFirstChild("EmptyLabel", true)
+if not TableOverviewEmptyLabel then
+	TableOverviewEmptyLabel = ensureTextLabel(TableOverviewList, "EmptyLabel", {
+		text = "No players at the table",
+		font = Enum.Font.GothamMedium,
+		textColor = Color3.fromRGB(194, 204, 219),
+		textSize = 14,
+		textWrapped = true,
+	})
+end
+
 local OnboardingPanel = Elements:WaitForChild("CoinFlipOnboarding")
 local OnboardingTitle = OnboardingPanel:WaitForChild("Title")
-local OnboardingProgressText = OnboardingPanel:WaitForChild("ProgressText")
 local OnboardingTaskLabel = OnboardingPanel:WaitForChild("TaskLabel")
 local OnboardingHintLabel = OnboardingPanel:WaitForChild("HintLabel")
 local OnboardingProgressBar = OnboardingPanel:WaitForChild("ProgressBar")
 local OnboardingProgressFill = OnboardingProgressBar:WaitForChild("Fill")
-local OnboardingSteps = OnboardingPanel:WaitForChild("Steps")
+
+local function ensureOnboardingProgressText()
+	local progressText = OnboardingPanel:FindFirstChild("ProgressText")
+	if progressText and progressText:IsA("TextLabel") then
+		return progressText
+	end
+
+	progressText = ensureTextLabel(OnboardingPanel, "ProgressText", {
+		text = "0 / 5",
+		font = Enum.Font.GothamBold,
+		textColor = Color3.fromRGB(255, 231, 163),
+		textSize = 13,
+		textXAlignment = Enum.TextXAlignment.Right,
+		layoutOrder = 2,
+	})
+	progressText.Size = UDim2.new(1, 0, 0, 18)
+	return progressText
+end
+
+local function ensureOnboardingSteps()
+	local steps = OnboardingPanel:FindFirstChild("Steps")
+	if steps and steps:IsA("Frame") then
+		return steps
+	end
+
+	steps = Instance.new("Frame")
+	steps.Name = "Steps"
+	steps.BackgroundTransparency = 1
+	steps.LayoutOrder = 6
+	steps.Size = UDim2.new(1, 0, 0, 26)
+	steps.Parent = OnboardingPanel
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Padding = UDim.new(0, 6)
+	layout.Parent = steps
+
+	for index = 1, 5 do
+		local chip = ensureTextLabel(steps, string.format("Step%02d", index), {
+			text = tostring(index),
+			font = Enum.Font.GothamBold,
+			textColor = Color3.fromRGB(174, 184, 198),
+			textSize = 11,
+		})
+		chip.BackgroundColor3 = Color3.fromRGB(28, 33, 42)
+		chip.BackgroundTransparency = 0.08
+		chip.BorderSizePixel = 0
+		chip.Size = UDim2.fromOffset(44, 24)
+		ensureCorner(chip, UDim.new(0, 999))
+		ensureStroke(chip, Color3.fromRGB(255, 214, 124), 1, 0.78)
+	end
+
+	return steps
+end
+
+local OnboardingProgressText = ensureOnboardingProgressText()
+local OnboardingSteps = ensureOnboardingSteps()
 
 local UpgradeMap = {
-	valueLevel = UpgradeButtons:WaitForChild("ValueButton"),
-	comboLevel = UpgradeButtons:WaitForChild("ComboButton"),
-	speedLevel = UpgradeButtons:WaitForChild("SpeedButton"),
-	biasLevel = UpgradeButtons:WaitForChild("BiasButton"),
+	valueLevel = ensureUpgradeButton("ValueButton", "Value"),
+	comboLevel = ensureUpgradeButton("ComboButton", "Combo"),
+	speedLevel = ensureUpgradeButton("SpeedButton", "Speed"),
+	biasLevel = ensureUpgradeButton("BiasButton", "Bias"),
 }
 local UpgradeTitles = {
 	valueLevel = "Value",
@@ -122,32 +453,32 @@ local OverviewRowTheme = table.freeze({
 local StatsCards = {
 	{
 		key = "cash",
-		card = StatsFrame:WaitForChild("CashCard"),
-		label = StatsFrame.CashCard:WaitForChild("Label"),
+		card = CashCard,
+		label = resolveStatLabel(CashCard),
 		value = CashValue,
 	},
 	{
 		key = "chance",
-		card = StatsFrame:WaitForChild("ChanceCard"),
-		label = StatsFrame.ChanceCard:WaitForChild("Label"),
+		card = ChanceCard,
+		label = resolveStatLabel(ChanceCard),
 		value = ChanceValue,
 	},
 	{
 		key = "streak",
-		card = StatsFrame:WaitForChild("StreakCard"),
-		label = StatsFrame.StreakCard:WaitForChild("Label"),
+		card = StreakCard,
+		label = resolveStatLabel(StreakCard),
 		value = StreakValue,
 	},
 	{
 		key = "speed",
-		card = StatsFrame:WaitForChild("SpeedCard"),
-		label = StatsFrame.SpeedCard:WaitForChild("Label"),
+		card = SpeedCard,
+		label = resolveStatLabel(SpeedCard),
 		value = SpeedValue,
 	},
 	{
 		key = "seat",
-		card = StatsFrame:WaitForChild("SeatCard"),
-		label = StatsFrame.SeatCard:WaitForChild("Label"),
+		card = SeatCard,
+		label = resolveStatLabel(SeatCard),
 		value = SeatValue,
 	},
 }
@@ -156,7 +487,7 @@ for layoutOrder, entry in ipairs(StatsCards) do
 	entry.card.LayoutOrder = layoutOrder
 end
 
-local StatsGridLayout = StatsFrame:FindFirstChild("ResponsiveGridLayout")
+local StatsGridLayout = StatsFrame:FindFirstChild("ResponsiveGridLayout") or StatsFrame:FindFirstChildOfClass("UIGridLayout")
 if not StatsGridLayout then
 	StatsGridLayout = Instance.new("UIGridLayout")
 	StatsGridLayout.Name = "ResponsiveGridLayout"
@@ -164,6 +495,8 @@ if not StatsGridLayout then
 	StatsGridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 	StatsGridLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 	StatsGridLayout.Parent = StatsFrame
+else
+	StatsGridLayout.Name = "ResponsiveGridLayout"
 end
 
 if StatsListLayout and StatsListLayout.Parent then
@@ -171,8 +504,63 @@ if StatsListLayout and StatsListLayout.Parent then
 	StatsListLayout = nil
 end
 
+local function ensureOverviewRow(index)
+	local rowName = string.format("SeatRow%02d", index)
+	local row = TableOverviewList:FindFirstChild(rowName)
+	if row then
+		return row
+	end
+
+	row = Instance.new("Frame")
+	row.Name = rowName
+	row.BackgroundColor3 = OverviewRowTheme.Background
+	row.BackgroundTransparency = 0.08
+	row.BorderSizePixel = 0
+	row.Visible = false
+	row.Parent = TableOverviewList
+	ensureCorner(row, UDim.new(0, 10))
+	ensureStroke(row, OverviewRowTheme.Stroke, 1, 0.55)
+
+	local seatLabel = ensureTextLabel(row, "SeatLabel", {
+		font = Enum.Font.GothamBold,
+		textColor = OverviewRowTheme.Seat,
+		textSize = 12,
+	})
+	seatLabel.Position = UDim2.fromOffset(10, 8)
+	seatLabel.Size = UDim2.fromOffset(64, 14)
+
+	local statusLabel = ensureTextLabel(row, "StatusLabel", {
+		font = Enum.Font.GothamBold,
+		textColor = WorldBillboardTheme.Status,
+		textSize = 12,
+		textXAlignment = Enum.TextXAlignment.Right,
+	})
+	statusLabel.AnchorPoint = Vector2.new(1, 0)
+	statusLabel.Position = UDim2.new(1, -10, 0, 8)
+	statusLabel.Size = UDim2.fromOffset(84, 14)
+
+	local nameLabel = ensureTextLabel(row, "NameLabel", {
+		font = Enum.Font.GothamBold,
+		textColor = OverviewRowTheme.Name,
+		textSize = 15,
+	})
+	nameLabel.Position = UDim2.fromOffset(10, 20)
+	nameLabel.Size = UDim2.new(1, -92, 0, 18)
+
+	local detailLabel = ensureTextLabel(row, "DetailLabel", {
+		font = Enum.Font.GothamMedium,
+		textColor = OverviewRowTheme.Detail,
+		textSize = 12,
+		textWrapped = true,
+	})
+	detailLabel.Position = UDim2.fromOffset(10, 36)
+	detailLabel.Size = UDim2.new(1, -20, 0, 12)
+
+	return row
+end
+
 for index = 1, 8 do
-	tableOverviewRows[index] = TableOverviewList:WaitForChild(string.format("SeatRow%02d", index))
+	tableOverviewRows[index] = ensureOverviewRow(index)
 end
 
 local OnboardingStepLabels = {}
@@ -437,6 +825,9 @@ local function updateOnboardingPanel()
 
 	for index, step in ipairs(currentOnboardingState.steps or {}) do
 		local chip = OnboardingStepLabels[index]
+		if not chip then
+			continue
+		end
 		chip.Text = step.label or chip.Text
 		if step.isComplete then
 			chip.BackgroundColor3 = Color3.fromRGB(63, 96, 67)
@@ -458,20 +849,40 @@ local function updateOnboardingPanel()
 end
 
 local function applyOnboardingLayout(profile)
+	OnboardingTitle.LayoutOrder = 1
+	OnboardingProgressText.LayoutOrder = 2
+	OnboardingTaskLabel.LayoutOrder = 3
+	OnboardingHintLabel.LayoutOrder = 4
+	local spacer = OnboardingPanel:FindFirstChild("Spacer")
+	if spacer and spacer:IsA("GuiObject") then
+		spacer.LayoutOrder = 5
+	end
+	if OnboardingSteps then
+		OnboardingSteps.LayoutOrder = 6
+	end
+	OnboardingProgressBar.LayoutOrder = 7
+
 	if profile.isMobile then
 		OnboardingPanel.Position = profile.isPortrait and UDim2.fromScale(0.02, 0.085) or UDim2.fromScale(0.02, 0.12)
-		OnboardingPanel.Size = profile.isPortrait and UDim2.fromOffset(230, 140) or UDim2.fromOffset(250, 132)
+		OnboardingPanel.Size = profile.isPortrait and UDim2.fromOffset(230, 168) or UDim2.fromOffset(250, 156)
 		OnboardingTitle.TextSize = profile.isPortrait and 14 or 15
 		OnboardingProgressText.TextSize = profile.isPortrait and 12 or 13
 		OnboardingTaskLabel.TextSize = profile.isPortrait and 14 or 15
 		OnboardingHintLabel.TextSize = 11
 	else
 		OnboardingPanel.Position = UDim2.fromScale(0.016, 0.11)
-		OnboardingPanel.Size = UDim2.fromOffset(328, 154)
+		OnboardingPanel.Size = UDim2.fromOffset(328, 188)
 		OnboardingTitle.TextSize = 18
 		OnboardingProgressText.TextSize = 14
 		OnboardingTaskLabel.TextSize = 17
 		OnboardingHintLabel.TextSize = 13
+	end
+
+	if OnboardingProgressText then
+		OnboardingProgressText.Size = UDim2.new(1, 0, 0, profile.isMobile and 16 or 18)
+	end
+	if OnboardingSteps then
+		OnboardingSteps.Size = UDim2.new(1, 0, 0, profile.isMobile and 22 or 26)
 	end
 end
 
@@ -693,11 +1104,13 @@ local function applyUpgradeButtonLayout(profile)
 	flipConstraint.MinTextSize = profile.isMobile and 14 or 22
 	flipConstraint.MaxTextSize = profile.isMobile and 30 or 64
 
-	local resultConstraint = ensureTextConstraint(ResultLabel, "ResponsiveConstraint")
-	ResultLabel.TextScaled = true
-	ResultLabel.TextWrapped = true
-	resultConstraint.MinTextSize = profile.isMobile and 10 or 16
-	resultConstraint.MaxTextSize = profile.isMobile and 18 or 34
+	if ResultLabel then
+		local resultConstraint = ensureTextConstraint(ResultLabel, "ResponsiveConstraint")
+		ResultLabel.TextScaled = true
+		ResultLabel.TextWrapped = true
+		resultConstraint.MinTextSize = profile.isMobile and 10 or 16
+		resultConstraint.MaxTextSize = profile.isMobile and 18 or 34
+	end
 end
 
 local function applyHudLayout(profile)
@@ -712,15 +1125,36 @@ local function applyHudLayout(profile)
 
 	Content.Size = UDim2.fromScale(1, 1)
 
-	if profile.isMobile then
-		StatsFrame.Position = UDim2.fromScale(0.04, 0.08)
-		StatsFrame.Size = UDim2.fromScale(0.5, 0.36)
-		ResultLabel.Position = UDim2.fromScale(0.58, 0.09)
-		ResultLabel.Size = UDim2.fromScale(0.36, 0.16)
-		FlipButton.Position = UDim2.fromScale(0.04, 0.48)
-		FlipButton.Size = UDim2.fromScale(0.43, 0.16)
-		UpgradeButtons.Position = UDim2.fromScale(0.04, 0.7)
-		UpgradeButtons.Size = UDim2.fromScale(0.92, 0.2)
+	if ContentListLayout and ActionsFrame then
+		ContentListLayout.Padding = UDim.new(0, profile.isMobile and 8 or 10)
+		ContentListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+		ContentListLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+		ContentListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+		StatsFrame.LayoutOrder = 1
+		StatsFrame.Position = UDim2.new()
+		StatsFrame.Size = UDim2.new(1, 0, 0, profile.isMobile and 92 or 108)
+
+		ResultLabel.LayoutOrder = 2
+		ResultLabel.Position = UDim2.new()
+		ResultLabel.Size = UDim2.new(1, 0, 0, profile.isMobile and 28 or 34)
+
+		ActionsFrame.LayoutOrder = 3
+		ActionsFrame.Position = UDim2.new()
+		ActionsFrame.Size = UDim2.new(1, 0, 0, profile.isMobile and 78 or 84)
+		local actionsLayout = ActionsFrame:FindFirstChildOfClass("UIListLayout")
+		if actionsLayout then
+			actionsLayout.Padding = UDim.new(0, profile.isMobile and 6 or 8)
+			actionsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+			actionsLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+			actionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		end
+
+		FlipButton.Size = UDim2.new(1, 0, 0, profile.isMobile and 36 or 40)
+		FlipButton.Position = UDim2.new()
+		UpgradeButtons.LayoutOrder = 4
+		UpgradeButtons.Position = UDim2.new()
+		UpgradeButtons.Size = UDim2.new(1, 0, 0, profile.isMobile and 126 or 96)
 	else
 		StatsFrame.Position = UDim2.fromScale(0.02, 0.05)
 		StatsFrame.Size = UDim2.fromScale(0.76, 0.22)
@@ -737,13 +1171,19 @@ local function applyHudLayout(profile)
 	UpgradeGridLayout.CellPadding = profile.upgradeCellPadding
 
 	local leaveButton = Content:FindFirstChild("LeaveSeatButton")
+	if not leaveButton and ActionsFrame then
+		leaveButton = ActionsFrame:FindFirstChild("LeaveButton") or ActionsFrame:FindFirstChild("LeaveSeatButton")
+	end
 	if leaveButton then
 		local leaveConstraint = ensureTextConstraint(leaveButton, "ResponsiveConstraint")
 		leaveButton.TextScaled = true
 		leaveConstraint.MinTextSize = profile.isMobile and 12 or 11
 		leaveConstraint.MaxTextSize = profile.isMobile and 22 or 18
 
-		if profile.isMobile then
+		if ContentListLayout and ActionsFrame then
+			leaveButton.Size = UDim2.new(1, 0, 0, profile.isMobile and 32 or 34)
+			leaveButton.Position = UDim2.new()
+		elseif profile.isMobile then
 			leaveButton.AnchorPoint = Vector2.new(0, 0)
 			leaveButton.Position = UDim2.fromScale(0.53, 0.48)
 			leaveButton.Size = UDim2.fromScale(0.43, 0.16)
@@ -1173,11 +1613,7 @@ local function requestFlip()
 end
 
 local function requestStand()
-	if not currentSeatId then
-		return
-	end
-
-	TableSeatSystem.Server:RequestStand()
+	return
 end
 
 local function ensureSpectatorFeed()
@@ -1207,7 +1643,7 @@ local function applyOverviewLayout(profile, panel)
 	local title = panel.Title
 	local subtitle = panel.Subtitle
 	local list = panel.List
-	local emptyLabel = panel.EmptyLabel
+	local emptyLabel = panel:FindFirstChild("EmptyLabel", true)
 	local stroke = panel:FindFirstChildOfClass("UIStroke")
 
 	panel.Position = UDim2.fromScale(profile.overviewPosition.X, profile.overviewPosition.Y)
@@ -1219,13 +1655,21 @@ local function applyOverviewLayout(profile, panel)
 	end
 	if subtitle then
 		subtitle.TextSize = profile.isMobile and 9 or 13
+		subtitle.Position = UDim2.fromOffset(12, profile.isMobile and 28 or 36)
+		subtitle.Size = UDim2.new(1, -24, 0, profile.isMobile and 24 or 32)
 	end
 	if stroke then
 		stroke.Thickness = profile.isMobile and 1.1 or 1.4
 	end
 	if list then
-		list.Position = UDim2.fromOffset(12, profile.isMobile and 48 or 62)
-		list.Size = UDim2.new(1, profile.isMobile and -24 or -28, 1, profile.isMobile and -58 or -90)
+		local listY = profile.isMobile and 58 or 78
+		local listBottomPadding = profile.isMobile and 70 or 96
+		if panel:FindFirstChild("Divider") then
+			listY = profile.isMobile and 60 or 82
+			listBottomPadding = profile.isMobile and 72 or 100
+		end
+		list.Position = UDim2.fromOffset(12, listY)
+		list.Size = UDim2.new(1, profile.isMobile and -24 or -28, 1, -listBottomPadding)
 		list.ScrollBarThickness = profile.isMobile and 3 or 6
 
 		local layout = list:FindFirstChildOfClass("UIListLayout")
@@ -1235,7 +1679,8 @@ local function applyOverviewLayout(profile, panel)
 	end
 	if emptyLabel then
 		emptyLabel.TextSize = profile.isMobile and 10 or 14
-		emptyLabel.Position = UDim2.fromOffset(12, profile.isMobile and 48 or 62)
+		emptyLabel.Position = UDim2.fromOffset(0, 8)
+		emptyLabel.Size = UDim2.new(1, 0, 0, profile.isMobile and 16 or 20)
 	end
 end
 
@@ -1370,7 +1815,7 @@ end
 local function setVisible(isVisible)
 	Hud.Visible = isVisible == true
 	if not isVisible then
-		updateResultText("Approach a seat to reveal the flip HUD.", "Neutral")
+		updateResultText("Waiting for seat assignment...", "Neutral")
 	end
 end
 
@@ -1382,8 +1827,21 @@ local function updateUpgradeButton(button, title, level, cost, isMaxed)
 end
 
 local function ensureLeaveButton()
+	if ActionsFrame then
+		local modernLeaveButton = ActionsFrame:FindFirstChild("LeaveButton") or ActionsFrame:FindFirstChild("LeaveSeatButton")
+		if modernLeaveButton then
+			modernLeaveButton.Visible = false
+			modernLeaveButton.Active = false
+			modernLeaveButton.AutoButtonColor = false
+			return modernLeaveButton
+		end
+	end
+
 	local leaveButton = Content:FindFirstChild("LeaveSeatButton")
 	if leaveButton then
+		leaveButton.Visible = false
+		leaveButton.Active = false
+		leaveButton.AutoButtonColor = false
 		return leaveButton
 	end
 
@@ -1400,7 +1858,9 @@ local function ensureLeaveButton()
 	leaveButton.Position = UDim2.new(1, -18, 0, 16)
 	leaveButton.Size = UDim2.fromOffset(112, 34)
 	leaveButton.Visible = false
-	leaveButton.Parent = Content
+	leaveButton.Active = false
+	leaveButton.AutoButtonColor = false
+	leaveButton.Parent = ActionsFrame or Content
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 10)
@@ -1503,10 +1963,6 @@ function CoinFlipUi.Init()
 		requestFlip()
 	end)
 
-	uiController.SetButtonHoverAndClick(leaveButton, function()
-		requestStand()
-	end)
-
 	for upgradeKey, button in pairs(UpgradeMap) do
 		uiController.SetButtonHoverAndClick(button, function()
 			CoinFlipSystem.Server:BuyUpgrade({
@@ -1574,13 +2030,13 @@ function CoinFlipUi.SeatStateChanged(args)
 		awaitingFlipResponse = false
 	end
 	setVisible(isSeated)
-	leaveButton.Visible = isSeated == true
+	leaveButton.Visible = false
 	updateTableOverview(args and args.seatState)
 	updateOnboardingPanel()
 	if isSeated then
 		SeatValue.Text = args.seatState.seatId or "--"
-		if ResultLabel.Text == "Approach a seat to reveal the flip HUD." then
-			updateResultText("Click FLIP to flip. Jump to leave the seat.", "Neutral")
+		if ResultLabel.Text == "Waiting for seat assignment..." then
+			updateResultText("Click FLIP to flip.", "Neutral")
 		end
 	end
 end

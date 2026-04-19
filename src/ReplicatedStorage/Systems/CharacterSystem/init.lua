@@ -100,6 +100,10 @@ function CharacterSystem:PlayerAdded(sender, player: Player, args)
 
 			local Humanoid = model:WaitForChild("Humanoid")
 			Humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+			Humanoid.AutoJumpEnabled = false
+			Humanoid.UseJumpPower = false
+			Humanoid.JumpHeight = 0
+			Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
 			SystemMgr.systems.PlayerSystem:UpdateLeaderStats(player)
 			SystemMgr.systems.PlayerSystem:UpdatePlayerHeadGui(player)
 			ModelModule.SetModelCollisionGroup(model, Keys.CollisionGroup.Player)

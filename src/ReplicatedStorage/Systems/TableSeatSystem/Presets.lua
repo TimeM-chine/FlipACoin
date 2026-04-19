@@ -9,6 +9,8 @@ local Presets = {
 }
 
 Presets.AfkKickSeconds = GameConfig.FlipACoin.AfkKickSeconds
+Presets.AutoSeatRetryInterval = 0.15
+Presets.AutoSeatMaxAttempts = 40
 Presets.Billboard = table.freeze({
 	MaxDistance = 56,
 	FullSize = Vector2.new(168, 74),

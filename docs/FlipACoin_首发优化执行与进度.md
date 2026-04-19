@@ -1,235 +1,374 @@
 # FlipACoin 首发优化执行与进度
 
-最后更新：2026-04-17
+最后更新：2026-04-19
 
 ## 文档定位
 
-这份文档是本轮“全链路首发优化”的唯一续接文档，用于：
+这份文档已按 2026-04-19 的新需求整份重置。
+
+它现在只负责记录这一轮真实执行计划、当前状态和验证结论，用于：
 
 - 跨设备继续推进
-- 多轮对话继续接力
-- 多协作者共享当前结论、优先级与状态
+- 多 agent 并行接力
+- 防止旧的“围观版”方案继续误导实现
 
-它不替代以下文档：
-
-- `docs/PROJECT_LOGIC.md`
-  - 负责说明当前代码和运行链路，是仓库接管入口
-- `docs/FlipACoin_首发路线图与进度.md`
-  - 负责记录旧的首发推进历史
-- `docs/FlipACoin_Roblox多人化改造策划案.md`
-  - 负责说明产品目标和设计出发点
-
-后续若要继续本轮优化，建议始终按这个顺序读：
+后续接手顺序固定为：
 
 1. `docs/PROJECT_LOGIC.md`
 2. `docs/FlipACoin_首发优化执行与进度.md`
-3. 若要补背景，再看 `docs/FlipACoin_首发路线图与进度.md`
-4. 若要回到设计原点，再看 `docs/FlipACoin_Roblox多人化改造策划案.md`
+3. 若要补旧背景，再看 `docs/FlipACoin_首发路线图与进度.md`
 
-如果文档与当前代码冲突：
+如果文档和当前代码冲突：
 
 - 以当前代码为准
-- 先修正文档，再继续推进
+- 先回写本文，再继续改
 
 ---
 
-## 版本目标
+## 本轮需求重置
 
-本轮首发优化目标不是补一个点，而是把“能玩”推到“更容易留下来、更容易传播、更有后续目标”。
+本轮不再继续“围观转化”方向，目标已改为更直接的单人入局体验：
 
-目标版本定义：
+1. 一个服务器可以有多张桌子，但玩家进入游戏后必须自动分配座位并立即坐下
+2. 玩家暂时不能离开座位，也不做切桌逻辑
+3. 摄像头必须改成第一人称
+4. Flip 输入必须同时支持：
+   - HUD 按钮点击
+   - `Space`
+   - 手柄 `RT`
+5. `Space` 原本跳跃逻辑必须被禁用，不能让玩家跳出座位
+6. 不再显示座位上的 `BillboardGui`
+7. 参考给定示意图重做 `Flip HUD`，突出中间主按钮和两侧信息区
+8. 所有资源必须预制到 Studio 中，不允许继续靠代码临时生成 UI / Billboard / 世界资源
 
-- 玩家进入后 `1 分钟内` 理解主玩法
-- 玩家进入后 `5 分钟内` 感到想继续
-- 玩家进入后 `10-20 分钟内` 看到明确长期目标
+本轮默认不做：
 
-本轮优化覆盖：
-
-- 首留与首局引导
-- 同桌社交与围观转化
-- 数值重构与局内构筑
-- 长线成长与内容钩子
-- 首发表现、移动端和上线前验收
-
-本轮优化默认不引入：
-
-- 重 PvP
-- 负向互坑
-- 多世界扩张
-- 复杂 simulator 壳层
-
----
-
-## 当前结论
-
-结合当前活跃代码与现有体验，当前版本最需要处理的问题是：
-
-1. 首局引导偏弱，玩家知道“能翻硬币”，但不一定知道“现在该做什么”
-2. 围观体验偏被动，玩家看得到别人，但不一定被转化为下一位入座者
-3. `runData` 语义与长期成长混层，容易让实现继续把“本局成长”写成永久成长
-4. 四项升级目前更像纯线性变强，构筑差异和购买决策感不足
-5. `ownedCoins / equippedCoin / rebirthTree / autoFlipUnlocked` 已有字段尚未真正形成长期目标
-6. 手动点击循环容易在中前期转化为疲劳，而不是张力
-
-当前优化判断：
-
-- 优先顺序不是“先加更多内容”，而是先把首局理解、社交转化和成长层级梳清
-- 后续所有代码与文案调整，都要优先服务“让玩家更快进入状态并更想继续”
-
----
-
-## 优化总里程碑
-
-### M0：基线与埋点
-
-目标：先补最小业务观察能力，确保后续优化能被验证，而不是只靠感觉判断。
-
-重点内容：
-
-- 定义首局关键漏斗节点
-- 梳理现有可复用埋点路径
-- 明确首局引导状态的独立语义
-
-完成标准：
-
-- 可以区分“没看懂玩法”“看懂但没入座”“入座但没持续玩”“玩了但没进入成长”
-
-### M1：首留与首局引导
-
-目标：重做前 `60 秒` 体验，让玩家自然完成一次“入座 -> flip -> 升级 -> 再继续”的闭环。
-
-重点内容：
-
-- 固定首局任务链
-- HUD / 世界提示 / 头顶提示统一
-- 失败提示改成下一步行动建议
-
-完成标准：
-
-- 新玩家不需要外部解释，也能完成一次完整循环
-- 首次入座到首次升级的路径明显缩短
-
-### M2：同桌社交与围观转化
-
-目标：把“看得到别人”升级成“会被别人吸引进桌”。
-
-重点内容：
-
-- 热门座位高亮
+- 围观机制
+- featured seat
+- audience 范围收敛
 - 空位抢座引导
-- 围观时快速看到别人高潮信息
-- 播报范围从全服噪音收敛到同桌/近桌优先
+- 离座按钮
+- 手动切桌
 
-完成标准：
+---
 
-- 旁观者能快速理解这桌正在发生什么
-- 空位存在时，围观玩家有更明确的入座路径
+## 社区检索结论
 
-### M3：数值重构与局内构筑
+已先做第一人称方案检索，当前找到两个可参考社区方案：
 
-目标：把“有钱就升”的单线成长，改成有路线差异的局内构筑。
+- [Open FPC](https://devforum.roblox.com/t/open-fpc-a-modern-first-person-camera-system/2507587)
+  - 偏现代化、可定制，适合先作为首选评估对象
+- [FPX](https://devforum.roblox.com/t/fpx-first-person-experience/3537429)
+  - 更新更近，但集成侵入性更强，先不作为第一选择
 
-重点内容：
+当前决策：
 
-- 明确拆分 `Run Progression` 与 `Meta Progression`
-- 调整四项升级曲线与分工
-- 重新校准点击疲劳、首次爽点与 streak 稀缺度
+- 第一人称相机任务不排到最后
+- 先按 `Open FPC` 作为优先接入候选
+- 若它与“强制坐席 + 禁止离座 + 当前角色链路”冲突过大，再回退到自实现第一人称锁定方案
 
-完成标准：
+---
 
-- 前期不拖，中期有“差一点”的情绪
-- 不同升级组合能形成可感知差异
+## 当前代码事实
 
-### M4：长线成长与内容钩子
+以下是当前代码里已经确认、但与新方案冲突的点：
 
-目标：让玩家在第一次离开前，已经知道自己下一次回来想追什么。
+- `TableSeatSystem` 仍然是 `ProximityPrompt` 入座
+- `TableSeatSystem` 仍保留：
+  - `RequestStand`
+  - AFK 踢座
+  - `SeatInfoBillboard`
+  - featured seat 计算
+  - audience / spectator 同步语义
+- `CoinFlipSystem/ui.lua` 仍保留：
+  - `CoinFlipSpectatorFeed`
+  - `CoinFlipTableOverview`
+  - `Leave Seat` 按钮
+  - `Jump to leave the seat.` 文案
+  - 运行时 `ensure*` 创建 UI 的逻辑
+- 当前代码文案里已经出现 `Space flips`，但尚未看到完整冻结为首发正式输入方案的实现闭环
+- 当前 UI 仍有大量运行时 `Instance.new` 兜底逻辑，不符合“资源全部预制到 Studio”要求
 
-重点内容：
-
-- 功能硬币
-- rebirth 开局强化
-- auto flip 解锁与控制
-
-完成标准：
-
-- 玩家能明确说出自己的下一个长期目标
-- 长线系统不会把产品带偏成普通 simulator
-
-### M5：首发表现、移动端与上线前验收
-
-目标：把核心高光、移动端可玩性和多人同桌稳定性一起收尾到可发布状态。
-
-重点内容：
-
-- `10 streak`、`Table Fever`、`rebirth`、稀有硬币首次装备的高光表现
-- 移动端 HUD、按钮密度与误触回归
-- `4 人 / 8 人` 同桌稳定性验证
-
-完成标准：
-
-- PC 与移动端都能完整体验主循环
-- `8 人` 同桌场景下信息仍清晰、反馈不过载
+本轮要做的不是在旧方案上继续加补丁，而是把上面这些冲突点按新需求整批替换掉。
 
 ---
 
 ## 当前正在做
 
-- 推进 `M2-01` 热门座位高亮首版，并准备多人同桌回归
-- 开始梳理 `M2-02` Audience 范围收敛的现状与改造边界
-- 把 `featured seat` 判定口径和现有 UI 复用边界同步回续接文档
+- 已完成旧进度文档清空与需求重置
+- 已完成第一人称社区方案检索
+- 已完成 `M0-03` Studio 资源清单冻结
+- 已落 `M1-01` 自动分配空座位首版代码，当前等待 Studio Play 回归
+- 已落 `M1-02 / M1-03` 强制坐席首版代码，当前等待 Studio Play 回归
+- 下一步继续 `M1-01 / M1-02 / M1-03` 的实机验证与脱座回收，不再继续旧的围观任务
 
-## 最新实现进展
+---
 
-- 已新增独立首局引导状态：`guideData.coinFlipOnboarding`
-- 已把 `onboardingFunnelStep` 和实际引导状态拆开，避免继续混写
-- 已把首局任务链接到真实玩法事件：
-  - 靠近空位 prompt
-  - 入座
-  - flip `3` 次
-  - 购买首次升级
-  - 达成 `2 streak`
-- 已新增常驻 HUD 引导面板 `StarterGui.Main.Elements.CoinFlipOnboarding`
-- 已把座位 prompt 文案收敛为 `Take Seat / Flip Table`
-- 已把世界 Billboard 和头顶文案接到首局阶段：
-  - 未入座时空位显示 `Take Seat / Start Here`
-  - 已入座后自己的桌位显示 `Next Up`
-  - 头顶提示会从 `Take Seat -> Flip x3 -> Buy Upgrade -> 2 Streak`
-- 已完成一轮 Studio 实机验证：
-  - 新号入座后面板从 `2 / 5` 推进到 `4 / 5`
-  - 首购升级后正确切到 `2 streak`
-  - 达成目标后面板隐藏，漏斗节点推进到 `6`
-- 已完成第二轮世界/头顶文案对齐实现：
-  - 未入座状态下已确认世界 Billboard 与头顶提示同步到 `Take Seat`
-  - 入座后二次同步补丁已落代码，但补测时 Studio Play 会话卡在初始化中间态，需下轮补一遍完整回归
-- 已定位 Studio Play 初始化卡点根因：
-  - `SystemMgr` 运行时 Remote 挂在 `ModuleScript` 子级时，客户端会出现 `WaitForChild("RemoteEvent")` 卡住
-  - 已把运行时桥接节点改到 `ReplicatedStorage.Systems.SystemMgrRuntime`
-  - 后续完整回归应基于这版桥接实现继续做，不再沿用“原因未明”的旧结论
-- 已补首版失败提示改造：
-  - `Tails` 结果不再只显示 `Streak reset`
-  - 会结合当前引导步骤补一句明确的下一步动作，例如继续 flip、购买升级或重新追 `2 streak`
-  - 同时会通过轻量通知再提示一次，避免结果文本在移动端或高节奏操作里被忽略
-- 已完成 fresh Play 首局完整回归：
-  - `SystemMgrRuntime` 方案下未再出现 `WaitForChild("RemoteEvent")` 初始化卡死
-  - `靠近空位 -> 入座 -> flip 3 次 -> 首购升级 -> 2 streak` 链路可连续推进
-  - `flipThree` 阶段失败提示已验证为 `Next: keep flipping to reach 3.`
-  - `reachTwoStreak` 阶段失败提示已验证为 `Next: rebuild to 2 Heads.`
-- 已修复头顶引导文案与 HUD 不一致问题：
-  - 根因是 `PlayerSystem` 传给 `Onboarding.BuildActionText()` 的是 `BuildState()` 返回的展示态
-  - 原实现仍按原始存档态取步骤，导致头顶长期停在 `Take Seat / Start your first run`
-  - 已让头顶文案兼容展示态的 `currentStep`，现已验证会随引导推进到 `Flip x3 -> Buy Upgrade -> 2 Streak`
-- 已落 `M2-01` 热门座位高亮首版：
-  - `TableSeatSystem` 现在会基于 `streak + 最近活动时间 + 少量 cash 平分` 统一计算当前 `featured seat`
-  - `buildSeatState()` 现会额外同步 `featuredSeatId / featuredSeatPlayerName / featuredSeatLabel / featuredSeatStreak`
-  - `CoinFlipSystem/ui.lua` 已把观战态世界 Billboard 从“所有占座都 full”收敛为“热门座位 full，其余 occupied compact”
-  - `CoinFlipTableOverview` 的 subtitle 和行样式也已接入 `featured seat` 高亮
-  - 当前仍缺 `4 人 / 8 人` 同桌实机验证，暂不转 `已完成`
+## M0-03 资源清单冻结结果
 
-## 下一步
+清点时间：2026-04-19
 
-1. 补一次 `4 人 / 8 人` 同桌验证，观察 `featured seat` 高亮与现有 Billboard、观战 feed 是否会互相抢注意力
-2. 若 `M2-01` 验证通过，再进入 `M2-02`，核对 `GetAudiencePlayers()`、播报接收范围和桌况同步范围的真实影响面
-3. 根据多人验证结果，再决定是否提前补 `M2-03` 的空位抢座引导文案
+清点方式：
+
+- 源码检索活跃系统中的 `Instance.new`、`BillboardGui`、`ProximityPrompt`、`CoinFlipHUD`、`CoinFlipTableOverview`、`CoinFlipSpectatorFeed`、`Camera`、`UserInputService`
+- Studio 停止模式检查 `StarterGui.Main.Elements` 与 `Workspace.CoinFlipTable`
+- 以 `SystemMgr.lua` 当前注册系统为准，只把首发主线和活跃系统算入本轮资源口径
+
+### 范围冻结
+
+本轮主路径只保留：
+
+- 自动分配座位
+- 自动坐下并锁定坐席
+- 第一人称相机
+- `Flip HUD`
+- 点击 / `Space` / 手柄 `RT` 触发同一套 Flip
+- 当前现金、streak、概率、速度、四项升级、基础结果反馈
+
+本轮明确退场，不再继续投入：
+
+- 手动抢座 / 空位 `ProximityPrompt` 主流程
+- 离座按钮与 `RequestStand` 玩家入口
+- 座位 `SeatInfoBillboard`
+- `CoinFlipTableOverview`
+- `CoinFlipSpectatorFeed`
+- `featured seat`
+- spectator / audience 方向表现
+- 空位抢座引导文案
+
+### 当前 Studio 已有资源
+
+`StarterGui.Main.Elements` 当前已存在：
+
+- `CoinFlipHUD`
+  - `Content`
+  - `Stats`
+  - `Stats.Cash`
+  - `Stats.Chance`
+  - `Stats.Streak`
+  - `Stats.Speed`
+  - `Actions`
+  - `Actions.FlipButton`
+  - `Actions.LeaveButton`
+- `CoinFlipOnboarding`
+- `CoinFlipTableOverview`
+- `CoinFlipSpectatorFeed`
+- 对应的 `_backup` 旧资源：`CoinFlipHUD_backup`、`CoinFlipOnboarding_backup`、`CoinFlipTableOverview_backup`、`CoinFlipSpectatorFeed_backup`
+
+`Workspace.CoinFlipTable` 当前已存在：
+
+- `Seats`
+- `Seats.Seat01` 到 `Seats.Seat08`
+- 每个座位当前都有 `Prompt`
+- 每个座位当前都有 `SeatInfoBillboard`
+- `Attachments`
+- `Assets`
+- `Assets.CoinVisuals`
+- `TableTop`
+- `TableBase`
+- `SpectatorZone`
+
+### 必须预制或重做的首发资源
+
+`StarterGui.Main.Elements.CoinFlipHUD` 需要冻结为新的预制结构，不再靠代码补主节点：
+
+- `Content.LeftPanel`
+- `Content.LeftPanel.CashCard.Title`
+- `Content.LeftPanel.CashCard.Value`
+- `Content.LeftPanel.StreakCard.Title`
+- `Content.LeftPanel.StreakCard.Value`
+- `Content.CenterPanel`
+- `Content.CenterPanel.FlipButton`
+- `Content.CenterPanel.FlipButton.Label`
+- `Content.CenterPanel.ResultLabel`
+- `Content.CenterPanel.InputHints`
+- `Content.CenterPanel.InputHints.SpaceHint`
+- `Content.CenterPanel.InputHints.GamepadRTHint`
+- `Content.RightPanel`
+- `Content.RightPanel.ChanceCard.Title`
+- `Content.RightPanel.ChanceCard.Value`
+- `Content.RightPanel.SpeedCard.Title`
+- `Content.RightPanel.SpeedCard.Value`
+- `Content.RightPanel.UpgradeButtons`
+- `Content.RightPanel.UpgradeButtons.ValueButton`
+- `Content.RightPanel.UpgradeButtons.ComboButton`
+- `Content.RightPanel.UpgradeButtons.SpeedButton`
+- `Content.RightPanel.UpgradeButtons.BiasButton`
+
+每个升级按钮必须预制：
+
+- `Title`
+- `Level`
+- `Cost`
+- `UICorner`
+- `UIStroke`
+- 文本约束或缩放约束
+
+输入提示资源必须预制在 HUD 内：
+
+- `SpaceHint` 用于 PC 键盘提示
+- `GamepadRTHint` 用于手柄 `RT` 提示
+- 后续代码只负责显隐和改文字，不再 `Instance.new` 创建提示节点
+
+第一人称模块放置边界冻结为：
+
+- 社区模块或回退模块放在 `StarterPlayer.StarterPlayerScripts.Modules.FirstPersonCamera`
+- 项目适配脚本放在 `StarterPlayer.StarterPlayerScripts` 或 `CoinFlipSystem` 客户端初始化链路中
+- 相机模块只处理本地相机、鼠标锁定、角色局部透明、重生再绑定
+- 相机模块不负责座位分配、Flip 请求、HUD 数据刷新
+
+桌面与座位资源保留口径：
+
+- `Workspace.CoinFlipTable.Seats` 保留为自动分配座位池
+- `Workspace.CoinFlipTable.Attachments` 保留为相机 / 硬币表现 / 座位锚点候选
+- `Workspace.CoinFlipTable.Assets.CoinVisuals` 保留为硬币视觉预制目录
+- `Prompt` 后续只允许作为调试或直接禁用资源，不能再是主流程入口
+- `SeatInfoBillboard` 后续必须隐藏、禁用或移除，不再进入首发主表现
+- `SpectatorZone` 暂不投入；如后续没有其它系统依赖，应在清理阶段退场
+
+### 必须清理的运行时创建点
+
+`src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua` 仍在运行时补造这些主资源或旧表现，后续 `M4` 必须替换为预制绑定：
+
+- `UICorner` / `UIStroke` 兜底
+- `TextLabel` 兜底
+- `Seat` stat card
+- `ResultLabel`
+- `UpgradeButtons`
+- `UIGridLayout`
+- 四个升级按钮
+- onboarding 的 `ProgressText` / `Steps`
+- table overview rows
+- `LeaveSeatButton`
+- `UISizeConstraint` / `UITextSizeConstraint` 兜底
+- `CoinLandingPulse` 世界 Part
+
+`src/ReplicatedStorage/Systems/TableSeatSystem/init.lua` 当前仍依赖：
+
+- `SeatInfoBillboard`
+- `Prompt`
+- `featured seat` 状态字段
+- billboard 刷新链路
+
+`src/ReplicatedStorage/Systems/AnnouncementSystem/ui.lua` 当前仍运行时创建顶部 banner。若首发继续保留 announcement，需要新增 Studio 预制 banner 模板；若不保留，需要在表现清理阶段退场。
+
+`src/ReplicatedFirst/LoadingScreen/Loader.lua` 仍有加载期运行时创建逻辑。它不阻塞 `M0-03`，但如果“所有 UI 都必须预制”的口径扩展到加载屏，也需要单独列入后续清理。
+
+### M0-03 决策
+
+- `M0-03` 已完成，后续 agent 不需要重新盘点第一批资源。
+- `M1` 可以直接开始自动分配和自动坐下，不需要等待 HUD 重做。
+- `M4` 必须按上面的新 HUD 结构做 Studio 资源与代码绑定，不允许继续扩展 `ensure*` 兜底创建逻辑。
+- `M2` 接入第一人称时按 `StarterPlayer.StarterPlayerScripts.Modules.FirstPersonCamera` 作为模块落点；如果使用 `Open FPC`，也必须包一层项目适配，避免第三方模块直接耦合座位系统。
+
+---
+
+## 新执行顺序
+
+### M0：范围冻结与资源清点
+
+目标：先把旧方向彻底停掉，明确哪些资源必须改成 Studio 预制。
+
+重点内容：
+
+- 冻结本轮“不做列表”
+- 盘点当前哪些 UI / Billboard / 世界元素还是运行时代码创建
+- 确认新 HUD 需要的 Studio 资源清单
+- 确认第一人称模块放置位置和接入边界
+
+完成标准：
+
+- 后续 agent 不会再继续做围观、Billboard、featured seat 方向
+- HUD / 输入 / 相机 / 座位所需资源有明确清单
+
+### M1：自动入座与强制坐席
+
+目标：玩家进入游戏后自动落到某张桌子的空座位上，并且不能主动离开。
+
+重点内容：
+
+- 服务端自动分配空座位
+- `PlayerAdded / CharacterAdded` 后自动坐下
+- 去掉手动入座 prompt 主路径
+- 禁止 `RequestStand`
+- 禁止跳跃导致的离座
+- 暂停 AFK 踢座或改成不会把玩家弹出座位
+
+完成标准：
+
+- 玩家进服后无需操作即可进入可 Flip 状态
+- 玩家无法通过跳跃、按钮或默认座椅行为离开座位
+
+### M2：第一人称相机
+
+目标：玩家入局后稳定处于第一人称视角，并与坐席状态兼容。
+
+重点内容：
+
+- 优先评估并接入 `Open FPC`
+- 若模块不合适，落回自实现第一人称锁定
+- 处理角色坐姿、头部遮挡、镜头穿模、重生后的重新绑定
+
+完成标准：
+
+- 角色坐下后镜头稳定
+- 重生、重新入座后仍能恢复第一人称
+- 不因第一人称导致无法 Flip 或严重遮挡桌面
+
+### M3：Flip 输入统一
+
+目标：让 PC、键盘和手柄都能用同一套输入闭环完成 Flip。
+
+重点内容：
+
+- HUD 点击触发
+- `Space` 触发
+- 手柄 `RT` 触发
+- 屏蔽默认跳跃
+- 确保输入在 HUD 激活、重生、第一人称状态下都稳定
+
+完成标准：
+
+- 点击、`Space`、`RT` 都能触发同一个 `RequestFlip`
+- `Space` 不再导致跳跃或离座
+
+### M4：HUD 重做与旧表现清理
+
+目标：去掉旧的围观和桌况表现，只留下主玩家首屏所需信息。
+
+重点内容：
+
+- 删除座位 `BillboardGui` 显示链路
+- 删除 spectator feed / table overview / featured seat 相关表现
+- 参考示意图重做 `CoinFlipHUD`
+- 强化中间 `FLIP` 主按钮
+- 两侧分别承载当前现金 / streak / 升级信息
+- 所有 HUD 子节点改为 Studio 预制，不再运行时补造
+
+完成标准：
+
+- 玩家一进游戏只看到首屏主玩法 HUD
+- 不再出现围观、热门座位、桌况看板相关视觉
+- 代码只负责绑定预制资源，不再负责补生成主资源
+
+### M5：回归验证与文档续写
+
+目标：把自动入座、第一人称、输入和 HUD 在真实 Studio 流程里收口。
+
+重点内容：
+
+- 单人进服验证
+- 多桌分配验证
+- 满桌保护验证
+- 重生后重新坐下与重新绑相机验证
+- `Space / RT / 点击` 三输入回归
+- 文档持续回写
+
+完成标准：
+
+- 新玩家进服即可直接玩
+- 不需要 prompt、Billboard、离座按钮
+- 多端输入和第一人称都稳定
 
 ---
 
@@ -237,23 +376,26 @@
 
 | ID | 里程碑 | 模块 | 优先级 | 状态 | 验收标准 | 依赖 | 最近更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `M0-01` | `M0` | 首局漏斗埋点定义 | `P0` | `已完成` | 首局关键节点、命名与触发口径冻结 | `PROJECT_LOGIC`、现有 `PlayerSystem` 行为链 | `2026-04-16` |
-| `M0-02` | `M0` | 引导状态独立语义 | `P0` | `已完成` | 不再把首局引导状态与通用 `onboardingFunnelStep` 混写 | `M0-01` | `2026-04-16` |
-| `M1-01` | `M1` | 首局任务链 | `P0` | `已完成` | 首局 `60 秒` 任务链、触发规则与文案方向已在 fresh Play 回归中完成验证与冻结 | `M0-01` | `2026-04-17` |
-| `M1-02` | `M1` | HUD/世界/头顶引导统一 | `P0` | `已完成` | HUD / 世界 Billboard / 头顶提示已确认能指向同一下一步动作，且头顶文案错位问题已修复 | `M1-01` | `2026-04-17` |
-| `M1-03` | `M1` | 失败提示改造 | `P1` | `已完成` | `Tails` 在 `flipThree` 与 `reachTwoStreak` 两阶段都能给出明确下一步动作 | `M1-01` | `2026-04-17` |
-| `M2-01` | `M2` | 热门座位高亮 | `P0` | `进行中` | 已落 `featured seat` 首版判定与 Billboard / overview 焦点高亮，待 `4 人 / 8 人` 同桌验证是否足够清晰 | `M1-02` | `2026-04-17` |
-| `M2-02` | `M2` | Audience 范围收敛 | `P0` | `未开始` | 播报优先同桌/近桌/可感知范围，减少全服噪音 | `M2-01` | `2026-04-16` |
-| `M2-03` | `M2` | 空位抢座与围观转化 | `P1` | `未开始` | 空位存在时，围观玩家能清楚知道如何参与 | `M2-01`、`M2-02` | `2026-04-16` |
-| `M3-01` | `M3` | Run / Meta 拆层方案 | `P0` | `未开始` | `runData` 与长期成长职责边界冻结 | `M0-02` | `2026-04-16` |
-| `M3-02` | `M3` | 四项升级差异化 | `P0` | `未开始` | 至少形成 3 类可感知构筑方向 | `M3-01` | `2026-04-16` |
-| `M3-03` | `M3` | 点击疲劳与爽点校准 | `P1` | `未开始` | 中前期不因重复点击过度疲劳，10 分钟内能出现高潮 | `M3-02` | `2026-04-16` |
-| `M4-01` | `M4` | 功能硬币首发名单 | `P0` | `未开始` | 首发 `4-6` 枚硬币的定位与被动冻结 | `M3-01` | `2026-04-16` |
-| `M4-02` | `M4` | RebirthTree 开局强化 | `P0` | `未开始` | 永久成长只强化开局和路线，不压过局内升级 | `M3-01` | `2026-04-16` |
-| `M4-03` | `M4` | Auto Flip 解锁与控制 | `P1` | `未开始` | Auto Flip 成为中期便利性目标，不破坏前期节奏 | `M3-03`、`M4-02` | `2026-04-16` |
-| `M5-01` | `M5` | 高光时刻打磨 | `P1` | `未开始` | `10 streak`、`Table Fever`、`rebirth`、稀有硬币装备都有明确高光 | `M2`、`M4` | `2026-04-16` |
-| `M5-02` | `M5` | 移动端布局回归 | `P1` | `未开始` | 竖屏和横屏都能稳定完成入座、flip、升级、离座 | `M1`、`M2` | `2026-04-16` |
-| `M5-03` | `M5` | 4 人 / 8 人同桌发布前验收 | `P0` | `未开始` | 多人同步、信息密度和稳定性达到首发可接受标准 | `M1`-`M5` 主要改动 | `2026-04-16` |
+| `M0-01` | `M0` | 进度文档重置 | `P0` | `已完成` | 旧围观计划已清空，本文成为新需求下的唯一执行真相 | `PROJECT_LOGIC` | `2026-04-19` |
+| `M0-02` | `M0` | 第一人称社区检索 | `P0` | `已完成` | 已确认 `Open FPC` 可作为优先评估候选，第一人称任务不后置 | `M0-01` | `2026-04-19` |
+| `M0-03` | `M0` | Studio 资源清单冻结 | `P0` | `已完成` | 已确认当前预制资源、待退场旧资源、新 HUD 预制结构、输入提示节点与第一人称模块放置边界 | `M0-01` | `2026-04-19` |
+| `M1-01` | `M1` | 自动分配空座位 | `P0` | `进行中` | 服务端已接入自动分配与 `CharacterAdded` 自动重试，待 Studio Play 确认新玩家进服后稳定落到空座位 | `M0-03` | `2026-04-19` |
+| `M1-02` | `M1` | 自动坐下链路 | `P0` | `进行中` | 自动入座已接到 `PlayerAdded / CharacterAdded` 与脱座后回拉逻辑，待 Studio Play 确认角色生成后稳定坐下 | `M1-01` | `2026-04-19` |
+| `M1-03` | `M1` | 禁止离座与跳座 | `P0` | `进行中` | 已关闭 `RequestStand` 主路径、禁用跳跃状态与触屏跳跃按钮，待 Studio Play 确认默认座椅行为仍不会把玩家弹出 | `M1-02` | `2026-04-19` |
+| `M1-04` | `M1` | 旧 prompt / AFK 逻辑退场 | `P1` | `未开始` | `ProximityPrompt` 不再承担主流程，AFK 不再把玩家踢离座位 | `M1-02` | `2026-04-19` |
+| `M2-01` | `M2` | `Open FPC` 评估与接入 | `P0` | `未开始` | 模块已进入 Studio 并能在当前项目链路中工作 | `M0-02`、`M1-02` | `2026-04-19` |
+| `M2-02` | `M2` | 第一人称回退方案 | `P1` | `未开始` | 若社区模块不适配，可切回自实现第一人称锁定 | `M2-01` | `2026-04-19` |
+| `M2-03` | `M2` | 重生与再绑定 | `P0` | `未开始` | 重生后玩家仍自动坐下并恢复第一人称 | `M1-02`、`M2-01` | `2026-04-19` |
+| `M3-01` | `M3` | `Space` Flip 绑定 | `P0` | `未开始` | `Space` 可稳定触发 Flip，且不触发跳跃 | `M1-03` | `2026-04-19` |
+| `M3-02` | `M3` | 手柄 `RT` Flip 绑定 | `P0` | `未开始` | 手柄 `RT` 可稳定触发同一个 Flip 行为 | `M1-03` | `2026-04-19` |
+| `M3-03` | `M3` | HUD 点击 Flip 统一入口 | `P0` | `未开始` | 点击、`Space`、`RT` 最终都走同一请求路径 | `M3-01`、`M3-02` | `2026-04-19` |
+| `M4-01` | `M4` | 移除座位 BillboardGui | `P0` | `未开始` | 不再显示 `SeatInfoBillboard`，相关刷新链路全部停用 | `M1-02` | `2026-04-19` |
+| `M4-02` | `M4` | 移除围观 HUD 链路 | `P0` | `未开始` | `CoinFlipSpectatorFeed`、`CoinFlipTableOverview`、featured seat 表现退出主流程 | `M4-01` | `2026-04-19` |
+| `M4-03` | `M4` | 新 Flip HUD 预制资源 | `P0` | `未开始` | 参考图中的主按钮、左侧状态、右侧升级区已在 Studio 做成资源 | `M0-03` | `2026-04-19` |
+| `M4-04` | `M4` | HUD 绑定改为预制模式 | `P0` | `未开始` | 主 UI 不再依赖运行时 `Instance.new` 补资源 | `M4-03` | `2026-04-19` |
+| `M5-01` | `M5` | 单人首轮回归 | `P0` | `未开始` | 玩家进服后自动坐下、第一人称生效、三输入可 Flip | `M1`、`M2`、`M3`、`M4` | `2026-04-19` |
+| `M5-02` | `M5` | 多桌与满桌验证 | `P0` | `未开始` | 多张桌子下分配稳定，满桌时有明确降级处理 | `M1`、`M2` | `2026-04-19` |
+| `M5-03` | `M5` | 文档续接维护 | `P0` | `进行中` | 每轮实现后都回写本文的状态、决策与测试结论 | `M0-01` | `2026-04-19` |
 
 状态只使用：
 
@@ -264,33 +406,61 @@
 
 ---
 
-## 关键决策记录
+## 关键改造点
 
-### 2026-04-16
+### 1. `TableSeatSystem`
 
-1. 单独新增本文件，不覆盖 `docs/FlipACoin_首发路线图与进度.md`
-   - 原因：旧文档更偏历史推进记录，本文件更偏当前优化执行与跨对话续接
-2. 本轮优化按 `M0 -> M1 -> M2 -> M3 -> M4 -> M5` 推进，不并行开大面
-   - 原因：当前最缺的不是内容数量，而是可验证的优先级和连续闭环
-3. 不把产品拉向重 PvP、互坑、多世界或复杂 simulator
-   - 原因：当前题材的独特性来自概率折磨、同桌共视和高光瞬间
-4. 后续协作者仍需先读 `docs/PROJECT_LOGIC.md`，再读本文件
-   - 原因：仓库接管必须先基于真实运行链，不先看策划执行文档做假设
-5. 后续若出现“文档说的是本局成长，但代码写成永久成长”的冲突，优先修正文档与数据职责说明
-   - 原因：`run/meta` 混层是当前最容易持续放大的结构风险
-6. `SystemMgr` 运行时桥接实例不再挂在 `ModuleScript` 自身下面，统一挂到 `ReplicatedStorage.Systems.SystemMgrRuntime`
-   - 原因：Studio Play 补测时已确认旧挂法会导致客户端等待 `RemoteEvent`，把回归卡在初始化中间态
+后续改造重点：
 
-### 2026-04-17
+- 从 `Prompt 入座` 改成 `服务端自动分配 + 自动坐下`
+- 停掉 `RequestStand`
+- 停掉 AFK 踢座对主流程的影响
+- 停掉 `SeatInfoBillboard` 刷新
+- 删除 featured seat / audience 相关状态下发
 
-1. `M1-01 / M1-02 / M1-03` 在 fresh Play 回归通过后转为完成态
-   - 原因：当前已确认初始化不卡死、首局链闭环、失败提示可读，继续停留在“进行中”只会误导后续协作者
-2. 头顶引导文案兼容 `Onboarding.BuildState()` 的展示态
-   - 原因：`PlayerSystem` 传入的并不是原始引导存档；若不兼容 `currentStep`，头顶提示会长期停在首步文案，破坏三端统一
-3. `M2-01` 首版先复用现有 `SeatInfoBillboard + CoinFlipTableOverview`
-   - 原因：当前最缺的是旁观焦点，而不是再堆一个新面板；先通过“一个热门座位 full，其余 occupied compact”收噪，再决定要不要追加更多 UI
-4. `featured seat` 判定先用 `streak + 最近活动时间 + 少量 cash 平分`
-   - 原因：M2 当前想突出的是“哪里最值得看”，不是做永久排行；该口径更贴近实时桌况，也方便下一步继续收敛 Audience 范围
+### 2. `CoinFlipSystem/ui.lua`
+
+后续改造重点：
+
+- 不再把未入座 / 观战态当成主路径
+- 删除 `Leave Seat`
+- 删除 spectator feed / overview / featured 文案
+- 重做 `CoinFlipHUD`
+- 输入统一改成：
+  - 点击
+  - `Space`
+  - `RT`
+- 清掉运行时 `ensure*` 资源补造逻辑，改为绑定 Studio 预制节点
+
+### 3. Studio 资源
+
+必须转为预制的资源至少包括：
+
+- `StarterGui.Main.Elements.CoinFlipHUD`
+- HUD 内部主按钮、左侧状态区、右侧升级区
+- 相机模块或相机配置容器
+- 桌面上真正需要保留的视觉锚点
+
+明确不再继续投入的资源：
+
+- `SeatInfoBillboard`
+- spectator feed 相关 UI
+- table overview 相关 UI
+
+---
+
+## 当前假设
+
+这几条是当前计划默认假设，若实现中发现不成立，要先改本文再改代码：
+
+1. 玩家重生后仍应被重新放回可用座位，而不是重生后处于自由行走态
+2. 如果原座位无效或丢失，允许重生时重新分配空位
+3. 多桌存在时，当前阶段只要求“能自动分到某张桌子的空位”，不要求玩家自己选桌
+4. 若社区第一人称模块接入成本过高，允许回退到项目内自实现，但优先顺序不变
+5. “资源全部预制到 Studio” 的判定口径是：
+   - 主资源必须预先存在
+   - 代码只负责读、绑、显隐、改字、改值
+   - 不再依赖运行时 `Instance.new` 生成主 UI 或主世界资源
 
 ---
 
@@ -298,94 +468,159 @@
 
 ### 当前状态
 
-- 已完成 fresh Play 首局引导专项验证
-- 当前已确认 `靠近空位 -> 入座 -> flip 3 次 -> 首购升级 -> 2 streak` 能在 Studio 中闭环推进
-- 当前已确认未入座与引导推进状态下，HUD / 世界 Billboard / 头顶提示都能统一指向同一下一步动作
-- 已确认本轮卡点已不是 `SystemMgr` 运行时桥接初始化；`SystemMgrRuntime` 方案在 fresh Play 中未复现卡死
-- 已确认 `Tails -> 下一步建议` 在 `flipThree` 与 `reachTwoStreak` 阶段均可读且不过长
-- 已修复一个回归中暴露的对齐问题：头顶引导文案此前未正确读取 `BuildState()` 返回的当前步骤
-- 已落 `M2-01` 热门座位高亮首版，但尚未开始 `4 人 / 8 人` 同桌专项验证
-- 尚未开始多人同桌、移动端与长时稳定性专项验证
+- 本轮已完成需求重置、第一人称社区检索与 `M0-03` 资源清单冻结
+- 已完成一次 Studio 资源审计
+- 尚未开始真正的 Play 模式行为回归
+- 当前第一优先级已切到 `M1-01 / M1-02 / M1-03`
 
-### 2026-04-17
+### 已记录验证
 
-- 测试场景：
-  - fresh Play 首局引导完整回归
-  - 聚焦验证 `SystemMgrRuntime` 初始化、`Tails -> 下一步建议`、头顶/HUD 对齐
-- 结果：
-  - Play 会话正常启动，未再卡在 `WaitForChild("RemoteEvent")`
-  - 引导从 `0 / 5` 正常推进到 `4 / 5`
-  - `flipThree` 失败提示为 `Next: keep flipping to reach 3.`
-  - `reachTwoStreak` 失败提示为 `Next: rebuild to 2 Heads.`
-  - 头顶文案在修复后可正确显示 `Flip 0/3`、`Buy Upgrade`、`2 Streak 0/2`
-- 发现的问题：
-  - 回归中发现头顶文案长期停在首步提示，已定位并修复
-- 是否影响里程碑状态：
-  - 是，`M1-01 / M1-02 / M1-03` 可转为 `已完成`
+#### 2026-04-19 资源审计
+
+测试场景：
+
+- Studio 停止模式检查 `StarterGui.Main.Elements`
+- Studio 停止模式检查 `Workspace.CoinFlipTable`
+- 源码检索活跃系统中的运行时创建点与旧围观链路
+
+结果：
+
+- `StarterGui.Main.Elements` 当前已有 `CoinFlipHUD`、`CoinFlipOnboarding`、`CoinFlipTableOverview`、`CoinFlipSpectatorFeed` 及对应 `_backup` 资源
+- `CoinFlipHUD` 当前只有 `Stats + Actions + FlipButton + LeaveButton` 这一版预制结构，升级区和部分文本仍靠 `CoinFlipSystem/ui.lua` 兜底生成
+- `Workspace.CoinFlipTable.Seats.Seat01` 到 `Seat08` 当前全部仍带 `Prompt` 和 `SeatInfoBillboard`
+- 仓库当前还没有 `Open FPC` 或其它第一人称模块落地文件
+
+发现的问题：
+
+- 旧围观资源和首发主路径资源还混在一起
+- `CoinFlipSystem/ui.lua` 仍大量依赖 `ensure*` 运行时补造主节点
+- `TableSeatSystem` 仍把 `Prompt`、`SeatInfoBillboard`、`featured seat` 视为活跃链路
+
+是否影响里程碑状态：
+
+- `M0-03` 可判定完成
+- 不阻塞进入 `M1`
+- 直接构成 `M4-01 / M4-02 / M4-03 / M4-04` 的实现输入
+
+#### 2026-04-19 自动入座代码级校验
+
+测试场景：
+
+- 改造 `TableSeatSystem` 为服务端自动找空座位
+- 关闭客户端与服务端座位 `Prompt` 主路径
+- 接入 `PlayerAdded / CharacterAdded` 自动入座重试
+- 用 `rojo build` 做工程级解析校验
+
+结果：
+
+- `TableSeatSystem` 已新增空座位选择与自动入座重试逻辑
+- 新玩家进入时会绑定 `CharacterAdded`，并在角色可用后自动调用 `RequestSit`
+- 当前所有座位 `Prompt` 在代码路径里都会被强制禁用，不再作为主流程入口
+- onboarding 的 `sitDown` 现在会顺带补齐 `approachSeat`，不会因 `Prompt` 关闭而卡死
+- `rojo build --output build-test.rbxlx` 构建通过，当前改动未出现项目级解析错误
+
+发现的问题：
+
+- 还没做 Studio Play 真机回归，无法确认入服即坐下、满桌等待、重生后再入座的实际表现
+- 构建校验时生成了 `build-test.rbxlx` 临时文件，当前因路径访问被拒绝未删除成功，需要后续顺手清理
+
+是否影响里程碑状态：
+
+- `M1-01` 可转为 `进行中`
+- 不足以把 `M1-01` 直接转 `已完成`
+
+#### 2026-04-19 强制坐席代码级校验
+
+测试场景：
+
+- 改造 `TableSeatSystem` 的脱座分支，在玩家仍存活时自动回拉到座位
+- 让 `RequestStand` 失效，不再清空占座
+- 在 `CharacterSystem` 与 `StarterCharacterScripts` 中禁用跳跃
+- 隐藏触屏 `JumpButton`
+- 清理 `CoinFlipHUD` 中的 `Leave / Jump to leave` 旧提示
+- 用 `rojo build --output build-test-2.rbxlx` 做工程级解析校验
+
+结果：
+
+- 座椅 `Occupant` 变空时，若玩家角色仍存活，会直接重新进入自动入座流程
+- `RequestStand` 当前不会再触发离座清理，而是回到自动入座逻辑
+- 角色生成后会同时在服务端和客户端把跳跃状态关掉
+- 触屏跳跃按钮已隐藏
+- HUD 默认提示已改成 `Waiting for seat assignment...` 和 `Click FLIP to flip.`
+- `rojo build --output build-test-2.rbxlx` 构建通过，当前改动未出现项目级解析错误
+
+发现的问题：
+
+- `CoinFlipSystem/ui.lua` 里旧的 `LeaveSeatButton` 资源和相关兜底函数仍在，只是已隐藏，真正删链路要放到 `M4`
+- 还没做 Studio Play 真机回归，无法确认 Roblox 原生座椅状态机会不会在某些边界场景下继续触发脱座
+- 构建校验又生成了 `build-test-2.rbxlx` 临时文件，当前未清理
+
+是否影响里程碑状态：
+
+- `M1-02` 可转为 `进行中`
+- `M1-03` 可转为 `进行中`
+- 两项都不足以直接转 `已完成`
 
 ### 计划中的必测场景
 
-1. 新玩家首局测试
-   - 不看说明进入游戏，是否能在 `60 秒` 内完成入座与首次升级
-2. 同桌社交测试
-   - `4 人` 与 `8 人` 场景下，是否能快速识别谁在连中、哪里有空位、为什么值得围观
-3. 数值节奏测试
-   - `10 分钟` 内是否出现至少一次“差一点成功”的高潮
-   - 不同升级路线是否形成明显手感差异
-4. 长线目标测试
-   - 玩家在第一次离开前，是否已经出现“想解锁 Auto Flip / 想拿新 Coin / 想 rebirth”的清晰目标
-5. 移动端测试
-   - 竖屏与横屏都能正常完成入座、flip、升级、离座
-6. 稳定性测试
-   - `8 人` 同桌连续 flip、播报、Billboard、观战 UI 同时存在时，无明显信息爆炸或同步错乱
+1. 自动入座
+   - 新玩家进入游戏后是否无需操作就能坐下
+2. 禁止离座
+   - `Space`、默认跳跃、座椅默认行为、旧离座逻辑是否都无法把玩家弹出座位
+3. 第一人称
+   - 坐下后镜头是否稳定
+   - 重生后是否能恢复
+4. Flip 输入
+   - 点击、`Space`、手柄 `RT` 是否都能触发 Flip
+5. HUD
+   - 玩家只看到主玩法 HUD，不再出现观战 / Billboard / 桌况 UI
+6. 多桌
+   - 多张桌子时能否稳定分配
+   - 满桌时是否有清晰降级处理
 
 ### 记录规则
 
-- 每次 Studio 验证后至少记录：
-  - 测试日期
-  - 测试场景
-  - 结果
-  - 发现的问题
-  - 是否影响里程碑状态
+每次 Studio 验证后至少补充：
+
+- 测试日期
+- 测试场景
+- 结果
+- 发现的问题
+- 是否影响里程碑状态
 
 ---
 
 ## 对话续接规则
 
-后续任何新对话或新协作者接手时，默认按下面规则继续：
+后续任何新对话或新 agent 接手时，默认按下面规则继续：
 
 1. 先读 `docs/PROJECT_LOGIC.md`
-2. 再读 `docs/FlipACoin_首发优化执行与进度.md`
-3. 优先查看这几个章节：
+2. 再读本文件
+3. 优先看：
    - `当前正在做`
-   - `下一步`
+   - `新执行顺序`
    - `任务总表`
-   - `关键决策记录`
+   - `关键改造点`
+   - `当前假设`
    - `测试与验证记录`
-4. 若本轮有新结论，必须至少同步更新：
-   - `最后更新`
+4. 如果又出现新需求变更，直接在本文重排，不要叠加旧阶段命名
+5. 如果某任务状态变化，必须同步更新：
    - `当前正在做`
-   - `下一步`
    - `任务总表`
-   - `关键决策记录` 或 `测试与验证记录`
-5. 若代码与文档不一致：
-   - 先确认代码现状
-   - 再回写本文件
-   - 不要带着旧假设继续推进
-6. 若某任务状态变化，必须同步更新对应行的：
-   - `状态`
-   - `验收标准`
-   - `最近更新`
-7. 若后续新增大模块，优先追加到本文件的里程碑和任务表，不要另起一份并行真相文档
+   - `测试与验证记录`
+6. 如果代码和本文不一致：
+   - 先确认代码
+   - 再更新本文
+   - 不允许带着旧计划继续做
 
 ---
 
 ## 今日结论
 
-- `M1-01 / M1-02 / M1-03` 已完成并可视为当前首留优化的第一段收口
-- `SystemMgrRuntime` 已在 fresh Play 验证通过，不再把 M1 卡在初始化问题上
-- `M2-01` 热门座位高亮首版已落代码，但当前仍处在“待多人验证”的 `进行中` 状态
-- 当前新的最高优先级应转向：
-  - `M2-01` 热门座位高亮
-  - `M2-02` Audience 范围收敛
-  - `4 人 / 8 人` 同桌专项验证
+- 旧的“围观优化版”进度文档已失效，今天已整份重置
+- 第一人称任务已通过社区检索确认可以前置，不再排最后
+- `M0-03` 已完成，当前资源清单、退场资源、相机模块落点和新 HUD 预制结构已经冻结
+- 当前新的最高优先级是：
+  - `M1-01 / M1-02 / M1-03` 自动入座与禁止离座
+  - `M2-01` 第一人称相机接入
+  - `M4-03 / M4-04` 预制版 Flip HUD 落地

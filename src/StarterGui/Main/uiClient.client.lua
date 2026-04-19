@@ -98,4 +98,5 @@ if UserInputService.TouchEnabled and fakeGui then
 	local touchGui = PlayerGui:FindFirstChild("TouchGui")
 	touchGui.TouchControlFrame.JumpButton.Position = fakeGui.TouchControlFrame.JumpButton.Position
 	touchGui.TouchControlFrame.JumpButton.Size = fakeGui.TouchControlFrame.JumpButton.Size
+	touchGui.TouchControlFrame.JumpButton.Visible = false
 end

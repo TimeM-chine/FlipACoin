@@ -179,7 +179,7 @@ function Onboarding.BuildHeadSecondaryText(state, context)
 		return "Start your first run"
 	end
 	if stepKey == "sitDown" then
-		return "Use the seat prompt"
+		return "Joining the table"
 	end
 	if stepKey == "flipThree" then
 		return "Warm up your run"
@@ -316,6 +316,7 @@ function Onboarding.ApplyAction(playerIns, action, context)
 		if not state.approachSeat then
 			state.approachSeat = true
 			changed = true
+			table.insert(milestones, StepLookup.approachSeat)
 		end
 		if not state.sitDown then
 			state.sitDown = true
