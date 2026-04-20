@@ -1,6 +1,5 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
@@ -20,14 +19,29 @@ local function disconnectCharacterConnections()
 	table.clear(characterConnections)
 end
 
-local function setCharacterVisibility(character, transparency)
+local function shouldHideInFirstPerson(descendant)
+	if descendant:IsA("BasePart") then
+		if descendant.Name == "Head" then
+			return true
+		end
+
+		local accessory = descendant.Parent
+		if accessory and accessory:IsA("Accessory") then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function applyCharacterVisibility(character)
 	if not character then
 		return
 	end
 
 	for _, descendant in ipairs(character:GetDescendants()) do
-		if descendant:IsA("BasePart") and descendant.Name ~= "HumanoidRootPart" then
-			descendant.LocalTransparencyModifier = transparency
+		if descendant:IsA("BasePart") then
+			descendant.LocalTransparencyModifier = shouldHideInFirstPerson(descendant) and 1 or 0
 		end
 	end
 end
@@ -38,18 +52,30 @@ local function applyCameraLock()
 		return
 	end
 
-	LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
-	LocalPlayer.CameraMinZoomDistance = 0.5
-	LocalPlayer.CameraMaxZoomDistance = 0.5
+	LocalPlayer.CameraMode = Enum.CameraMode.Classic
+	LocalPlayer.CameraMinZoomDistance = 10
+	LocalPlayer.CameraMaxZoomDistance = 10
 
 	if currentHumanoid and currentHumanoid.Parent and currentHumanoid.Health > 0 then
+		local head = currentCharacter and currentCharacter:FindFirstChild("Head")
+		if not head then
+			return
+		end
+
+		local lookVector = camera.CFrame.LookVector
+		local upVector = camera.CFrame.UpVector
+		local cameraPosition = head.Position
+
 		camera.CameraType = Enum.CameraType.Custom
 		camera.CameraSubject = currentHumanoid
-		setCharacterVisibility(currentCharacter, 1)
-	end
-
-	if not UserInputService.TouchEnabled then
-		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		currentHumanoid.CameraOffset = Vector3.zero
+		camera.CFrame = CFrame.lookAt(cameraPosition, cameraPosition + lookVector, upVector)
+		camera.Focus = CFrame.lookAt(
+			cameraPosition + lookVector,
+			cameraPosition + (lookVector * 2),
+			upVector
+		)
+		applyCharacterVisibility(currentCharacter)
 	end
 end
 
@@ -57,17 +83,22 @@ local function bindCharacter(character)
 	disconnectCharacterConnections()
 
 	currentCharacter = character
-	currentHumanoid = character and character:FindFirstChildOfClass("Humanoid") or nil
+	currentHumanoid = nil
 
 	if not character then
 		return
 	end
 
-	setCharacterVisibility(character, 1)
+	local humanoid = character:FindFirstChild("Humanoid") or character:WaitForChild("Humanoid", 5)
+	if humanoid and humanoid:IsA("Humanoid") then
+		currentHumanoid = humanoid
+	end
+
+	applyCharacterVisibility(character)
 
 	table.insert(characterConnections, character.DescendantAdded:Connect(function(descendant)
-		if descendant:IsA("BasePart") and descendant.Name ~= "HumanoidRootPart" then
-			descendant.LocalTransparencyModifier = 1
+		if descendant:IsA("BasePart") then
+			descendant.LocalTransparencyModifier = shouldHideInFirstPerson(descendant) and 1 or 0
 		end
 	end))
 

@@ -39,6 +39,8 @@ setmetatable(TableSeatUi, Types.mt)
 local TableSeatSystem: Types.System = {
 	whiteList = {
 		"GetPlayerSeatId",
+		"GetPlayerSeatAssignment",
+		"GetSeatRecordByDisplayId",
 		"GetTablePlayers",
 		"IsPlayerSeated",
 		"RegisterActivity",
@@ -67,12 +69,69 @@ local function GetSystemMgr()
 	return SystemMgr
 end
 
+local function getSeatRecord(self, seatKey)
+	if typeof(seatKey) ~= "string" then
+		return nil
+	end
+
+	return self._seats and self._seats[seatKey] or nil
+end
+
+local function getSeatDisplayId(self, seatKey)
+	local seatRecord = getSeatRecord(self, seatKey)
+	return seatRecord and seatRecord.displaySeatId or nil
+end
+
+local function getPlayerSeatRecord(self, player)
+	local seatKey = self._playerSeats and self._playerSeats[player.UserId]
+	return getSeatRecord(self, seatKey)
+end
+
+local function resolveSeatKey(self, seatIdentifier)
+	if typeof(seatIdentifier) ~= "string" then
+		return nil
+	end
+
+	if self._seats and self._seats[seatIdentifier] then
+		return seatIdentifier
+	end
+
+	return self._seatDisplayLookup and self._seatDisplayLookup[seatIdentifier] or nil
+end
+
+local function getTableSortPosition(tableModel)
+	local anchor = tableModel.PrimaryPart or tableModel:FindFirstChildWhichIsA("BasePart", true)
+	return anchor and anchor.Position or Vector3.zero
+end
+
 local function buildSeatState(self, player)
 	self:_EnsureSeatCatalog()
 
-	local mySeatId = self._playerSeats[player.UserId]
-	local seatOrder = self._seatOrder or {}
+	local mySeatRecord = getPlayerSeatRecord(self, player)
+	local mySeatId = mySeatRecord and mySeatRecord.displaySeatId or nil
+	local seatOrder = {}
+	for _, seatKey in ipairs(self._seatOrder or {}) do
+		table.insert(seatOrder, getSeatDisplayId(self, seatKey) or seatKey)
+	end
 	local seatSnapshot = self:_BuildSeatDisplaySnapshot()
+	local assignmentStatus
+	local assignmentMessage
+
+	if not mySeatId then
+		local isWaitingForSeat = self._playersWaitingForSeat and self._playersWaitingForSeat[player.UserId] == true
+		if isWaitingForSeat then
+			if seatSnapshot.openSeatCount > 0 then
+				assignmentStatus = "assigning"
+				assignmentMessage = "Seat opening detected. Seating you..."
+			else
+				assignmentStatus = "full"
+				assignmentMessage = "All coin flip seats are full. Waiting for the next open seat..."
+			end
+		elseif seatSnapshot.openSeatCount > 0 then
+			assignmentStatus = "assigning"
+			assignmentMessage = "Finding an available seat..."
+		end
+	end
 
 	return {
 		mySeatId = mySeatId,
@@ -82,8 +141,11 @@ local function buildSeatState(self, player)
 		tablePlayerUserIds = seatSnapshot.tablePlayerUserIds,
 		seatOrder = table.clone(seatOrder),
 		seatDisplayEntries = seatSnapshot.seatDisplayEntries,
-		openSeatCount = math.max(#seatOrder - #seatSnapshot.tablePlayerUserIds, 0),
+		openSeatCount = seatSnapshot.openSeatCount,
 		isSpectating = mySeatId == nil,
+		tableId = mySeatRecord and mySeatRecord.tableId or nil,
+		assignmentStatus = assignmentStatus,
+		assignmentMessage = assignmentMessage,
 		featuredSeatId = seatSnapshot.featuredSeatId,
 		featuredSeatPlayerName = seatSnapshot.featuredSeatPlayerName,
 		featuredSeatLabel = seatSnapshot.featuredSeatLabel,
@@ -122,32 +184,32 @@ local function getFeaturedSeatMeta(entry, secondsSinceActivity)
 	return "Featured", BillboardColors.Open, "Best seat to watch right now"
 end
 
-local function getSeatBillboardAdornee(self, seatId)
-	local tableModel = Workspace:FindFirstChild(Presets.TableModelName)
+local function getSeatBillboardAdornee(self, seatKey)
+	local seatRecord = getSeatRecord(self, seatKey)
+	local tableModel = seatRecord and seatRecord.tableModel or nil
 	local attachmentsFolder = tableModel and tableModel:FindFirstChild("Attachments")
-	local marker = attachmentsFolder and attachmentsFolder:FindFirstChild(`{seatId}Marker`)
+	local marker = attachmentsFolder and seatRecord and attachmentsFolder:FindFirstChild(`{seatRecord.rawSeatId}Marker`)
 	local attachment = marker and marker:FindFirstChildWhichIsA("Attachment")
 	if attachment then
 		return attachment
 	end
 
-	local seatRecord = self._seats and self._seats[seatId]
 	return seatRecord and seatRecord.seat or nil
 end
 
-local function ensureSeatBillboard(self, seatId)
-	local seatRecord = self._seats and self._seats[seatId]
+local function ensureSeatBillboard(self, seatKey)
+	local seatRecord = getSeatRecord(self, seatKey)
 	if not seatRecord or not seatRecord.seat then
 		return nil
 	end
 
 	if seatRecord.billboard and seatRecord.billboard.Parent then
-		seatRecord.billboard.Adornee = getSeatBillboardAdornee(self, seatId)
+		seatRecord.billboard.Adornee = getSeatBillboardAdornee(self, seatKey)
 		return seatRecord.billboard
 	end
 
 	local billboard = seatRecord.seat:WaitForChild("SeatInfoBillboard")
-	billboard.Adornee = getSeatBillboardAdornee(self, seatId)
+	billboard.Adornee = getSeatBillboardAdornee(self, seatKey)
 
 	seatRecord.billboard = billboard
 	return billboard
@@ -162,12 +224,12 @@ local function refreshSeatBillboards(self)
 	local seatSnapshot = self:_BuildSeatDisplaySnapshot()
 	local seatEntryMap = {}
 	for _, entry in ipairs(seatSnapshot.seatDisplayEntries) do
-		seatEntryMap[entry.seatId] = entry
+		seatEntryMap[entry.seatKey] = entry
 	end
 
-	for _, seatId in ipairs(self._seatOrder or {}) do
-		local entry = seatEntryMap[seatId]
-		local billboard = ensureSeatBillboard(self, seatId)
+	for _, seatKey in ipairs(self._seatOrder or {}) do
+		local entry = seatEntryMap[seatKey]
+		local billboard = ensureSeatBillboard(self, seatKey)
 		if not entry or not billboard then
 			continue
 		end
@@ -196,14 +258,15 @@ local function refreshSeatBillboards(self)
 	end
 end
 
-local function refreshPromptAttributes(self, seatId)
-	local seatRecord = self._seats[seatId]
+local function refreshPromptAttributes(self, seatKey)
+	local seatRecord = getSeatRecord(self, seatKey)
 	if not seatRecord or not seatRecord.prompt then
 		return
 	end
 
-	seatRecord.prompt:SetAttribute("SeatId", seatId)
-	seatRecord.prompt:SetAttribute("Occupied", self._seatOwners[seatId] ~= nil)
+	seatRecord.prompt:SetAttribute("SeatId", seatRecord.displaySeatId or seatRecord.rawSeatId)
+	seatRecord.prompt:SetAttribute("SeatKey", seatKey)
+	seatRecord.prompt:SetAttribute("Occupied", self._seatOwners[seatKey] ~= nil)
 end
 
 local function refreshLocalPromptVisibility(self)
@@ -213,7 +276,7 @@ local function refreshLocalPromptVisibility(self)
 
 	self:_EnsureSeatCatalog()
 
-	for seatId, seatRecord in pairs(self._seats or {}) do
+	for _, seatRecord in pairs(self._seats or {}) do
 		local prompt = seatRecord.prompt
 		if not prompt then
 			continue
@@ -257,15 +320,15 @@ local function broadcastSeatStates(self)
 end
 
 local function clearSeatOwnership(self, player)
-	local seatId = self._playerSeats[player.UserId]
-	if not seatId then
+	local seatKey = self._playerSeats[player.UserId]
+	if not seatKey then
 		return
 	end
 
-	local seatRecord = self._seats[seatId]
-	local currentOccupant = self._seatOwners[seatId]
+	local seatRecord = getSeatRecord(self, seatKey)
+	local currentOccupant = self._seatOwners[seatKey]
 	if currentOccupant == player then
-		self._seatOwners[seatId] = nil
+		self._seatOwners[seatKey] = nil
 	end
 	self._playerSeats[player.UserId] = nil
 	self._lastActivity[player.UserId] = nil
@@ -277,9 +340,9 @@ local function clearSeatOwnership(self, player)
 		end
 	end
 
-	refreshPromptAttributes(self, seatId)
+	refreshPromptAttributes(self, seatKey)
 	GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(player)
-
+	self:_TryAssignWaitingPlayers()
 	broadcastSeatStates(self)
 end
 
@@ -308,106 +371,223 @@ end
 function TableSeatSystem:_EnsureSeatCatalog()
 	self._seats = self._seats or {}
 	self._seatOrder = self._seatOrder or {}
+	self._seatDisplayLookup = self._seatDisplayLookup or {}
 	self._seatOwners = self._seatOwners or {}
 	self._playerSeats = self._playerSeats or {}
 	self._lastActivity = self._lastActivity or {}
 
-	local tableModel = Workspace:FindFirstChild(Presets.TableModelName)
-	local seatsFolder = tableModel and tableModel:FindFirstChild(Presets.SeatsFolderName)
-	if not seatsFolder then
+	local tableModels = {}
+	for _, descendant in ipairs(Workspace:GetDescendants()) do
+		if descendant:IsA("Model") and descendant.Name == Presets.TableModelName then
+			local seatsFolder = descendant:FindFirstChild(Presets.SeatsFolderName)
+			if seatsFolder then
+				table.insert(tableModels, descendant)
+			end
+		end
+	end
+
+	if #tableModels == 0 then
 		return
 	end
 
-	for _, seat in ipairs(seatsFolder:GetChildren()) do
-		if not seat:IsA("Seat") then
+	table.sort(tableModels, function(modelA, modelB)
+		local tableIdA = tostring(modelA:GetAttribute("TableId") or "")
+		local tableIdB = tostring(modelB:GetAttribute("TableId") or "")
+		if tableIdA ~= tableIdB then
+			if tableIdA == "" then
+				return false
+			end
+			if tableIdB == "" then
+				return true
+			end
+			return tableIdA < tableIdB
+		end
+
+		local posA = getTableSortPosition(modelA)
+		local posB = getTableSortPosition(modelB)
+		if posA.Z ~= posB.Z then
+			return posA.Z < posB.Z
+		end
+		if posA.X ~= posB.X then
+			return posA.X < posB.X
+		end
+		return modelA.Name < modelB.Name
+	end)
+
+	local discoveredSeatKeys = {}
+	local seatOrder = {}
+	local seatDisplayLookup = {}
+	local hasMultipleTables = #tableModels > 1
+
+	for tableIndex, tableModel in ipairs(tableModels) do
+		local tableId = tableModel:GetAttribute("TableId")
+		if typeof(tableId) ~= "string" or tableId == "" then
+			tableId = `Table{tableIndex}`
+		end
+
+		local tableLabel = tableModel:GetAttribute("TableLabel")
+		if typeof(tableLabel) ~= "string" or tableLabel == "" then
+			tableLabel = `T{tableIndex}`
+		end
+
+		local seatsFolder = tableModel:FindFirstChild(Presets.SeatsFolderName)
+		if not seatsFolder then
 			continue
 		end
 
-		local seatId = seat:GetAttribute("SeatId") or seat.Name
-		if not self._seats[seatId] then
-			table.insert(self._seatOrder, seatId)
+		local seats = {}
+		for _, seat in ipairs(seatsFolder:GetChildren()) do
+			if seat:IsA("Seat") then
+				table.insert(seats, seat)
+			end
 		end
 
-		local prompt = seat:FindFirstChildWhichIsA("ProximityPrompt", true)
-		if prompt then
-			prompt.Enabled = false
-		end
-		self._seats[seatId] = {
-			seat = seat,
-			prompt = prompt,
-		}
-		refreshPromptAttributes(self, seatId)
+		table.sort(seats, function(seatA, seatB)
+			local seatIdA = tostring(seatA:GetAttribute("SeatId") or seatA.Name)
+			local seatIdB = tostring(seatB:GetAttribute("SeatId") or seatB.Name)
+			return seatIdA < seatIdB
+		end)
 
-		if not IsServer then
-			continue
-		end
+		for _, seat in ipairs(seats) do
+			local rawSeatId = tostring(seat:GetAttribute("SeatId") or seat.Name)
+			local seatKey = `{tableId}:{rawSeatId}`
+			local displaySeatId = hasMultipleTables and `{tableLabel}-{rawSeatId}` or rawSeatId
+			local prompt = seat:FindFirstChildWhichIsA("ProximityPrompt", true)
 
-		self._seatPromptConnections = self._seatPromptConnections or {}
-		self._seatOccupantConnections = self._seatOccupantConnections or {}
+			if prompt then
+				prompt.Enabled = false
+			end
 
-		if not self._seatOccupantConnections[seat] then
-			self._seatOccupantConnections[seat] = seat:GetPropertyChangedSignal("Occupant"):Connect(function()
-				local humanoid = seat.Occupant
-				if humanoid then
-					local occupantPlayer = Players:GetPlayerFromCharacter(humanoid.Parent)
-					if occupantPlayer and self._seatOwners[seatId] ~= occupantPlayer then
-						local previousSeat = self._playerSeats[occupantPlayer.UserId]
-						if previousSeat and previousSeat ~= seatId then
-							clearSeatOwnership(self, occupantPlayer)
+			table.insert(seatOrder, seatKey)
+			seatDisplayLookup[displaySeatId] = seatKey
+			discoveredSeatKeys[seatKey] = true
+
+			self._seats[seatKey] = self._seats[seatKey] or {}
+			self._seats[seatKey].seat = seat
+			self._seats[seatKey].prompt = prompt
+			self._seats[seatKey].tableId = tableId
+			self._seats[seatKey].tableLabel = tableLabel
+			self._seats[seatKey].displaySeatId = displaySeatId
+			self._seats[seatKey].rawSeatId = rawSeatId
+			self._seats[seatKey].tableModel = tableModel
+			refreshPromptAttributes(self, seatKey)
+
+			if not IsServer then
+				continue
+			end
+
+			self._seatPromptConnections = self._seatPromptConnections or {}
+			self._seatOccupantConnections = self._seatOccupantConnections or {}
+
+			if not self._seatOccupantConnections[seat] then
+				self._seatOccupantConnections[seat] = seat:GetPropertyChangedSignal("Occupant"):Connect(function()
+					local humanoid = seat.Occupant
+					if humanoid then
+						local occupantPlayer = Players:GetPlayerFromCharacter(humanoid.Parent)
+						if occupantPlayer and self._seatOwners[seatKey] ~= occupantPlayer then
+							local previousSeat = self._playerSeats[occupantPlayer.UserId]
+							if previousSeat and previousSeat ~= seatKey then
+								clearSeatOwnership(self, occupantPlayer)
+							end
+							self._seatOwners[seatKey] = occupantPlayer
+							self._playerSeats[occupantPlayer.UserId] = seatKey
+							self._lastActivity[occupantPlayer.UserId] = os.clock()
+							self._playersWaitingForSeat = self._playersWaitingForSeat or {}
+							self._playersWaitingForSeat[occupantPlayer.UserId] = nil
+							refreshPromptAttributes(self, seatKey)
+							GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(occupantPlayer)
+							broadcastSeatStates(self)
+							GetSystemMgr().systems.CoinFlipSystem:HandleGuideSit(SENDER, occupantPlayer)
 						end
-						self._seatOwners[seatId] = occupantPlayer
-						self._playerSeats[occupantPlayer.UserId] = seatId
-						self._lastActivity[occupantPlayer.UserId] = os.clock()
-						refreshPromptAttributes(self, seatId)
-						GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(occupantPlayer)
-						broadcastSeatStates(self)
-						GetSystemMgr().systems.CoinFlipSystem:HandleGuideSit(SENDER, occupantPlayer)
-					end
-					return
-				end
-
-				local seatedPlayer = self._seatOwners[seatId]
-				if seatedPlayer and seatedPlayer:IsDescendantOf(Players) then
-					local seatedHumanoid = seatedPlayer.Character and seatedPlayer.Character:FindFirstChildOfClass("Humanoid")
-					if seatedHumanoid and seatedHumanoid.Health > 0 then
-						task.defer(function()
-							self:_QueueAutoSeat(seatedPlayer)
-						end)
 						return
 					end
 
-					clearSeatOwnership(self, seatedPlayer)
-				else
-					self._seatOwners[seatId] = nil
-					refreshPromptAttributes(self, seatId)
-					broadcastSeatStates(self)
-				end
-			end)
+					local seatedPlayer = self._seatOwners[seatKey]
+					if seatedPlayer and seatedPlayer:IsDescendantOf(Players) then
+						local seatedHumanoid = seatedPlayer.Character and seatedPlayer.Character:FindFirstChildOfClass("Humanoid")
+						if seatedHumanoid and seatedHumanoid.Health > 0 then
+							task.defer(function()
+								self:_QueueAutoSeat(seatedPlayer)
+							end)
+							return
+						end
+
+						clearSeatOwnership(self, seatedPlayer)
+					else
+						self._seatOwners[seatKey] = nil
+						refreshPromptAttributes(self, seatKey)
+						self:_TryAssignWaitingPlayers()
+						broadcastSeatStates(self)
+					end
+				end)
+			end
 		end
 	end
+
+	for seatKey in pairs(self._seats) do
+		if not discoveredSeatKeys[seatKey] then
+			self._seats[seatKey] = nil
+		end
+	end
+
+	self._seatOrder = seatOrder
+	self._seatDisplayLookup = seatDisplayLookup
 end
 
-function TableSeatSystem:_FindOpenSeatId(player)
+function TableSeatSystem:_FindOpenSeatKey(player)
 	self:_EnsureSeatCatalog()
 
-	local currentSeatId = self._playerSeats[player.UserId]
-	if currentSeatId then
-		local currentRecord = self._seats[currentSeatId]
-		local currentOwner = self._seatOwners[currentSeatId]
+	local currentSeatKey = self._playerSeats[player.UserId]
+	if currentSeatKey then
+		local currentRecord = self._seats[currentSeatKey]
+		local currentOwner = self._seatOwners[currentSeatKey]
 		if currentRecord and (not currentOwner or currentOwner == player or not currentOwner:IsDescendantOf(Players)) then
-			return currentSeatId
+			return currentSeatKey
 		end
 	end
 
-	for _, seatId in ipairs(self._seatOrder or {}) do
-		local seatRecord = self._seats[seatId]
-		local owner = self._seatOwners[seatId]
+	for _, seatKey in ipairs(self._seatOrder or {}) do
+		local seatRecord = self._seats[seatKey]
+		local owner = self._seatOwners[seatKey]
 		if seatRecord and (not owner or not owner:IsDescendantOf(Players)) then
-			return seatId
+			return seatKey
 		end
 	end
 
 	return nil
+end
+
+function TableSeatSystem:_TryAssignWaitingPlayers()
+	if not IsServer then
+		return
+	end
+
+	self._playersWaitingForSeat = self._playersWaitingForSeat or {}
+	self._seatWaitQueue = self._seatWaitQueue or {}
+
+	while #self._seatWaitQueue > 0 do
+		local userId = self._seatWaitQueue[1]
+		local player = Players:GetPlayerByUserId(userId)
+		if not player or not player:IsDescendantOf(Players) then
+			self._playersWaitingForSeat[userId] = nil
+			table.remove(self._seatWaitQueue, 1)
+			continue
+		end
+
+		if self._playerSeats[userId] then
+			self._playersWaitingForSeat[userId] = nil
+			table.remove(self._seatWaitQueue, 1)
+			continue
+		end
+
+		if not self:_FindOpenSeatKey(player) then
+			return
+		end
+
+		table.remove(self._seatWaitQueue, 1)
+		self._playersWaitingForSeat[userId] = nil
+		self:_QueueAutoSeat(player)
+	end
 end
 
 function TableSeatSystem:_QueueAutoSeat(player)
@@ -421,17 +601,61 @@ function TableSeatSystem:_QueueAutoSeat(player)
 	self._autoSeatTokens = self._autoSeatTokens or {}
 	local token = (self._autoSeatTokens[player.UserId] or 0) + 1
 	self._autoSeatTokens[player.UserId] = token
+	self._playersWaitingForSeat = self._playersWaitingForSeat or {}
+	self._seatWaitQueue = self._seatWaitQueue or {}
+
+	local function markWaitingForSeat()
+		if self._playersWaitingForSeat[player.UserId] then
+			return
+		end
+
+		self._playersWaitingForSeat[player.UserId] = true
+		table.insert(self._seatWaitQueue, player.UserId)
+		GetSystemMgr().systems.GuiSystem:SetNotification(SENDER, player, {
+			text = "All coin flip seats are full. Waiting for the next open seat...",
+			lastTime = 3.2,
+			textColor = Color3.fromRGB(255, 224, 158),
+		})
+		broadcastSeatStates(self)
+	end
+
+	local function clearWaitingForSeat()
+		if not self._playersWaitingForSeat[player.UserId] then
+			return
+		end
+
+		self._playersWaitingForSeat[player.UserId] = nil
+		for index = #self._seatWaitQueue, 1, -1 do
+			if self._seatWaitQueue[index] == player.UserId then
+				table.remove(self._seatWaitQueue, index)
+			end
+		end
+	end
+
+	local function isPlayerActuallySeated(seatKey, humanoid)
+		local seatRecord = getSeatRecord(self, seatKey)
+		return seatRecord and seatRecord.seat.Occupant == humanoid and self._playerSeats[player.UserId] == seatKey
+	end
 
 	local function trySeatOnce()
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		local seatId = self:_FindOpenSeatId(player)
+		local seatKey = self:_FindOpenSeatKey(player)
 
-		if humanoid and seatId then
-			return self:RequestSit(SENDER, player, {
-				seatId = seatId,
+		if humanoid and seatKey and isPlayerActuallySeated(seatKey, humanoid) then
+			clearWaitingForSeat()
+			return true
+		end
+
+		if humanoid and seatKey then
+			self:RequestSit(SENDER, player, {
+				seatId = seatKey,
 				autoAssigned = true,
 			})
+			if isPlayerActuallySeated(seatKey, humanoid) then
+				clearWaitingForSeat()
+				return true
+			end
 		end
 
 		return false
@@ -454,14 +678,22 @@ function TableSeatSystem:_QueueAutoSeat(player)
 			task.wait(Presets.AutoSeatRetryInterval)
 		end
 
+		if not self:_FindOpenSeatKey(player) then
+			markWaitingForSeat()
+			return
+		end
+
 		warn(`[TableSeatSystem] Failed to auto-seat {player.Name}: no available seat or humanoid.`)
 	end)
 end
 
-function TableSeatSystem:_BuildSeatDisplayEntry(seatId, occupant)
+function TableSeatSystem:_BuildSeatDisplayEntry(seatKey, occupant)
+	local seatRecord = getSeatRecord(self, seatKey)
+	local displaySeatId = seatRecord and seatRecord.displaySeatId or seatKey
 	if not IsServer then
 		return {
-			seatId = seatId,
+			seatKey = seatKey,
+			seatId = displaySeatId,
 			displayName = "Open Seat",
 			coinName = "",
 			streak = 0,
@@ -475,7 +707,8 @@ function TableSeatSystem:_BuildSeatDisplayEntry(seatId, occupant)
 	end
 
 	local entry = {
-		seatId = seatId,
+		seatKey = seatKey,
+		seatId = displaySeatId,
 		displayName = "Open Seat",
 		coinName = "",
 		streak = 0,
@@ -518,21 +751,25 @@ function TableSeatSystem:_BuildSeatDisplaySnapshot()
 	local occupiedSeats = {}
 	local tablePlayerUserIds = {}
 	local seatDisplayEntries = {}
+	local openSeatCount = 0
 	local featuredEntry
 	local featuredScore = -math.huge
 	local featuredActivityAge = math.huge
 	local featuredStreak = -1
 	local featuredCash = -1
 
-	for _, seatId in ipairs(self._seatOrder or {}) do
-		local occupant = self._seatOwners[seatId]
+	for _, seatKey in ipairs(self._seatOrder or {}) do
+		local occupant = self._seatOwners[seatKey]
 		if occupant and occupant:IsDescendantOf(Players) then
-			occupiedSeats[seatId] = occupant.UserId
+			occupiedSeats[getSeatDisplayId(self, seatKey) or seatKey] = occupant.UserId
 			table.insert(tablePlayerUserIds, occupant.UserId)
 		end
 
-		local entry = self:_BuildSeatDisplayEntry(seatId, occupant)
+		local entry = self:_BuildSeatDisplayEntry(seatKey, occupant)
 		table.insert(seatDisplayEntries, entry)
+		if not entry.isOccupied then
+			openSeatCount += 1
+		end
 
 		if entry.isOccupied then
 			local lastActivityAt = self._lastActivity[entry.userId]
@@ -601,6 +838,7 @@ function TableSeatSystem:_BuildSeatDisplaySnapshot()
 		occupiedSeats = occupiedSeats,
 		tablePlayerUserIds = tablePlayerUserIds,
 		seatDisplayEntries = seatDisplayEntries,
+		openSeatCount = openSeatCount,
 		featuredSeatId = featuredSeatId,
 		featuredSeatPlayerName = featuredSeatPlayerName,
 		featuredSeatLabel = featuredSeatLabel,
@@ -631,7 +869,30 @@ function TableSeatSystem:Init()
 end
 
 function TableSeatSystem:GetPlayerSeatId(player)
-	return self._playerSeats and self._playerSeats[player.UserId] or nil
+	local seatRecord = getPlayerSeatRecord(self, player)
+	return seatRecord and seatRecord.displaySeatId or nil
+end
+
+function TableSeatSystem:GetPlayerSeatAssignment(player)
+	local seatRecord = getPlayerSeatRecord(self, player)
+	if not seatRecord then
+		return nil
+	end
+
+	return {
+		seatId = seatRecord.displaySeatId,
+		rawSeatId = seatRecord.rawSeatId,
+		tableId = seatRecord.tableId,
+		tableLabel = seatRecord.tableLabel,
+		seat = seatRecord.seat,
+		tableModel = seatRecord.tableModel,
+	}
+end
+
+function TableSeatSystem:GetSeatRecordByDisplayId(displaySeatId)
+	self:_EnsureSeatCatalog()
+	local seatKey = resolveSeatKey(self, displaySeatId)
+	return getSeatRecord(self, seatKey)
 end
 
 function TableSeatSystem:GetTablePlayers(seatId)
@@ -726,6 +987,14 @@ function TableSeatSystem:PlayerRemoving(sender, player)
 	disconnectPlayerCharacterAutoSeat(self, player)
 	self._autoSeatTokens = self._autoSeatTokens or {}
 	self._autoSeatTokens[player.UserId] = nil
+	self._playersWaitingForSeat = self._playersWaitingForSeat or {}
+	self._playersWaitingForSeat[player.UserId] = nil
+	self._seatWaitQueue = self._seatWaitQueue or {}
+	for index = #self._seatWaitQueue, 1, -1 do
+		if self._seatWaitQueue[index] == player.UserId then
+			table.remove(self._seatWaitQueue, index)
+		end
+	end
 	clearSeatOwnership(self, player)
 end
 
@@ -739,42 +1008,63 @@ function TableSeatSystem:RequestSit(sender, player, args)
 		return false
 	end
 
+	self:_EnsureSeatCatalog()
 	local seatId = args and args.seatId
-	if typeof(seatId) ~= "string" then
+	local seatKey = resolveSeatKey(self, seatId)
+	if not seatKey then
 		return false
 	end
 
-	self:_EnsureSeatCatalog()
-	local seatRecord = self._seats[seatId]
+	local seatRecord = self._seats[seatKey]
 	if not seatRecord then
 		return false
 	end
 
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if not humanoid then
+	if not humanoid or humanoid.Health <= 0 then
 		return false
 	end
 
-	local occupant = self._seatOwners[seatId]
+	local seatOccupant = seatRecord.seat.Occupant
+	local occupant = self._seatOwners[seatKey]
 	if occupant and occupant ~= player and occupant:IsDescendantOf(Players) then
 		return false
 	end
+	if seatOccupant and seatOccupant ~= humanoid then
+		local seatOccupantPlayer = Players:GetPlayerFromCharacter(seatOccupant.Parent)
+		if seatOccupantPlayer and seatOccupantPlayer ~= player then
+			return false
+		end
+	end
 
-	local currentSeatId = self._playerSeats[player.UserId]
-	if currentSeatId and currentSeatId ~= seatId then
+	local currentSeatKey = self._playerSeats[player.UserId]
+	if currentSeatKey and currentSeatKey ~= seatKey then
 		clearSeatOwnership(self, player)
 	end
 
-	self._seatOwners[seatId] = player
-	self._playerSeats[player.UserId] = seatId
-	self._lastActivity[player.UserId] = os.clock()
-	refreshPromptAttributes(self, seatId)
-	seatRecord.seat:Sit(humanoid)
+	if seatRecord.seat.Occupant == humanoid then
+		self._seatOwners[seatKey] = player
+		self._playerSeats[player.UserId] = seatKey
+		self._lastActivity[player.UserId] = os.clock()
+		refreshPromptAttributes(self, seatKey)
+		GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(player)
+		broadcastSeatStates(self)
+		return true
+	end
 
-	GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(player)
-	broadcastSeatStates(self)
-	return true
+	seatRecord.seat:Sit(humanoid)
+	if seatRecord.seat.Occupant == humanoid then
+		self._seatOwners[seatKey] = player
+		self._playerSeats[player.UserId] = seatKey
+		self._lastActivity[player.UserId] = os.clock()
+		refreshPromptAttributes(self, seatKey)
+		GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(player)
+		broadcastSeatStates(self)
+		return true
+	end
+
+	return false
 end
 
 function TableSeatSystem:RequestStand(sender, player, args)

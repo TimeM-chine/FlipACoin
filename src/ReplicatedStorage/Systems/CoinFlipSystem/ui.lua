@@ -18,9 +18,6 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local Main = PlayerGui:WaitForChild("Main")
 local Elements = Main:WaitForChild("Elements")
 local uiController = require(Main:WaitForChild("uiController"))
-local TableModel = Workspace:WaitForChild("CoinFlipTable")
-local TableAssets = TableModel:WaitForChild("Assets")
-local CoinVisualsFolder = TableAssets:WaitForChild("CoinVisuals")
 
 local CoinFlipSystem = SystemMgr.systems.CoinFlipSystem
 local TableSeatSystem = SystemMgr.systems.TableSeatSystem
@@ -1012,16 +1009,42 @@ local function getWorldBillboardGuideOverride(seatState, entry)
 end
 
 local function getTableModel()
-	return TableModel
+	return Workspace:FindFirstChild("CoinFlipTable")
+end
+
+local function getSeatRecord(seatId)
+	if typeof(seatId) ~= "string" then
+		return nil
+	end
+
+	return TableSeatSystem:GetSeatRecordByDisplayId(seatId)
+end
+
+local function getCoinVisualsFolder(seatId)
+	local seatRecord = getSeatRecord(seatId)
+	local tableModel = seatRecord and seatRecord.tableModel or getTableModel()
+	local assets = tableModel and tableModel:FindFirstChild("Assets")
+	return assets and assets:FindFirstChild("CoinVisuals") or nil
 end
 
 local function getSeatAttachment(seatId)
-	local marker = TableModel.Attachments:WaitForChild(`{seatId}Marker`)
-	return marker:FindFirstChildWhichIsA("Attachment")
+	local seatRecord = getSeatRecord(seatId)
+	local tableModel = seatRecord and seatRecord.tableModel or getTableModel()
+	local rawSeatId = seatRecord and seatRecord.rawSeatId or seatId
+	local attachmentsFolder = tableModel and tableModel:FindFirstChild("Attachments")
+	local marker = attachmentsFolder and attachmentsFolder:FindFirstChild(`{rawSeatId}Marker`)
+	return marker and marker:FindFirstChildWhichIsA("Attachment") or nil
 end
 
 local function getSeatPart(seatId)
-	return TableModel.Seats:WaitForChild(seatId)
+	local seatRecord = getSeatRecord(seatId)
+	if seatRecord and seatRecord.seat then
+		return seatRecord.seat
+	end
+
+	local tableModel = getTableModel()
+	local seatsFolder = tableModel and tableModel:FindFirstChild("Seats")
+	return seatsFolder and seatsFolder:FindFirstChild(seatId)
 end
 
 local function applyStatCardLayout(profile)
@@ -1346,7 +1369,13 @@ local function getTableSurfaceData(tableTop)
 end
 
 local function getFlipPositions(seatId, coinSize)
-	local tableTop = TableModel.TableTop
+	local seatRecord = getSeatRecord(seatId)
+	local tableModel = seatRecord and seatRecord.tableModel or getTableModel()
+	local tableTop = tableModel and tableModel:FindFirstChild("TableTop")
+	if not tableTop then
+		return nil, nil, nil
+	end
+
 	local centerAttachment = tableTop.TableCenterAttachment
 	local seatAttachment = getSeatAttachment(seatId)
 	local seatPart = getSeatPart(seatId)
@@ -1378,7 +1407,14 @@ local function getFlipPositions(seatId, coinSize)
 end
 
 local function getCoinVisual(seatId)
-	local visualModel = CoinVisualsFolder:WaitForChild(`{seatId}CoinVisual`)
+	local seatRecord = getSeatRecord(seatId)
+	local rawSeatId = seatRecord and seatRecord.rawSeatId or seatId
+	local coinVisualsFolder = getCoinVisualsFolder(seatId)
+	local visualModel = coinVisualsFolder and coinVisualsFolder:FindFirstChild(`{rawSeatId}CoinVisual`)
+	if not visualModel then
+		return nil
+	end
+
 	return visualModel, visualModel:WaitForChild("Coin"), visualModel:WaitForChild("Shadow")
 end
 
@@ -1389,7 +1425,7 @@ local function setCoinVisualEnabled(coin, shadow, enabled)
 	coin.BottomFace.Enabled = enabled
 end
 
-local function spawnLandingPulse(position, color)
+local function spawnLandingPulse(position, color, parent)
 	local pulse = Instance.new("Part")
 	pulse.Name = "CoinLandingPulse"
 	pulse.Anchored = true
@@ -1403,7 +1439,7 @@ local function spawnLandingPulse(position, color)
 	pulse.Transparency = 0.18
 	pulse.Size = Vector3.new(VisualConfig.ShadowHeight, VisualConfig.PulseStartSize, VisualConfig.PulseStartSize)
 	pulse.CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90))
-	pulse.Parent = CoinVisualsFolder
+	pulse.Parent = parent or Workspace
 
 	local tween = TweenService:Create(
 		pulse,
@@ -1471,7 +1507,14 @@ local function playCoinVisual(seatId, result, landedCallback)
 		return
 	end
 
+	local coinVisualsFolder = getCoinVisualsFolder(seatId)
 	local visualModel, coin, shadow = getCoinVisual(seatId)
+	if not visualModel or not coin or not shadow then
+		if landedCallback then
+			landedCallback()
+		end
+		return
+	end
 	local baseCoinSize = coin.Size
 	local baseShadowSize = shadow.Size
 	local startPos, endPos, tableNormal = getFlipPositions(seatId, baseCoinSize)
@@ -1545,7 +1588,7 @@ local function playCoinVisual(seatId, result, landedCallback)
 		visual.connection = nil
 
 		local pulseColor = result == "Heads" and VisualConfig.HeadsPulseColor or VisualConfig.TailsPulseColor
-		spawnLandingPulse(shadowPos, pulseColor)
+		spawnLandingPulse(shadowPos, pulseColor, coinVisualsFolder)
 
 		local settleTween = TweenService:Create(
 			coin,
