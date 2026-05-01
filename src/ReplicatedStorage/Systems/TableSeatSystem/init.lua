@@ -184,77 +184,20 @@ local function getFeaturedSeatMeta(entry, secondsSinceActivity)
 	return "Featured", BillboardColors.Open, "Best seat to watch right now"
 end
 
-local function getSeatBillboardAdornee(self, seatKey)
-	local seatRecord = getSeatRecord(self, seatKey)
-	local tableModel = seatRecord and seatRecord.tableModel or nil
-	local attachmentsFolder = tableModel and tableModel:FindFirstChild("Attachments")
-	local marker = attachmentsFolder and seatRecord and attachmentsFolder:FindFirstChild(`{seatRecord.rawSeatId}Marker`)
-	local attachment = marker and marker:FindFirstChildWhichIsA("Attachment")
-	if attachment then
-		return attachment
-	end
-
-	return seatRecord and seatRecord.seat or nil
-end
-
-local function ensureSeatBillboard(self, seatKey)
-	local seatRecord = getSeatRecord(self, seatKey)
-	if not seatRecord or not seatRecord.seat then
-		return nil
-	end
-
-	if seatRecord.billboard and seatRecord.billboard.Parent then
-		seatRecord.billboard.Adornee = getSeatBillboardAdornee(self, seatKey)
-		return seatRecord.billboard
-	end
-
-	local billboard = seatRecord.seat:WaitForChild("SeatInfoBillboard")
-	billboard.Adornee = getSeatBillboardAdornee(self, seatKey)
-
-	seatRecord.billboard = billboard
-	return billboard
-end
-
-local function refreshSeatBillboards(self)
+local function disableSeatBillboards(self)
 	if not IsServer then
 		return
 	end
 
 	self:_EnsureSeatCatalog()
-	local seatSnapshot = self:_BuildSeatDisplaySnapshot()
-	local seatEntryMap = {}
-	for _, entry in ipairs(seatSnapshot.seatDisplayEntries) do
-		seatEntryMap[entry.seatKey] = entry
-	end
 
 	for _, seatKey in ipairs(self._seatOrder or {}) do
-		local entry = seatEntryMap[seatKey]
-		local billboard = ensureSeatBillboard(self, seatKey)
-		if not entry or not billboard then
-			continue
+		local seatRecord = getSeatRecord(self, seatKey)
+		local billboard = seatRecord and seatRecord.seat and seatRecord.seat:FindFirstChild("SeatInfoBillboard")
+		if billboard and billboard:IsA("BillboardGui") then
+			billboard.Enabled = false
+			seatRecord.billboard = billboard
 		end
-
-		local frame = billboard.Frame
-		local seatLabel = frame.SeatLabel
-		local statusLabel = frame.StatusLabel
-		local nameLabel = frame.NameLabel
-		local detailLabel = frame.DetailLabel
-		local cashLabel = frame.CashLabel
-		local stroke = frame:FindFirstChildOfClass("UIStroke")
-
-		seatLabel.Text = entry.seatId
-		statusLabel.Text = entry.isFeatured and (entry.featuredBadgeText or entry.statusText) or entry.statusText
-		statusLabel.TextColor3 = entry.isFeatured and (entry.featuredBadgeColor or entry.statusColor) or entry.statusColor
-		nameLabel.Text = entry.displayName
-		detailLabel.Text = entry.isFeatured and (entry.featuredDetailText or entry.detailText) or entry.detailText
-		cashLabel.Text = entry.cashText
-		frame.BackgroundTransparency = entry.isFeatured and 0.08 or 0.18
-		if stroke then
-			stroke.Color = entry.isFeatured and (entry.featuredBadgeColor or BillboardColors.Stroke) or BillboardColors.Stroke
-			stroke.Transparency = entry.isFeatured and 0.04 or 0.22
-			stroke.Thickness = entry.isFeatured and 1.65 or 1.25
-		end
-		billboard.Enabled = true
 	end
 end
 
@@ -304,7 +247,7 @@ end
 local function broadcastSeatStates(self)
 	local systemMgr = GetSystemMgr()
 
-	refreshSeatBillboards(self)
+	disableSeatBillboards(self)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		local seatState = buildSeatState(self, player)
@@ -604,15 +547,16 @@ function TableSeatSystem:_QueueAutoSeat(player)
 	self._playersWaitingForSeat = self._playersWaitingForSeat or {}
 	self._seatWaitQueue = self._seatWaitQueue or {}
 
-	local function markWaitingForSeat()
+	local function markWaitingForSeat(message)
 		if self._playersWaitingForSeat[player.UserId] then
+			broadcastSeatStates(self)
 			return
 		end
 
 		self._playersWaitingForSeat[player.UserId] = true
 		table.insert(self._seatWaitQueue, player.UserId)
 		GetSystemMgr().systems.GuiSystem:SetNotification(SENDER, player, {
-			text = "All coin flip seats are full. Waiting for the next open seat...",
+			text = message or "All coin flip seats are full. Waiting for the next open seat...",
 			lastTime = 3.2,
 			textColor = Color3.fromRGB(255, 224, 158),
 		})
@@ -683,7 +627,7 @@ function TableSeatSystem:_QueueAutoSeat(player)
 			return
 		end
 
-		warn(`[TableSeatSystem] Failed to auto-seat {player.Name}: no available seat or humanoid.`)
+		markWaitingForSeat("Seat is ready. Waiting for your character to sit...")
 	end)
 end
 
@@ -852,6 +796,7 @@ function TableSeatSystem:Init()
 	self:_EnsureSeatCatalog()
 
 	if IsServer then
+		disableSeatBillboards(self)
 		self._afkScheduleId = ScheduleModule.AddSchedule(Presets.AfkCheckInterval, function()
 			for userId, seatId in pairs(self._playerSeats) do
 				local player = Players:GetPlayerByUserId(userId)

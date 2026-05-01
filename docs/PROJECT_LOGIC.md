@@ -1,6 +1,6 @@
 # PROJECT_LOGIC
 
-更新时间：2026-04-17
+更新时间：2026-05-01
 
 ## 1. 这份文档的定位
 
@@ -8,11 +8,12 @@
 
 新窗口建议按这个顺序读：
 
-1. `docs/PROJECT_LOGIC.md`
-2. `docs/FlipACoin_首发优化执行与进度.md`
-3. `docs/FlipACoin_首发路线图与进度.md`
-4. `docs/FlipACoin_Roblox多人化改造策划案.md`
-5. 需要落代码时，再回到对应系统源码核实
+1. `docs/FRAMEWORK.md`
+2. `docs/PROJECT_LOGIC.md`
+3. `docs/TASK_STATE.md`
+4. 需要补产品背景时，再看 `docs/FlipACoin_Roblox多人化改造策划案.md`
+5. 需要补历史路线时，再看 `docs/FlipACoin_首发路线图与进度.md`
+6. 需要落代码时，再回到对应系统源码核实
 
 如果文档和代码冲突：
 
@@ -25,16 +26,17 @@
 
 这是一个基于旧 `SystemMgr + Systems` 框架持续改造中的 `Flip A Coin` 项目。
 
-当前主玩法已经切到：
+当前主玩法目标已经校准为 **单桌 8 人、弱社交、高频 Flip 的桌面运气游戏**：
 
-- 玩家进入大厅
-- 通过 `CoinFlipTable` 的空座位入座
-- 坐下后开始翻硬币
+- 每个服务器只有一张主桌，最大 `8` 人同桌
+- 玩家进服后自动分配到 `CoinFlipTable` 的空座位并坐下
+- 玩家面前有一个非常明确的 `FLIP` 主按钮
 - 正面给主要 `wins` 奖励，反面给少量保底 `Cash`，但会打断 streak
 - `wins` 在 UI 和 `leaderstats` 中对外展示为 `Cash`
 - 用 `Cash` 升级本局四项 run 属性
 - 冲更高 streak
-- 同桌/旁观玩家看到桌况、播报和抛币结果
+- 同桌玩家能感到彼此存在，但不走强社交 / 大厅 simulator 路线
+- 桌面只保留低噪音的他人 Flip、streak、全桌高光反馈
 
 这份仓库里仍保留很多旧 simulator/战斗项目遗留目录，所以不要按“目录里有什么”理解项目，而要按下面两条判断：
 
@@ -322,41 +324,37 @@ FlipACoin
 
 当前职责：
 
-- 维护 `CoinFlipTable` 的座位目录
-- 接 `ProximityPrompt` 入座
-- 处理离座 / 换座
-- AFK 超时踢座
+- 维护唯一 `CoinFlipTable` 的 `8` 个座位
+- 玩家进服 / 重生后自动分配空座位并坐下
+- 暂时禁止主动离座、换座、切桌
+- 满桌时进入等待 / 降级处理
 - 同步座位状态给客户端
-- 维护桌边 Billboard 信息
-- 统一计算当前 `featured seat / 热门座位`
+- 为同桌轻量桌面反馈提供座位状态
 - 通知 `CoinFlipSystem` 当前座位态变化
 
 依赖的场景约定：
 
 - `Workspace.CoinFlipTable`
 - 其下 `Seats` 文件夹
-- 每个 `Seat` 需要有 `SeatId` 属性或用座位名作为 seat id
-- 座位上要有 `ProximityPrompt`
+- 每个 `Seat` 需要有 `SeatId` 属性或用座位名作为 seat id，目标是 `Seat01` 到 `Seat08`
 
 一个非常重要的当前实现细节：
 
-- `GetAudiencePlayers()` 现在直接返回 `Players:GetPlayers()`
-- 所以“观战同步”和“播报接收范围”目前其实是全服，而不是严格只限同桌
-- `seatDisplayEntries` 现在除了基础座位信息，还会附带：
+- 旧 `ProximityPrompt`、`RequestStand`、AFK 踢座、`SeatInfoBillboard`、featured seat 逻辑仍可能残留在代码里
+- 新方向下这些都不是首发主路径：玩家不需要找座位、不需要离座按钮、不需要切桌
+- `GetAudiencePlayers()` 现在直接返回 `Players:GetPlayers()`；在单桌 `8` 人服务器口径下可以暂时接受，但语义应理解为“全桌 / 全服同一批玩家”
+- `seatDisplayEntries` 旧字段可能仍会附带：
   - `isFeatured`
   - `featuredBadgeText`
   - `featuredBadgeColor`
   - `featuredDetailText`
-- `featured seat` 当前判定口径是：
-  - 先看当前 streak
-  - 再看最近活动时间
-  - 最后用少量现金规模做平分
 - `buildSeatState()` 顶层还会额外给客户端：
   - `featuredSeatId`
   - `featuredSeatPlayerName`
   - `featuredSeatLabel`
   - `featuredSeatStreak`
   - `featuredSeatReason`
+- 这些旧字段后续不要继续扩展成复杂观战系统；若保留，只应收敛为低噪音桌面高光，例如当前最高 streak 座位轻微发光
 
 ### 7.4 `CoinFlipSystem`
 
@@ -378,7 +376,7 @@ FlipACoin
 - 维护首局 `coinFlipOnboarding` 引导状态
 - 累积 `wins / bestStreak / lifetimeFlips / lifetimeHeads / lifetimeCashEarned`
 - 刷新 `leaderstats` 与头顶 UI
-- 广播本次 flip 给旁观者
+- 广播本次 flip 给同桌玩家，用于低噪音桌面反馈
 - 驱动 streak 播报
 - 处理升级购买
 
@@ -386,11 +384,10 @@ FlipACoin
 
 - 显示 Flip HUD
 - 显示首局引导面板与按钮聚焦
-- 本地改写 `SeatInfoBillboard`，把世界提示对齐到当前首局步骤
 - 响应式布局
-- 展示桌况 overview
-- 展示观战 feed
-- 把 `featured seat` 从座位状态映射成世界 Billboard 和 overview 的焦点高亮
+- 让玩家面前的 `FLIP` 主按钮足够明确
+- 展示 Cash、streak、chance、speed、四项升级
+- 展示同桌玩家的轻量状态 / streak / flip 结果
 - 播放 coin flip 可视表现
 
 关键玩法数据：
@@ -409,17 +406,13 @@ FlipACoin
 
 当前额外要记住：
 
-- 首局引导链已经接到真实玩法事件：
-  - 靠近空位 prompt
-  - 入座
+- 首局引导链应围绕“进服即坐下，直接 Flip”：
+  - 自动入座
   - flip `3` 次
   - 购买首次升级
   - 达成 `2 streak`
-- `CoinFlipSystem/ui.lua` 还会根据当前引导步骤本地重写世界 Billboard：
-  - 未入座时把空位改成 `Take Seat / Start Here`
-  - 已入座后把自己的座位改成 `Next Up`
-- 非引导状态下，未入座观战者现在默认只把 `featured seat` 保持为完整 Billboard，其余占座位降成 compact，减少“全桌都一样吵”的问题
-- `CoinFlipTableOverview` 的 subtitle 和座位行样式也会跟着 `featured seat` 一起高亮，帮助旁观者更快知道“最值得看哪里”
+- `SeatInfoBillboard`、`CoinFlipTableOverview`、`CoinFlipSpectatorFeed`、复杂 featured seat 表现都不再是首发主路径，当前代码级退场首版已把它们保持隐藏
+- 但“弱社交”不等于完全无同桌反馈：保留或重做低噪音桌面信号，让玩家知道另外 7 个座位也在发生 Flip
 - `PlayerSystem:UpdatePlayerHeadGui()` 现在也会在引导期间把头顶文案切到当前下一步动作
 - 引导细状态写在 `guideData.coinFlipOnboarding`
 - 漏斗埋点仍继续沿用 `onboardingFunnelStep`
@@ -517,10 +510,10 @@ FlipACoin
 
 ### 8.3 入座开始玩法
 
-1. 玩家触发 `CoinFlipTable` 上的座位 `ProximityPrompt`
+1. 玩家进服后由服务端自动选择唯一 `CoinFlipTable` 的空座位
 2. `TableSeatSystem:RequestSit()` 占座并让 Humanoid 坐下
 3. 座位状态广播给所有客户端
-4. `CoinFlipSystem` 收到座位态后切换 HUD / 观战态
+4. `CoinFlipSystem` 收到座位态后显示主玩法 HUD，并让玩家立即进入可 Flip 状态
 
 ### 8.4 翻硬币结算
 
@@ -534,7 +527,7 @@ FlipACoin
 5. 刷新：
    - `leaderstats.Cash`
    - 头顶 UI
-   - 座位桌况
+   - 座位 / 桌面轻量状态
 6. 发回本人 HUD 结果
 7. 发给其他玩家观察结果
 8. 若达到阈值，驱动 `AnnouncementSystem`
@@ -649,14 +642,22 @@ FlipACoin
 ### 10.2 当前首发玩法最关键的 UI 在哪里
 
 - `Main.Elements.CoinFlipHUD`
-- `Main.Elements.CoinFlipTableOverview`
-- `Main.Elements.CoinFlipSpectatorFeed`
+- 桌面内的同桌轻量状态 / streak / flip 反馈节点
+- 当前预制 HUD 的三栏结构：
+  - `Content.LeftPanel`：Cash / Streak
+  - `Content.CenterPanel`：SeatLabel / ResultLabel / `FLIP` 主按钮 / `SpaceHint` / `GamepadRTHint`
+  - `Content.RightPanel`：Chance / Speed / 四个升级按钮
 
 这些由：
 
 - `CoinFlipSystem/ui.lua`
 
 直接管理。
+
+当前约定：
+
+- 主 HUD 绑定读取 Studio 预制节点，不再为统计卡、升级按钮或离座按钮运行时创建兜底资源。
+- 旧 `Stats` / `Actions` 容器如果仍存在，只是隐藏兼容遗留，不是当前主 HUD 数据源。
 
 ### 10.3 UI 延迟初始化模式
 
@@ -709,8 +710,8 @@ FlipACoin
 
 其中：
 
-- `Attachments/<SeatId>Marker` 会被 `TableSeatSystem` 用来给座位 Billboard 找 Adornee
-- 缺少时会退回直接挂到座位本体
+- `Attachments/<SeatId>Marker` 可作为座位视觉锚点
+- 旧座位 Billboard 不再是首发主路径；若需要桌面反馈，应改成低噪音桌面信号
 
 ### 11.2 `Workspace.RankingList`
 
@@ -737,8 +738,10 @@ FlipACoin
 
 - `docs/PROJECT_LOGIC.md`
   - 运行地图，优先级最高
+- `docs/TASK_STATE.md`
+  - 当前 active 任务、下一步、决策、验证记录和 backlog 的唯一实时状态源
 - `docs/FlipACoin_首发优化执行与进度.md`
-  - 当前全链路首发优化的唯一续接文档
+  - 旧续接文档，已迁移为指向 `TASK_STATE.md` 的历史入口
 - `docs/FlipACoin_首发路线图与进度.md`
   - 旧的首发推进历史和已完成事项
 - `docs/FlipACoin_Roblox多人化改造策划案.md`
@@ -828,3 +831,5 @@ FlipACoin
 如果只用一句工程化的话概括当前仓库：
 
 这是一个已经用旧框架成功跑通“8 人同桌翻硬币”主链路的 Flip A Coin 项目，当前最该相信的是 `SystemMgr + PlayerSystem + TableSeatSystem + CoinFlipSystem + ClientData` 这条线，其余大量目录都应先视为遗留或候选，而不是默认活跃。
+
+产品方向上，它应被理解为“单桌 8 人弱社交桌面运气游戏”：不要再往多桌大厅、自由走动、复杂观战面板方向扩展；首发重点是进服即坐下、面前一个强 `FLIP` 按钮、短循环升级、streak 情绪曲线、以及轻量同桌存在感。
