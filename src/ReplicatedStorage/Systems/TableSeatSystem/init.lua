@@ -146,11 +146,6 @@ local function buildSeatState(self, player)
 		tableId = mySeatRecord and mySeatRecord.tableId or nil,
 		assignmentStatus = assignmentStatus,
 		assignmentMessage = assignmentMessage,
-		featuredSeatId = seatSnapshot.featuredSeatId,
-		featuredSeatPlayerName = seatSnapshot.featuredSeatPlayerName,
-		featuredSeatLabel = seatSnapshot.featuredSeatLabel,
-		featuredSeatStreak = seatSnapshot.featuredSeatStreak,
-		featuredSeatReason = seatSnapshot.featuredSeatReason,
 	}
 end
 
@@ -165,23 +160,6 @@ local function getSeatBillboardTone(streak)
 		return "Heating Up", BillboardColors.Warm
 	end
 	return "Ready", BillboardColors.Open
-end
-
-local function getFeaturedSeatMeta(entry, secondsSinceActivity)
-	local streak = entry.streak or 0
-	if streak >= 8 then
-		return "Table Fever", BillboardColors.Jackpot, `Best streak on table: {streak}`
-	end
-	if streak >= 4 then
-		return "Hot Seat", BillboardColors.Hot, `Best streak on table: {streak}`
-	end
-	if streak >= 2 then
-		return "Rising", BillboardColors.Warm, `Streak building: {streak}`
-	end
-	if typeof(secondsSinceActivity) == "number" and secondsSinceActivity <= Presets.HotSeat.RecentSeatWindow then
-		return "Live Now", BillboardColors.Warm, "Most recent action at the table"
-	end
-	return "Featured", BillboardColors.Open, "Best seat to watch right now"
 end
 
 local function disableSeatBillboards(self)
@@ -696,11 +674,6 @@ function TableSeatSystem:_BuildSeatDisplaySnapshot()
 	local tablePlayerUserIds = {}
 	local seatDisplayEntries = {}
 	local openSeatCount = 0
-	local featuredEntry
-	local featuredScore = -math.huge
-	local featuredActivityAge = math.huge
-	local featuredStreak = -1
-	local featuredCash = -1
 
 	for _, seatKey in ipairs(self._seatOrder or {}) do
 		local occupant = self._seatOwners[seatKey]
@@ -714,68 +687,6 @@ function TableSeatSystem:_BuildSeatDisplaySnapshot()
 		if not entry.isOccupied then
 			openSeatCount += 1
 		end
-
-		if entry.isOccupied then
-			local lastActivityAt = self._lastActivity[entry.userId]
-			local secondsSinceActivity = nil
-			if typeof(lastActivityAt) == "number" then
-				secondsSinceActivity = math.max(os.clock() - lastActivityAt, 0)
-			end
-
-			local activityWindow = Presets.HotSeat.RecentActivityWindow
-			local recentActivityBonus = 0
-			if typeof(secondsSinceActivity) == "number" then
-				recentActivityBonus = math.max(activityWindow - math.min(secondsSinceActivity, activityWindow), 0)
-					* Presets.HotSeat.RecentActivityWeight
-			end
-			local cashBonus = math.min(
-				math.floor((entry.cash or 0) / Presets.HotSeat.CashBonusDivisor),
-				Presets.HotSeat.MaxCashBonus
-			)
-			local score = ((entry.streak or 0) * Presets.HotSeat.StreakWeight) + recentActivityBonus + cashBonus
-
-			entry.secondsSinceActivity = secondsSinceActivity
-			entry.heatScore = score
-
-			local activityAge = typeof(secondsSinceActivity) == "number" and secondsSinceActivity or math.huge
-			if score > featuredScore
-				or (score == featuredScore and (entry.streak or 0) > featuredStreak)
-				or (score == featuredScore and (entry.streak or 0) == featuredStreak and activityAge < featuredActivityAge)
-				or (
-					score == featuredScore
-					and (entry.streak or 0) == featuredStreak
-					and activityAge == featuredActivityAge
-					and (entry.cash or 0) > featuredCash
-				)
-			then
-				featuredEntry = entry
-				featuredScore = score
-				featuredActivityAge = activityAge
-				featuredStreak = entry.streak or 0
-				featuredCash = entry.cash or 0
-			end
-		end
-	end
-
-	local featuredSeatId
-	local featuredSeatPlayerName
-	local featuredSeatLabel
-	local featuredSeatStreak
-	local featuredSeatReason
-
-	if featuredEntry then
-		local badgeText, badgeColor, detailText =
-			getFeaturedSeatMeta(featuredEntry, featuredEntry.secondsSinceActivity)
-		featuredEntry.isFeatured = true
-		featuredEntry.featuredBadgeText = badgeText
-		featuredEntry.featuredBadgeColor = badgeColor
-		featuredEntry.featuredDetailText = detailText
-
-		featuredSeatId = featuredEntry.seatId
-		featuredSeatPlayerName = featuredEntry.displayName
-		featuredSeatLabel = badgeText
-		featuredSeatStreak = featuredEntry.streak or 0
-		featuredSeatReason = detailText
 	end
 
 	return {
@@ -783,11 +694,6 @@ function TableSeatSystem:_BuildSeatDisplaySnapshot()
 		tablePlayerUserIds = tablePlayerUserIds,
 		seatDisplayEntries = seatDisplayEntries,
 		openSeatCount = openSeatCount,
-		featuredSeatId = featuredSeatId,
-		featuredSeatPlayerName = featuredSeatPlayerName,
-		featuredSeatLabel = featuredSeatLabel,
-		featuredSeatStreak = featuredSeatStreak,
-		featuredSeatReason = featuredSeatReason,
 	}
 end
 

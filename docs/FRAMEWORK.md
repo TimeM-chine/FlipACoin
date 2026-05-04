@@ -96,7 +96,7 @@ local LoadOrder = { "PlayerSystem", "CharacterSystem" }
 | Client → Server | `self.Server:Fun(args)` |
 | 非关键高频广播 | 在 `args` 里写 `unreliable = true`，走 `UnreliableRemoteEvent` |
 
-`unreliable` 标记读取自第一个 payload table（即上表中的 `args.unreliable`），不是 varargs 包装表。
+`unreliable` 标记读取自第一个 payload table（即上表中的 `args.unreliable`），不是 varargs 包装表；桥接代理会据此选择 `RemoteEvent` 或 `UnreliableRemoteEvent`。
 
 ### 3.4 `whiteList`
 每个系统都应声明：

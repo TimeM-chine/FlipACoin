@@ -1,6 +1,6 @@
 # PROJECT_LOGIC
 
-更新时间：2026-05-01
+更新时间：2026-05-04
 
 ## 1. 这份文档的定位
 
@@ -11,9 +11,7 @@
 1. `docs/FRAMEWORK.md`
 2. `docs/PROJECT_LOGIC.md`
 3. `docs/TASK_STATE.md`
-4. 需要补产品背景时，再看 `docs/FlipACoin_Roblox多人化改造策划案.md`
-5. 需要补历史路线时，再看 `docs/FlipACoin_首发路线图与进度.md`
-6. 需要落代码时，再回到对应系统源码核实
+4. 需要落代码时，再回到对应系统源码核实
 
 如果文档和代码冲突：
 
@@ -145,7 +143,10 @@ FlipACoin
 玩家脚本阶段：
 
 - `src/StarterPlayer/StarterPlayerScripts/client.client.lua`
-  - 只做一件事：`require(Replicated.Systems.SystemMgr)` 然后 `SystemMgr.Start()`
+  - `require(Replicated.Systems.SystemMgr)`
+  - 启动 `Modules/FirstPersonCamera.lua`
+  - 然后 `SystemMgr.Start()`
+  - 注意：`FirstPersonCamera.lua` 是旧文件名；当前首发语义是“两态第一人称相机”，不是固定封闭第一人称
 
 主 UI 阶段：
 
@@ -411,6 +412,17 @@ FlipACoin
   - flip `3` 次
   - 购买首次升级
   - 达成 `2 streak`
+- 桌面沉浸视角当前由 `StarterPlayerScripts/Modules/FirstPersonCamera.lua` 负责：
+  - 平时是头部第一人称：镜头贴到 `Head.Position`，保留默认相机输入，所以玩家可自由转头
+  - 镜头相对 `HumanoidRootPart` 的左右转向被限制在 `-90° ~ 90°`，避免玩家坐在桌边时回头穿帮
+  - `Head` 和配件本地透明，身体可见，玩家低头能看到自己身体
+  - 自己 Flip 时由 `CoinFlipSystem/ui.lua` 调 `FirstPersonCamera.FollowCoin()`，相机临时切到 `Scriptable` 并从头部视角看向硬币
+  - 硬币落下或视觉被清理后调 `ReturnToFirstPerson()`，回到可自由转向的第一人称
+  - `FirstPersonCamera` 会采样本地相机 pitch / yaw，经 `CharacterSystem:HeadPoseChanged()` 走 unreliable 桥上报给服务端
+  - 服务端只信任发送者本人，校验 / clamp / 限频后在 Heartbeat 平滑改该角色的 `Neck` 与可选 `Waist.C0`，利用 Character 复制让其他客户端和服务端都看到轻微摇头 / 点头
+  - `StarterCharacterScripts/char.client.lua` 会拦截默认 `idle` 动画轨道，避免玩家长时间不动时自动播放默认 idle 摆动
+  - 其他玩家的 `ObservedFlip()` 不触发相机接管，只播放桌面硬币表现
+  - 文件名仍沿用旧名，当前暂不重命名，避免扩大启动链改动
 - `SeatInfoBillboard`、`CoinFlipTableOverview`、`CoinFlipSpectatorFeed`、复杂 featured seat 表现都不再是首发主路径，当前代码级退场首版已把它们保持隐藏
 - 但“弱社交”不等于完全无同桌反馈：保留或重做低噪音桌面信号，让玩家知道另外 7 个座位也在发生 Flip
 - `PlayerSystem:UpdatePlayerHeadGui()` 现在也会在引导期间把头顶文案切到当前下一步动作
@@ -736,20 +748,24 @@ FlipACoin
 
 ### 12.1 哪些文档今天还值得看
 
+- `docs/FRAMEWORK.md`
+  - SystemMgr 框架机制、生命周期、桥接约定和编码习惯
 - `docs/PROJECT_LOGIC.md`
   - 运行地图，优先级最高
 - `docs/TASK_STATE.md`
   - 当前 active 任务、下一步、决策、验证记录和 backlog 的唯一实时状态源
-- `docs/FlipACoin_首发优化执行与进度.md`
-  - 旧续接文档，已迁移为指向 `TASK_STATE.md` 的历史入口
-- `docs/FlipACoin_首发路线图与进度.md`
-  - 旧的首发推进历史和已完成事项
-- `docs/FlipACoin_Roblox多人化改造策划案.md`
-  - 产品目标和玩法定位
-- `docs/FlipACoin_开发优先级清单与系统任务表.md`
-  - 仍有参考价值，但部分内容已经落后于当前代码
 
-### 12.2 哪些文档现在明显过时
+### 12.2 已删除的旧 Markdown
+
+2026-05-04 已把旧策划、旧路线图、旧执行进度、旧系统拆分和旧架构梳理文档从 `docs/` 删除。
+
+删除原因：
+
+- 当前玩法定位已经合并进本文档第 2 节。
+- 当前任务、历史验证、决策和 backlog 已迁移到 `TASK_STATE.md`。
+- 旧系统拆分与旧架构梳理包含 `BaseSystem`、多桌 / 围观、旧 simulator 方向等过时信息，继续保留会误导新窗口。
+
+### 12.3 哪些内容现在明显过时
 
 - 旧 `PROJECT_LOGIC.md` 内容曾指向 `Minion Wars / BattleSystem / SkillSystem`
 - 这些都不再代表当前项目

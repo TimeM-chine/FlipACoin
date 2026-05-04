@@ -1,12 +1,12 @@
 # TASK_STATE
 
-最后更新：2026-05-01
+最后更新：2026-05-04
 
 > 目的：记录当前正在做什么、下一步是什么、已做验证、关键决策与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`。
 
 ## Active
 
-### 首发优化重置：单桌自动入座 / 桌面视角 / 统一 Flip 输入 / HUD 收口
+### 收尾验证：重生再绑定 / 旧表现清理回归
 
 - Started: 2026-04-19
 - Status: `进行中`
@@ -41,19 +41,28 @@ Progress:
 - 已落 `M4-03 / M4-04` 首版：Studio 预制版 Flip HUD 现在是左 / 中 / 右三栏结构，主 HUD 绑定改为读取预制节点，不再为统计卡、升级按钮或 Leave 按钮运行时创建兜底资源。
 - 已按逻辑验证完成单桌 `8` 人满员链路审查：场景确认为 `8` 个 Seat，自动分配 / 满员等待 / 空位释放后再分配 / 重生回座 / 离服清理链路闭环成立。
 - 已补等待队列边界：等待玩家若在空位出现时角色暂不可坐，不会从等待队列丢失，会继续等待下一轮自动入座。
+- 已落 `M2-01` 桌面沉浸视角首版：平时保持可自由转向的头部第一人称，玩家能低头看到身体；自己的 Flip 期间短暂切到硬币跟随相机，落下后回自由第一人称。
+- 已完成单人 Studio Play sanity：玩家自动坐到 `Seat01`，idle 相机为 `Custom`、镜头贴头、头部透明；Flip 期间相机切到 `Scriptable` 跟硬币，结束后回 `Custom`。
+- 已修正头部姿态弱社交方案：本地相机 pitch / yaw 经 `CharacterSystem` 走 unreliable 上报，服务端限频 / clamp 后平滑驱动角色 `Neck` / `Waist.C0`，利用 Character 复制让服务端和其他客户端可见。
+- 已限制桌面第一人称左右转向：相机和头部姿态 yaw 相对 `HumanoidRootPart` clamp 到 `-90° ~ 90°`；同时客户端拦截默认 idle 动画轨道，避免长时间不动自动播放 idle 摆动。
+- 已完成 `M2-03` 单人重生再绑定回归：重生后相机仍回到 `Custom`，角色重新坐回 `Seat01`，HUD 与桌面绑定没有掉线。
+- 已完成 `M4-01 / M4-02` Studio 回归：旧 `SeatInfoBillboard` 全部保持关闭，`CoinFlipSpectatorFeed` / `CoinFlipTableOverview` 不再进入主流程可见状态。
+- 正在推进 `M2-02` 后续验证：先做移动端竖屏 HUD 遮挡 / 可读性探针，再视 Studio 能力补 Team Test 观感检查。
+- 已完成竖屏 HUD 压缩首版：触屏竖屏下隐藏 `InputHints`，`SeatLabel` 在竖屏触屏模式下收起，Flip / Result / Upgrade 区块同步压缩，避免按钮和升级项互相挤压。
 
 Next:
 
-- 决定当前 head-camera fallback 是否足够，优先做“桌面沉浸视角”而不是封闭第一人称。
-- 清理 `M4-01 / M4-02`：旧座位 Billboard、spectator feed、table overview、复杂 featured seat 表现退出主流程。
-- 设计低噪音同桌反馈：其他玩家 flip、当前 streak、高 streak 全桌轻微高光。
+- 完成 `M2-02` 移动端竖屏 HUD 遮挡 / 可读性验证，并尽量补 Team Test 头部姿态观感检查。
+- 若双客户端 Team Test 仍无法稳定开启，就至少保留当前桌面 / 单客户端 sanity 结论，并标注移动端验证为源码级收敛结果。
+- 若观感通过，再补一层更轻的同桌高光反馈。
 
 Decisions:
 
 - 旧“围观优化版”计划已失效，不继续做多桌大厅、空位抢座引导、离座按钮、手动切桌、复杂观战面板。
 - 当前核心体验是“进服即坐下，面前一个巨大明确的 `FLIP` 按钮，循环简单但上头”。
 - 弱社交成立：不做强聊天 / 自由移动 / 主动组队，但要让玩家感觉自己坐在一张正在发生事的桌上。
-- 桌面沉浸视角前置，不排到最后；当前先保留项目内 head-camera fallback，若不舒服再调相机，而不是急着接第三方 `Open FPC`。
+- 桌面沉浸视角前置，不排到最后；首发采用项目内两态相机：idle 是可自由转向的头部第一人称，自己的 Flip 期间才临时 `Scriptable` 跟硬币，先不接第三方 `Open FPC`。
+- 头部姿态只是弱互动反馈，不做全身 IK；采用服务端驱动角色关节 C0，客户端只上报相机相对身体的 pitch / yaw。
 - 玩家重生后应重新回到可用座位，不进入自由行走态。
 - 首发只有一张主桌，最大 `8` 人；满桌时做等待 / 降级处理。
 - “资源全部预制到 Studio”的口径是主资源预先存在，代码只负责读、绑、显隐、改字、改值。
@@ -70,10 +79,9 @@ Milestone Outline:
 
 Current Code Conflicts To Remove:
 
-- `TableSeatSystem` 仍保留 `RequestStand`、`SeatInfoBillboard`、featured seat 计算、audience / spectator 同步语义。
-- `CoinFlipSystem/ui.lua` 仍保留隐藏态 `CoinFlipSpectatorFeed`、`CoinFlipTableOverview` 与对应 overview row / onboarding step 兜底创建逻辑。
-- 当前主 HUD 已改成预制节点绑定；剩余运行时 UI 创建点主要在旧 overview / onboarding / 世界落点 pulse / Announcement banner，后续按是否保留对应表现决定清理或预制。
-- 旧代码里的多桌 / 观战命名要按单桌 `8` 人语义收敛；不要继续扩展为大厅式多桌系统。
+- `CoinFlipSystem/ui.lua` 仍保留 onboarding fallback 节点和 `CoinLandingPulse` 的运行时创建，这些是后续表现收口项，不影响当前主流程。
+- `AnnouncementSystem/ui.lua` 仍运行时创建顶部 banner；若首发最终改为纯预制表现，这块需要再收。
+- `ReplicatedFirst/LoadingScreen/Loader.lua` 仍有加载屏 runtime creation，属于更后面的预制化统一项。
 
 M0-03 Resource Freeze:
 
@@ -104,14 +112,14 @@ Task Table:
 | `M1-02` | 自动坐下链路 | `P0` | `已完成` | 自动入座已接 `PlayerAdded / CharacterAdded` 与脱座回拉逻辑，单人 sanity 通过 | 2026-05-01 |
 | `M1-03` | 禁止离座与跳座 | `P0` | `进行中` | 已关闭 `RequestStand` 主路径、禁用跳跃状态与触屏跳跃按钮 | 2026-04-19 |
 | `M1-04` | 旧 prompt / AFK 逻辑退场 | `P1` | `进行中` | 已停掉客户端 `PromptShown` 主链路、服务端 AFK 踢座已关闭 | 2026-04-19 |
-| `M2-01` | 桌面沉浸视角评估 | `P0` | `进行中` | 当前先以项目内 head-camera fallback 对齐目标效果，后续重点是桌面和同桌反馈可读性 | 2026-05-01 |
-| `M2-02` | 视角回退方案 | `P1` | `进行中` | 已落自实现 fallback：相机贴头、隐藏头与配件、身体可见、鼠标不锁中心 | 2026-05-01 |
-| `M2-03` | 重生与再绑定 | `P0` | `进行中` | 单人回归确认 HUD 和视角都会恢复；待单桌满员验证 | 2026-05-01 |
+| `M2-01` | 桌面沉浸视角评估 | `P0` | `已完成` | 已落两态相机：idle 头部第一人称可自由转向，自己的 Flip 期间跟随硬币，落下后回 idle | 2026-05-03 |
+| `M2-02` | 视角回退方案 | `P1` | `进行中` | 平时保留自由第一人称但 yaw 限制为 `-90° ~ 90°`；硬币跟随只在本地 Flip 期间接管；头部姿态由服务端驱动 Character 关节复制给同桌玩家 | 2026-05-03 |
+| `M2-03` | 重生与再绑定 | `P0` | `已完成` | 单人重生后再绑定已通过，HUD / 相机 / 坐席状态恢复正常；Team Test 归入 `M2-02` | 2026-05-04 |
 | `M3-01` | `Space` Flip 绑定 | `P0` | `进行中` | 已通过 `ContextActionService` 接到统一 Flip 入口 | 2026-04-19 |
 | `M3-02` | 手柄 `RT` Flip 绑定 | `P0` | `进行中` | 已通过 `ContextActionService` 接到统一 Flip 入口 | 2026-04-19 |
 | `M3-03` | HUD 点击 Flip 统一入口 | `P0` | `进行中` | HUD 点击、`Space`、`RT` 统一走 `requestFlip()` | 2026-04-19 |
-| `M4-01` | 移除旧座位 BillboardGui | `P0` | `进行中` | 已停用服务端刷新与客户端显示，待 Studio Play 确认旧 `SeatInfoBillboard` 不再出现 | 2026-05-01 |
-| `M4-02` | 移除旧围观 HUD 链路 | `P0` | `进行中` | 已隐藏 `CoinFlipSpectatorFeed`、`CoinFlipTableOverview`、复杂 featured seat 表现；待补新轻量桌面反馈 | 2026-05-01 |
+| `M4-01` | 移除旧座位 BillboardGui | `P0` | `已完成` | Studio 回归确认旧 `SeatInfoBillboard` 保持关闭，不再进入主流程 | 2026-05-04 |
+| `M4-02` | 移除旧围观 HUD 链路 | `P0` | `已完成` | Studio 回归确认 `CoinFlipSpectatorFeed`、`CoinFlipTableOverview`、复杂 featured seat 表现不再可见 | 2026-05-04 |
 | `M4-03` | 新 Flip HUD 预制资源 | `P0` | `已完成` | 已补 Studio 预制三栏结构：左侧 Cash/Streak，中间 Flip/结果/输入提示，右侧 Chance/Speed/四升级 | 2026-05-01 |
 | `M4-04` | HUD 绑定改为预制模式 | `P0` | `已完成` | 主 HUD 已改为读取预制节点，不再为统计卡、升级按钮或 Leave 按钮运行时创建兜底资源 | 2026-05-01 |
 | `M5-01` | 单人首轮回归 | `P0` | `已完成` | 单人 Play 确认自动坐下、HUD 可见，`Space` / HUD 点击 / `RT` 均可 Flip | 2026-05-01 |
@@ -218,12 +226,42 @@ Status values:
 - `git diff --check` 通过。
 - Remaining risk: 未做真实网络延迟下多客户端竞争实测；后续若出现线上抢座异常，优先检查 `_seatOwners` 与实际 `Seat.Occupant` 的同步时序。
 
+### 2026-05-03 两态第一人称相机 sanity
+
+- `StarterPlayerScripts/Modules/FirstPersonCamera.lua` 保持文件名不变，但语义改为两态第一人称相机。
+- Idle：`camera.CameraType = Custom`，镜头每帧贴到头部位置，保留 Roblox 默认相机输入；头和配件本地透明，身体可见。
+- 本地 Flip：`CoinFlipSystem/ui.lua` 在自己的 `playCoinVisual()` 里调用 `FirstPersonCamera.FollowCoin()`，相机临时 `Scriptable` 并从头部视角看向硬币；`ObservedFlip()` 不触发相机跟随。
+- 单人 Studio Play 客户端探针：idle `cameraToHeadDistance = 0`、`headHidden = 1`、`FieldOfView = 70`；Flip 期间采到 `Scriptable` / FOV `68`，看向硬币点积最高约 `0.9999`；结束后回 `Custom` / FOV `70`。
+- Remaining risk: 未覆盖重生后再绑定、所有 `8` 个座位硬币跟随观感、移动端竖屏遮挡和真实多客户端观感。
+
+### 2026-05-03 头部姿态同步代码级校验
+
+- `SystemMgr` 的 unreliable 判断已改为读取第一个 payload table 的 `unreliable` 字段，移除旧的 varargs 包装表误判。
+- `FirstPersonCamera` 以约 `12Hz` 采样相机相对角色根部的 pitch / yaw，并通过 `CharacterSystem.Server:HeadPoseChanged({ unreliable = true })` 发送。
+- 初版采用服务端 `AllClients` unreliable 广播、客户端本地改关节，实测服务端不可见，其他客户端也没有稳定看到表现。
+- 已改为服务端按发送者 player 限频 / clamp 后在 Heartbeat 平滑改该角色 `Neck` 和可选 `Waist.C0`，超时约 `0.6s` 回正，利用 Character 属性复制让服务端和其他客户端可见。
+- 单人 Studio Play 探针：通过真实 `CharacterSystem.Server:HeadPoseChanged()` Remote 连续上报后，客户端读到复制回来的 `Neck.C0` / `Waist.C0` 均发生非零变化，并在约 `1s` 后回正；idle 相机仍为 `Custom`、镜头贴头、头透明、身体可见。
+- 补充优化：`FirstPersonCamera` 会把相机 look vector 相对 `HumanoidRootPart` 的 yaw clamp 到 `-90° ~ 90°`；`StarterCharacterScripts/char.client.lua` 拦截默认 `Animate.idle` / `Idle` 优先级轨道并立即停止。
+- Remaining risk: 尚未做真实双客户端 Team Test，无法从 B 客户端视觉确认 A 玩家摇头 / 点头幅度是否需要调参。
+
 ## Done
+
+### 2026-05-04 M2-03 重生与再绑定
+
+- Outcome: 单人 Studio Play 验证通过，重生后角色仍自动坐回 `Seat01`，相机回到 `Custom`，HUD 与桌面绑定恢复正常。
+
+### 2026-05-04 M4-01 / M4-02 旧表现清理回归
+
+- Outcome: 单人 Studio Play 验证通过，旧 `SeatInfoBillboard` 保持关闭，`CoinFlipSpectatorFeed` / `CoinFlipTableOverview` 不再进入主流程可见状态。
+
+### 2026-05-04 Docs 收敛与旧 Markdown 清理
+
+- Outcome: `docs/` 收敛为 `FRAMEWORK.md`、`PROJECT_LOGIC.md`、`TASK_STATE.md` 三份核心文档；旧策划、旧路线图、旧执行进度、旧系统拆分和旧架构梳理 Markdown 已删除，旧引用已改为核心文档说明。
 
 ### 2026-05-01 文档状态迁移
 
 - Outcome: 新建 `docs/TASK_STATE.md`，把当前执行状态、任务表、决策、验证记录与后续项从旧进度文档迁入。
-- Source docs touched: `docs/FlipACoin_首发优化执行与进度.md`、`docs/FlipACoin_首发路线图与进度.md`、`docs/PROJECT_LOGIC.md`。
+- Source: 旧执行进度与旧路线图内容已迁移到 `TASK_STATE.md`，项目运行事实已迁移到 `PROJECT_LOGIC.md`。
 
 ### 2026-05-01 产品方向校准
 

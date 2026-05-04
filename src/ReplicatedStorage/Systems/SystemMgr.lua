@@ -104,6 +104,11 @@ SystemMgr.systems = systems
 local RemoteEvent, UnreliableRemoteEvent, BindableEvent
 local RuntimeFolder
 
+local function shouldUseUnreliable(args)
+	local payload = args[1]
+	return typeof(payload) == "table" and payload.unreliable == true
+end
+
 local function getRuntimeFolder()
 	if RuntimeFolder and RuntimeFolder.Parent then
 		return RuntimeFolder
@@ -250,7 +255,7 @@ function LoadSystem(name)
 				system.Client[funName] = function(inst, player, ...)
 					local args = { ... }
 					table.insert(args, { sysName = name, funName = funName })
-					if args.unreliable then
+					if shouldUseUnreliable(args) then
 						UnreliableRemoteEvent:FireClient(player, nil, nil, table.unpack(args))
 					else
 						RemoteEvent:FireClient(player, nil, nil, table.unpack(args))
@@ -261,8 +266,7 @@ function LoadSystem(name)
 					system.AllClients[funName] = function(inst, ...)
 						local args = { ... }
 						table.insert(args, { sysName = name, funName = funName })
-						if args.unreliable then
-							print("Unreliable")
+						if shouldUseUnreliable(args) then
 							UnreliableRemoteEvent:FireAllClients(nil, nil, table.unpack(args))
 						else
 							RemoteEvent:FireAllClients(nil, nil, table.unpack(args))
@@ -304,7 +308,7 @@ function LoadSystem(name)
 				system.Server[funName] = function(inst, ...)
 					local args = { ... }
 					table.insert(args, { sysName = name, funName = funName })
-					if args.unreliable then
+					if shouldUseUnreliable(args) then
 						UnreliableRemoteEvent:FireServer(nil, table.unpack(args))
 					else
 						RemoteEvent:FireServer(nil, table.unpack(args))

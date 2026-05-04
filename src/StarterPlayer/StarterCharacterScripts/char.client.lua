@@ -111,4 +111,23 @@ humanoid.AutoJumpEnabled = false
 humanoid.UseJumpPower = false
 humanoid.JumpHeight = 0
 humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+
+local animator = humanoid:WaitForChild("Animator")
+
+local function stopIdleAnimationTrack(track)
+	local animation = track.Animation
+	local animationParent = animation and animation.Parent
+	local isDefaultIdle = animationParent and animationParent.Name == "idle"
+	local isIdlePriority = track.Priority == Enum.AnimationPriority.Idle
+	if not isDefaultIdle and not isIdlePriority then
+		return
+	end
+
+	track:Stop(0)
+end
+
+animator.AnimationPlayed:Connect(stopIdleAnimationTrack)
+for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+	stopIdleAnimationTrack(track)
+end
 -- warn(humanoid.UseJumpPower, humanoid.JumpHeight)
