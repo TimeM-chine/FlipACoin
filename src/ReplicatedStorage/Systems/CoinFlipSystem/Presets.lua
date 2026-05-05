@@ -71,6 +71,11 @@ Presets.Visuals = table.freeze({
 	PulseStartSize = 0.46,
 	PulseEndSize = 2.8,
 	PulseDuration = 0.26,
+	StreakPulseMinimum = 2,
+	StreakPulseColor = Color3.fromRGB(255, 241, 158),
+	StreakPulseStartSize = 0.72,
+	StreakPulseEndSize = 3.8,
+	StreakPulseDuration = 0.38,
 })
 
 Presets.UiLayout = table.freeze({

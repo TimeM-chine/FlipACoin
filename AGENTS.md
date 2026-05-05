@@ -20,6 +20,7 @@ Rule of thumb:
 - If the document and current code disagree, trust the current code and update the document when appropriate.
 - Do not assume every directory under `src/ReplicatedStorage/Systems` is active; check `SystemMgr.lua`.
 - For code-only Luau changes, do not run `rojo build` as validation; the Rojo structure is already known-good. Reserve Rojo build checks for project mapping, instance tree, asset structure, or Rojo config changes.
+- If an operation can be completed with an MCP tool, prefer MCP over Codex `computer use`; use `computer use` only when MCP cannot do the job.
 
 ### Task State Maintenance (`docs/TASK_STATE.md`)
 

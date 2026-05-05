@@ -1,6 +1,6 @@
 # TASK_STATE
 
-最后更新：2026-05-04
+最后更新：2026-05-05
 
 > 目的：记录当前正在做什么、下一步是什么、已做验证、关键决策与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`。
 
@@ -49,12 +49,20 @@ Progress:
 - 已完成 `M4-01 / M4-02` Studio 回归：旧 `SeatInfoBillboard` 全部保持关闭，`CoinFlipSpectatorFeed` / `CoinFlipTableOverview` 不再进入主流程可见状态。
 - 正在推进 `M2-02` 后续验证：先做移动端竖屏 HUD 遮挡 / 可读性探针，再视 Studio 能力补 Team Test 观感检查。
 - 已完成竖屏 HUD 压缩首版：触屏竖屏下隐藏 `InputHints`，`SeatLabel` 在竖屏触屏模式下收起，Flip / Result / Upgrade 区块同步压缩，避免按钮和升级项互相挤压。
+- 已尝试 `M2-02` Team Test 入口；本机 Studio 只成功启动单客户端 Play，未拿到第二客户端观察视角。
+- 已完成头部姿态单客户端真实链路探针：移动本地相机后，`Neck` 与 `Waist` 会经本地采样、remote、服务端 Motor6D 写入后发生变化，并能回正。
+- 已补工作流规则：能由 MCP 工具完成的事优先走 MCP，`computer use` 只在 MCP 做不到时兜底。
+- 已完成本轮 `M2-02` 后续尝试：Studio 菜单可切到 `Server & Clients` 并启动 Play，但本机仍只有 `1` 个玩家实例，未形成 B 客户端可观察视角；当前只能保留单客户端链路验证结论。
+- 已做一轮运行态 HUD 可读性 sanity：桌面运行视口下 Flip HUD 三栏、主按钮、升级项与顶部轻量信息可见；设备模拟器手机预设 / 竖屏切换在本轮工具链里未能稳定切入，未作为正式移动端视觉通过结论。
+- 已落同桌轻高光反馈首版：沿用 `CoinFlipSystem.ObservedFlip`，只在其他座位连续 Heads 至少 `2` streak 时给落点加一层短暂金色桌面光圈。
+- 已完成同桌轻高光源码检查与 MCP 单人 Play smoke：玩家仍能自动坐下，未见本次改动相关报错；真双客户端观感仍受本机环境限制。
+- 已完成 `CoinLandingPulse` 预制化收口：Studio `CoinVisuals` 每个座位视觉已补 `LandingPulse` / `StreakPulse`，客户端落点脉冲改为复用预制件，不再运行时创建 Part。
 
 Next:
 
-- 完成 `M2-02` 移动端竖屏 HUD 遮挡 / 可读性验证，并尽量补 Team Test 头部姿态观感检查。
-- 若双客户端 Team Test 仍无法稳定开启，就至少保留当前桌面 / 单客户端 sanity 结论，并标注移动端验证为源码级收敛结果。
-- 若观感通过，再补一层更轻的同桌高光反馈。
+- 若有可用真双客户端环境，补 `M2-02` 真实 B 客户端头部姿态观感检查；当前本机只保留单客户端链路验证结论。
+- 移动端竖屏 HUD 当前仍是源码级收敛 + 桌面运行 sanity；若设备模拟器能稳定切到手机竖屏，再补一次视觉截图/探针。
+- 后续表现收口再处理 `CoinFlipSystem/ui.lua` 剩余 onboarding fallback 与 `AnnouncementSystem/ui.lua` 顶部 banner runtime creation。
 
 Decisions:
 
@@ -79,7 +87,7 @@ Milestone Outline:
 
 Current Code Conflicts To Remove:
 
-- `CoinFlipSystem/ui.lua` 仍保留 onboarding fallback 节点和 `CoinLandingPulse` 的运行时创建，这些是后续表现收口项，不影响当前主流程。
+- `CoinFlipSystem/ui.lua` 仍保留 onboarding fallback 节点，这些是后续表现收口项，不影响当前主流程。
 - `AnnouncementSystem/ui.lua` 仍运行时创建顶部 banner；若首发最终改为纯预制表现，这块需要再收。
 - `ReplicatedFirst/LoadingScreen/Loader.lua` 仍有加载屏 runtime creation，属于更后面的预制化统一项。
 
@@ -90,6 +98,7 @@ M0-03 Resource Freeze:
 - `LeftPanel` includes Cash / Streak cards, `CenterPanel` includes `SeatLabel`、`ResultLabel`、`FlipButton`、`InputHints.SpaceHint`、`InputHints.GamepadRTHint`，`RightPanel` includes Chance / Speed cards and four upgrade buttons.
 - Legacy `Stats` / `Actions` containers may still exist under `Content` as hidden compatibility leftovers, but the active HUD binding no longer reads them.
 - Current `Workspace.CoinFlipTable` includes `Seats.Seat01` through `Seat08`、`Prompt`、`SeatInfoBillboard`、`Attachments`、`Assets.CoinVisuals`、`TableTop`、`TableBase`、`SpectatorZone`.
+- Each `Assets.CoinVisuals.SeatXXCoinVisual` now includes `Coin`、`Shadow`、`LandingPulse`、`StreakPulse` prebuilt parts.
 - New `CoinFlipHUD` should be Studio-prebuilt with `LeftPanel` cash / streak cards, `CenterPanel` flip button / result / input hints, and `RightPanel` chance / speed cards plus four upgrade buttons.
 - Each upgrade button should be prebuilt with `Title`、`Level`、`Cost`、`UICorner`、`UIStroke` and text constraints.
 - Input hint nodes should be prebuilt as `SpaceHint` and `GamepadRTHint`.
@@ -97,7 +106,7 @@ M0-03 Resource Freeze:
 - Seat resources to keep: `Workspace.CoinFlipTable.Seats` as automatic seat pool, `Attachments` as visual / camera anchors, `Assets.CoinVisuals` as coin visual presets.
 - Resources exiting the launch path: seat `Prompt` main flow, `SeatInfoBillboard`, `CoinFlipTableOverview`, `CoinFlipSpectatorFeed`, complex `featured seat`, spectator / audience presentation, empty-seat prompt onboarding.
 - Replacement presentation direction: one strong center `FLIP` button plus low-noise table signals for other seats, streak spikes, and all-table hype moments.
-- Runtime creation points still left in `CoinFlipSystem/ui.lua`: onboarding fallback nodes, table overview rows, legacy overview subtitle / empty label, text / size constraints for non-main-HUD legacy paths, and `CoinLandingPulse`.
+- Runtime creation points still left in `CoinFlipSystem/ui.lua`: onboarding fallback nodes, table overview rows, legacy overview subtitle / empty label, and text / size constraints for non-main-HUD legacy paths.
 - `AnnouncementSystem/ui.lua` still creates the top banner at runtime. If launch keeps announcements, add a Studio-prebuilt banner template; otherwise remove this presentation path in cleanup.
 - `ReplicatedFirst/LoadingScreen/Loader.lua` still has loading-screen runtime creation. It is not blocking `M0-03`, but belongs in a later cleanup if the prebuilt-resource rule expands to loading UI.
 
@@ -243,6 +252,33 @@ Status values:
 - 单人 Studio Play 探针：通过真实 `CharacterSystem.Server:HeadPoseChanged()` Remote 连续上报后，客户端读到复制回来的 `Neck.C0` / `Waist.C0` 均发生非零变化，并在约 `1s` 后回正；idle 相机仍为 `Custom`、镜头贴头、头透明、身体可见。
 - 补充优化：`FirstPersonCamera` 会把相机 look vector 相对 `HumanoidRootPart` 的 yaw clamp 到 `-90° ~ 90°`；`StarterCharacterScripts/char.client.lua` 拦截默认 `Animate.idle` / `Idle` 优先级轨道并立即停止。
 - Remaining risk: 尚未做真实双客户端 Team Test，无法从 B 客户端视觉确认 A 玩家摇头 / 点头幅度是否需要调参。
+
+### 2026-05-05 M2-02 Team Test 尝试与头部姿态链路探针
+
+- Team Test 尝试：从 Studio 顶部 `Test` 下拉选择 `Team Test / Server & Clients` 后启动 Play，本机仍只创建 `1` 个玩家实例，未形成可观察 B 客户端视角。
+- 单客户端链路验证：通过脚本实际改本地相机朝向，触发 `FirstPersonCamera` 采样并上报 `CharacterSystem:HeadPoseChanged()`，随后客户端读回本角色 `Neck.C0` 与 `Waist.C0` 均发生变化。
+- 回正验证：相机回到正向后，`Neck.C0` 与 `Waist.C0` 均从变更态回正，说明服务端 Heartbeat 超时 / 目标回零链路有效。
+- Remaining risk: 仍未从第二客户端肉眼确认 A 玩家点头 / 摇头幅度；后续若设备允许双客户端，应优先补这个观感项。
+
+### 2026-05-05 Server & Clients 与 HUD 可读性补探针
+
+- 从 Studio 顶部 `Test` 菜单切到 `Server & Clients` 后用 `F5` 启动 Play。
+- 运行后 `RunService:IsRunning() = true`，但 `Players:GetPlayers()` 仍只有 `MagicalHailuo` 一个玩家，未形成真实 B 客户端窗口或第二玩家实例。
+- 桌面运行视口下，Flip HUD 三栏、主按钮、升级项与顶部轻量信息可见，没有明显互相遮挡；这只算桌面 / 窄视口 sanity，不等于手机竖屏正式视觉验收。
+- 本轮未能稳定切入 Studio 手机设备预设 / 竖屏模式；移动端竖屏仍保留为后续设备条件满足时的补验项。
+
+### 2026-05-05 同桌轻高光反馈 smoke
+
+- `CoinFlipSystem.ObservedFlip` 仍沿用既有服务端观众广播；客户端只在观察到其他玩家 `Heads` 且 streak 至少为 `2` 时额外生成一层短暂金色落点光圈。
+- Studio MCP 确认 `CoinFlipSystem.Presets` 可正常 require，新视觉常量读取为 `StreakPulseMinimum = 2`、`StreakPulseEndSize = 3.8`、`StreakPulseDuration = 0.38`。
+- 单人 Play smoke：`RunService:IsRunning() = true`、`Players:GetPlayers() = 1`、玩家已自动坐下；控制台未见本次改动相关错误。
+- Remaining risk: 本机仍没有真实 B 客户端，无法肉眼确认其他玩家视角下的同桌 streak 光圈强度，后续有双客户端环境时补观感调参。
+
+### 2026-05-05 CoinLandingPulse 预制化 smoke
+
+- Studio MCP 已给 `Workspace.CoinFlipTable.Assets.CoinVisuals` 下 8 个 `SeatXXCoinVisual` 全部补齐 `LandingPulse` / `StreakPulse`，默认透明。
+- `CoinFlipSystem/ui.lua` 的落点脉冲改为 `WaitForChild("LandingPulse")` / `WaitForChild("StreakPulse")` 并复用 tween，不再 `Instance.new("Part")`。
+- MCP 单人 Play smoke：玩家自动坐下，`Space` 输入发送成功；控制台仍有既有 Studio / 插件 / 排行榜噪声，本次改动路径未观察到缺资源类报错。
 
 ## Done
 

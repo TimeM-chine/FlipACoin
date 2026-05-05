@@ -874,7 +874,11 @@ local function getCoinVisual(seatId)
 		return nil
 	end
 
-	return visualModel, visualModel:WaitForChild("Coin"), visualModel:WaitForChild("Shadow")
+	return visualModel,
+		visualModel:WaitForChild("Coin"),
+		visualModel:WaitForChild("Shadow"),
+		visualModel:WaitForChild("LandingPulse"),
+		visualModel:WaitForChild("StreakPulse")
 end
 
 local function setCoinVisualEnabled(coin, shadow, enabled)
@@ -884,33 +888,32 @@ local function setCoinVisualEnabled(coin, shadow, enabled)
 	coin.BottomFace.Enabled = enabled
 end
 
-local function spawnLandingPulse(position, color, parent)
-	local pulse = Instance.new("Part")
-	pulse.Name = "CoinLandingPulse"
-	pulse.Anchored = true
-	pulse.CanCollide = false
-	pulse.CanQuery = false
-	pulse.CanTouch = false
-	pulse.CastShadow = false
-	pulse.Material = Enum.Material.Neon
+local function hidePulseVisual(pulse)
+	pulse.Transparency = 1
+end
+
+local function playLandingPulse(pulse, position, color, options)
+	local startSize = options and options.startSize or VisualConfig.PulseStartSize
+	local endSize = options and options.endSize or VisualConfig.PulseEndSize
+	local duration = options and options.duration or VisualConfig.PulseDuration
+	local transparency = options and options.transparency or 0.18
+
 	pulse.Color = color
-	pulse.Shape = Enum.PartType.Cylinder
-	pulse.Transparency = 0.18
-	pulse.Size = Vector3.new(VisualConfig.ShadowHeight, VisualConfig.PulseStartSize, VisualConfig.PulseStartSize)
+	pulse.Transparency = transparency
+	pulse.Size = Vector3.new(VisualConfig.ShadowHeight, startSize, startSize)
 	pulse.CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90))
-	pulse.Parent = parent or Workspace
 
 	local tween = TweenService:Create(
 		pulse,
-		TweenInfo.new(VisualConfig.PulseDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 		{
-			Size = Vector3.new(VisualConfig.ShadowHeight, VisualConfig.PulseEndSize, VisualConfig.PulseEndSize),
+			Size = Vector3.new(VisualConfig.ShadowHeight, endSize, endSize),
 			Transparency = 1,
 		}
 	)
 	tween:Play()
 	tween.Completed:Once(function()
-		pulse:Destroy()
+		hidePulseVisual(pulse)
 	end)
 end
 
@@ -958,10 +961,12 @@ local function clearCoinVisual(seatId)
 		FirstPersonCamera.ReturnToFirstPerson(visual.coin)
 	end
 	visual.shadow.Size = visual.baseShadowSize
+	hidePulseVisual(visual.landingPulse)
+	hidePulseVisual(visual.streakPulse)
 	setCoinVisualEnabled(visual.coin, visual.shadow, false)
 end
 
-local function playCoinVisual(seatId, result, landedCallback, shouldFollowCamera)
+local function playCoinVisual(seatId, result, landedCallback, shouldFollowCamera, visualOptions)
 	if typeof(seatId) ~= "string" then
 		if landedCallback then
 			landedCallback()
@@ -969,9 +974,8 @@ local function playCoinVisual(seatId, result, landedCallback, shouldFollowCamera
 		return
 	end
 
-	local coinVisualsFolder = getCoinVisualsFolder(seatId)
-	local visualModel, coin, shadow = getCoinVisual(seatId)
-	if not visualModel or not coin or not shadow then
+	local visualModel, coin, shadow, landingPulse, streakPulse = getCoinVisual(seatId)
+	if not visualModel or not coin or not shadow or not landingPulse or not streakPulse then
 		if landedCallback then
 			landedCallback()
 		end
@@ -995,6 +999,8 @@ local function playCoinVisual(seatId, result, landedCallback, shouldFollowCamera
 		model = visualModel,
 		coin = coin,
 		shadow = shadow,
+		landingPulse = landingPulse,
+		streakPulse = streakPulse,
 		baseShadowSize = baseShadowSize,
 		shouldFollowCamera = shouldFollowCamera == true,
 	}
@@ -1010,6 +1016,11 @@ local function playCoinVisual(seatId, result, landedCallback, shouldFollowCamera
 	local shadowPos = endPos
 		- (tableNormal * ((baseCoinSize.X * 0.5) + VisualConfig.CoinSurfaceGap))
 		+ (tableNormal * ((baseShadowSize.X * 0.5) + VisualConfig.ShadowSurfaceGap))
+	local observedStreak = visualOptions and (visualOptions.streak or 0) or 0
+	local shouldShowObservedStreakPulse = visualOptions
+		and visualOptions.isObserved == true
+		and result == "Heads"
+		and observedStreak >= VisualConfig.StreakPulseMinimum
 
 	coin.CFrame = CFrame.new(startPos) * CFrame.Angles(0, 0, math.rad(90))
 	shadow.CFrame = CFrame.new(startPos.X, shadowPos.Y, startPos.Z) * CFrame.Angles(0, 0, math.rad(90))
@@ -1052,7 +1063,16 @@ local function playCoinVisual(seatId, result, landedCallback, shouldFollowCamera
 		visual.connection = nil
 
 		local pulseColor = result == "Heads" and VisualConfig.HeadsPulseColor or VisualConfig.TailsPulseColor
-		spawnLandingPulse(shadowPos, pulseColor, coinVisualsFolder)
+		playLandingPulse(landingPulse, shadowPos, pulseColor)
+		if shouldShowObservedStreakPulse then
+			local streakPulseBonus = math.clamp(observedStreak - VisualConfig.StreakPulseMinimum, 0, 6) * 0.16
+			playLandingPulse(streakPulse, shadowPos, VisualConfig.StreakPulseColor, {
+				startSize = VisualConfig.StreakPulseStartSize,
+				endSize = VisualConfig.StreakPulseEndSize + streakPulseBonus,
+				duration = VisualConfig.StreakPulseDuration,
+				transparency = 0.22,
+			})
+		end
 
 		local settleTween = TweenService:Create(
 			coin,
@@ -1346,7 +1366,10 @@ function CoinFlipUi.ObservedFlip(args)
 	end
 
 	playCoinVisual(args.seatId, args.result, function()
-	end)
+	end, false, {
+		isObserved = true,
+		streak = args.streak or 0,
+	})
 end
 
 return CoinFlipUi
