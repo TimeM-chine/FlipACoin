@@ -37,63 +37,6 @@ local function findFirstByNames(parent, names)
 	return nil
 end
 
-local function ensureCorner(guiObject, radius)
-	local corner = guiObject:FindFirstChildOfClass("UICorner")
-	if corner then
-		return corner
-	end
-
-	corner = Instance.new("UICorner")
-	corner.CornerRadius = radius or UDim.new(0, 12)
-	corner.Parent = guiObject
-	return corner
-end
-
-local function ensureStroke(guiObject, color, thickness, transparency)
-	local stroke = guiObject:FindFirstChildOfClass("UIStroke")
-	if stroke then
-		return stroke
-	end
-
-	stroke = Instance.new("UIStroke")
-	stroke.Color = color or Color3.fromRGB(255, 214, 124)
-	stroke.Thickness = thickness or 1.2
-	stroke.Transparency = transparency or 0.4
-	stroke.Parent = guiObject
-	return stroke
-end
-
-local function ensureTextLabel(parent, name, config)
-	local label = parent:FindFirstChild(name)
-	if label and label:IsA("TextLabel") then
-		return label
-	end
-
-	label = Instance.new("TextLabel")
-	label.Name = name
-	label.BackgroundTransparency = 1
-	label.BorderSizePixel = 0
-	label.Font = (config and config.font) or Enum.Font.GothamMedium
-	label.Text = (config and config.text) or ""
-	label.TextColor3 = (config and config.textColor) or Color3.fromRGB(245, 247, 250)
-	label.TextSize = (config and config.textSize) or 14
-	label.TextWrapped = config and config.textWrapped == true or false
-	label.TextXAlignment = (config and config.textXAlignment) or Enum.TextXAlignment.Left
-	label.TextYAlignment = (config and config.textYAlignment) or Enum.TextYAlignment.Center
-	label.Visible = config == nil or config.visible ~= false
-	if config and config.layoutOrder then
-		label.LayoutOrder = config.layoutOrder
-	end
-	if config and config.size then
-		label.Size = config.size
-	end
-	if config and config.position then
-		label.Position = config.position
-	end
-	label.Parent = parent
-	return label
-end
-
 local Hud = Elements:WaitForChild("CoinFlipHUD")
 local Content = Hud:WaitForChild("Content")
 local ContentListLayout = Content:WaitForChild("PanelListLayout")
@@ -142,71 +85,7 @@ if TableOverview and TableOverview:IsA("GuiObject") then
 	TableOverview.Visible = false
 end
 
-local OnboardingPanel = Elements:WaitForChild("CoinFlipOnboarding")
-local OnboardingTitle = OnboardingPanel:WaitForChild("Title")
-local OnboardingTaskLabel = OnboardingPanel:WaitForChild("TaskLabel")
-local OnboardingHintLabel = OnboardingPanel:WaitForChild("HintLabel")
-local OnboardingProgressBar = OnboardingPanel:WaitForChild("ProgressBar")
-local OnboardingProgressFill = OnboardingProgressBar:WaitForChild("Fill")
-
-local function ensureOnboardingProgressText()
-	local progressText = OnboardingPanel:FindFirstChild("ProgressText")
-	if progressText and progressText:IsA("TextLabel") then
-		return progressText
-	end
-
-	progressText = ensureTextLabel(OnboardingPanel, "ProgressText", {
-		text = "0 / 5",
-		font = Enum.Font.GothamBold,
-		textColor = Color3.fromRGB(255, 231, 163),
-		textSize = 13,
-		textXAlignment = Enum.TextXAlignment.Right,
-		layoutOrder = 2,
-	})
-	progressText.Size = UDim2.new(1, 0, 0, 18)
-	return progressText
-end
-
-local function ensureOnboardingSteps()
-	local steps = OnboardingPanel:FindFirstChild("Steps")
-	if steps and steps:IsA("Frame") then
-		return steps
-	end
-
-	steps = Instance.new("Frame")
-	steps.Name = "Steps"
-	steps.BackgroundTransparency = 1
-	steps.LayoutOrder = 6
-	steps.Size = UDim2.new(1, 0, 0, 26)
-	steps.Parent = OnboardingPanel
-
-	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-	layout.VerticalAlignment = Enum.VerticalAlignment.Center
-	layout.Padding = UDim.new(0, 6)
-	layout.Parent = steps
-
-	for index = 1, 5 do
-		local chip = ensureTextLabel(steps, string.format("Step%02d", index), {
-			text = tostring(index),
-			font = Enum.Font.GothamBold,
-			textColor = Color3.fromRGB(174, 184, 198),
-			textSize = 11,
-		})
-		chip.BackgroundColor3 = Color3.fromRGB(28, 33, 42)
-		chip.BackgroundTransparency = 0.08
-		chip.BorderSizePixel = 0
-		chip.Size = UDim2.fromOffset(44, 24)
-		ensureCorner(chip, UDim.new(0, 999))
-		ensureStroke(chip, Color3.fromRGB(255, 214, 124), 1, 0.78)
-	end
-
-	return steps
-end
-
-local OnboardingProgressText = ensureOnboardingProgressText()
-local OnboardingSteps = ensureOnboardingSteps()
+local OnboardingPanel = Elements:FindFirstChild("CoinFlipOnboarding")
 
 local UpgradeMap = {
 	valueLevel = UpgradeButtons:WaitForChild("ValueButton"),
@@ -237,14 +116,12 @@ local currentSeatState
 local currentLayoutProfile
 local viewportChangedConnection
 local cameraChangedConnection
-local currentOnboardingState
 local currentRunSnapshot = {
 	cash = 0,
 	runData = {},
 	nextCosts = {},
 	derivedStats = {},
 }
-local lastOnboardingStepKey
 local FlipInputActionName = "COIN_FLIP_REQUEST"
 
 local StatsCards = {
@@ -278,11 +155,6 @@ for layoutOrder, entry in ipairs(StatsCards) do
 	entry.card.LayoutOrder = layoutOrder
 end
 
-local OnboardingStepLabels = {}
-for index = 1, 5 do
-	OnboardingStepLabels[index] = OnboardingSteps:WaitForChild(string.format("Step%02d", index))
-end
-
 local function getViewportSize()
 	local camera = Workspace.CurrentCamera
 	if camera then
@@ -301,18 +173,6 @@ local function ensureSizeConstraint(guiObject, name)
 	constraint = Instance.new("UISizeConstraint")
 	constraint.Name = name
 	constraint.Parent = guiObject
-	return constraint
-end
-
-local function ensureTextConstraint(label, name)
-	local constraint = label:FindFirstChild(name)
-	if constraint then
-		return constraint
-	end
-
-	constraint = Instance.new("UITextSizeConstraint")
-	constraint.Name = name
-	constraint.Parent = label
 	return constraint
 end
 
@@ -381,26 +241,6 @@ local function buildFailureFollowUpText()
 	local seatState = currentSeatState or {}
 	local suggestedUpgrade = getRecommendedUpgradeKey()
 
-	if currentOnboardingState and not currentOnboardingState.isComplete then
-		local step = currentOnboardingState.currentStep
-		if step == "flipThree" then
-			local requiredFlips = currentOnboardingState.requiredFlips or 3
-			local flipCount = math.min(currentOnboardingState.flipCount or 0, requiredFlips)
-			return `Next: keep flipping to reach {requiredFlips}. ({flipCount}/{requiredFlips})`
-		end
-		if step == "buyUpgrade" then
-			local buttonLabel = suggestedUpgrade and UpgradeTitles[suggestedUpgrade] or "an upgrade"
-			return `Next: buy {buttonLabel}.`
-		end
-		if step == "reachTwoStreak" then
-			local streak = math.min(
-				(currentRunSnapshot.runData and currentRunSnapshot.runData.currentStreak or 0),
-				currentOnboardingState.requiredStreak or 2
-			)
-			return `Next: rebuild to 2 Heads. ({streak}/{currentOnboardingState.requiredStreak or 2})`
-		end
-	end
-
 	if not seatState.isSeated then
 		return "Next: take a seat and start again."
 	end
@@ -424,160 +264,11 @@ local function maybeShowFailureFollowUpNotification(text)
 	})
 end
 
-local function buildOnboardingHint()
-	if not currentOnboardingState or currentOnboardingState.isComplete then
-		return ""
-	end
-
-	local step = currentOnboardingState.currentStep
-	local seatState = currentSeatState or {}
-	local streak = currentRunSnapshot.runData and (currentRunSnapshot.runData.currentStreak or 0) or 0
-
-	if step == "approachSeat" then
-		if seatState.isSeated then
-			return "Seat found. Locking you into the table now."
-		end
-		return "Finding an open seat for you now."
-	end
-
-	if step == "sitDown" then
-		return seatState.isSeated and "Seat locked in. You're ready to start flipping."
-			or "Dropping you into the table automatically."
-	end
-
-	if step == "flipThree" then
-		local flipCount = math.min(currentOnboardingState.flipCount or 0, currentOnboardingState.requiredFlips or 3)
-		if seatState.isSeated then
-			return `Flip from this seat 3 times to warm up. {flipCount}/{currentOnboardingState.requiredFlips or 3} done.`
-		end
-		return `Seat assignment in progress, then flip 3 times. {flipCount}/{currentOnboardingState.requiredFlips or 3} done.`
-	end
-
-	if step == "buyUpgrade" then
-		local suggestedUpgrade = getRecommendedUpgradeKey()
-		local buttonLabel = suggestedUpgrade and UpgradeTitles[suggestedUpgrade] or "any upgrade"
-		if seatState.isSeated then
-			return `Spend your Cash on {buttonLabel} to keep the run moving.`
-		end
-		return "Seat assignment in progress, then buy your first upgrade with the Cash you earned."
-	end
-
-	if step == "reachTwoStreak" then
-		if seatState.isSeated then
-			return `Chain 2 Heads in a row to finish the guide. Current streak: {streak}.`
-		end
-		return "Seat assignment in progress, then chain 2 Heads in a row to finish the guide."
-	end
-
-	return ""
-end
-
-local function refreshGuideButtonHighlight()
-	if not currentOnboardingState or currentOnboardingState.isComplete then
-		uiController.SetGuideButton(nil)
-		return
-	end
-
-	if currentOnboardingState.currentStep == "flipThree" and currentSeatState and currentSeatState.isSeated then
-		uiController.SetGuideButton(FlipButton)
-		return
-	end
-
-	if currentOnboardingState.currentStep == "buyUpgrade" and currentSeatState and currentSeatState.isSeated then
-		local upgradeKey = getRecommendedUpgradeKey()
-		local button = upgradeKey and UpgradeMap[upgradeKey] or UpgradeMap.valueLevel
-		if button then
-			uiController.SetGuideButton(button)
-			return
-		end
-	end
-
+local function hideOnboardingPanel()
 	uiController.SetGuideButton(nil)
-end
 
-local function updateOnboardingPanel()
-	if not currentOnboardingState or currentOnboardingState.isComplete then
+	if OnboardingPanel and OnboardingPanel:IsA("GuiObject") then
 		OnboardingPanel.Visible = false
-		refreshGuideButtonHighlight()
-		return
-	end
-
-	local completedCount = currentOnboardingState.completedCount or 0
-	local totalSteps = math.max(currentOnboardingState.totalSteps or 5, 1)
-	local progressValue = completedCount
-	if currentOnboardingState.currentStep == "flipThree" then
-		progressValue += math.min(
-			(currentOnboardingState.flipCount or 0) / math.max(currentOnboardingState.requiredFlips or 3, 1),
-			0.95
-		)
-	end
-
-	OnboardingTitle.Text = "First Run Guide"
-	OnboardingProgressText.Text = `{completedCount} / {totalSteps}`
-	OnboardingTaskLabel.Text = currentOnboardingState.currentTitle or "Keep going"
-	OnboardingHintLabel.Text = buildOnboardingHint()
-	OnboardingProgressFill.Size = UDim2.fromScale(math.clamp(progressValue / totalSteps, 0, 1), 1)
-
-	for index, step in ipairs(currentOnboardingState.steps or {}) do
-		local chip = OnboardingStepLabels[index]
-		if not chip then
-			continue
-		end
-		chip.Text = step.label or chip.Text
-		if step.isComplete then
-			chip.BackgroundColor3 = Color3.fromRGB(63, 96, 67)
-			chip.TextColor3 = Color3.fromRGB(226, 255, 229)
-			chip.UIStroke.Transparency = 0.1
-		elseif step.key == currentOnboardingState.currentStep then
-			chip.BackgroundColor3 = Color3.fromRGB(90, 66, 25)
-			chip.TextColor3 = Color3.fromRGB(255, 239, 188)
-			chip.UIStroke.Transparency = 0.02
-		else
-			chip.BackgroundColor3 = Color3.fromRGB(28, 33, 42)
-			chip.TextColor3 = Color3.fromRGB(174, 184, 198)
-			chip.UIStroke.Transparency = 0.78
-		end
-	end
-
-	OnboardingPanel.Visible = true
-	refreshGuideButtonHighlight()
-end
-
-local function applyOnboardingLayout(profile)
-	OnboardingTitle.LayoutOrder = 1
-	OnboardingProgressText.LayoutOrder = 2
-	OnboardingTaskLabel.LayoutOrder = 3
-	OnboardingHintLabel.LayoutOrder = 4
-	local spacer = OnboardingPanel:FindFirstChild("Spacer")
-	if spacer and spacer:IsA("GuiObject") then
-		spacer.LayoutOrder = 5
-	end
-	if OnboardingSteps then
-		OnboardingSteps.LayoutOrder = 6
-	end
-	OnboardingProgressBar.LayoutOrder = 7
-
-	if profile.isMobile then
-		OnboardingPanel.Position = profile.isPortrait and UDim2.fromScale(0.02, 0.085) or UDim2.fromScale(0.02, 0.12)
-		OnboardingPanel.Size = profile.isPortrait and UDim2.fromOffset(230, 168) or UDim2.fromOffset(250, 156)
-		OnboardingTitle.TextSize = profile.isPortrait and 14 or 15
-		OnboardingProgressText.TextSize = profile.isPortrait and 12 or 13
-		OnboardingTaskLabel.TextSize = profile.isPortrait and 14 or 15
-		OnboardingHintLabel.TextSize = 11
-	else
-		OnboardingPanel.Position = UDim2.fromScale(0.016, 0.11)
-		OnboardingPanel.Size = UDim2.fromOffset(328, 188)
-		OnboardingTitle.TextSize = 18
-		OnboardingProgressText.TextSize = 14
-		OnboardingTaskLabel.TextSize = 17
-		OnboardingHintLabel.TextSize = 13
-	end
-
-	if OnboardingProgressText then
-		OnboardingProgressText.Size = UDim2.new(1, 0, 0, profile.isMobile and 16 or 18)
-	end
-	if OnboardingSteps then
-		OnboardingSteps.Size = UDim2.new(1, 0, 0, profile.isMobile and 22 or 26)
 	end
 end
 
@@ -1208,12 +899,11 @@ end
 local function applyResponsiveLayout()
 	currentLayoutProfile = getLayoutProfile()
 	applyHudLayout(currentLayoutProfile)
-	applyOnboardingLayout(currentLayoutProfile)
+	hideOnboardingPanel()
 
 	if currentSeatState then
 		updateTableOverview(currentSeatState)
 	end
-	updateOnboardingPanel()
 end
 
 local function bindViewportLayout()
@@ -1253,7 +943,7 @@ function CoinFlipUi.Init()
 	initialized = true
 
 	setVisible(false)
-	OnboardingPanel.Visible = false
+	hideOnboardingPanel()
 	uiController.HideUnitWhenPush(Hud)
 	ensureLeaveButton()
 	bindViewportLayout()
@@ -1334,7 +1024,7 @@ function CoinFlipUi.SeatStateChanged(args)
 		leaveButton.Visible = false
 	end
 	updateTableOverview(args and args.seatState)
-	updateOnboardingPanel()
+	hideOnboardingPanel()
 	if isSeated then
 		SeatLabel.Text = args.seatState.seatId and `Seat {args.seatState.seatId}` or "Seat --"
 		if ResultLabel.Text == "Waiting for seat assignment..." then
@@ -1343,18 +1033,8 @@ function CoinFlipUi.SeatStateChanged(args)
 	end
 end
 
-function CoinFlipUi.UpdateOnboarding(onboarding)
-	currentOnboardingState = onboarding
-	if not onboarding or onboarding.isComplete then
-		lastOnboardingStepKey = nil
-	else
-		if lastOnboardingStepKey ~= onboarding.currentStep then
-			uiController.SetUnitJump(OnboardingPanel, 0.08)
-		end
-		lastOnboardingStepKey = onboarding.currentStep
-	end
-
-	updateOnboardingPanel()
+function CoinFlipUi.UpdateOnboarding(_)
+	hideOnboardingPanel()
 	if currentSeatState then
 		hideLegacySeatBillboards(currentSeatState)
 	end

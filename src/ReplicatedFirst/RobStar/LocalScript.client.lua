@@ -1,6 +1,4 @@
-local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 
 local Background = script.Parent:WaitForChild("Background")
 Background.Visible = true
@@ -47,12 +45,6 @@ Background.Visible = true
 -- 	letter.Position = UDim2.fromScale(0.5, 0.5)
 -- end
 
--- local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
--- local CanClose = PlayerGui:GetAttribute("CanClose")
--- if not CanClose then
--- 	task.wait(3)
--- end
-
 local t1 = Background:WaitForChild("t1")
 local ti = TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.In, -1, true)
 local tween = TweenService:Create(t1, ti, { Position = UDim2.fromScale(0.5, 0.4) })
@@ -79,14 +71,3 @@ for _, des in script.Parent:GetDescendants() do
 		tween2:Play()
 	end
 end
--- local LoadingScreen = script.Parent.Parent:WaitForChild("LoadingScreen")
--- local Loader = require(LoadingScreen:WaitForChild("Loader"))
--- LoadingScreen:WaitForChild("Background").Visible = true
-
--- Loader.PreStart()
--- task.wait(1.5)
-
--- if LoadingScreen.Parent then
--- 	Loader.Start()
--- end
--- script.Parent:Destroy()

@@ -3,7 +3,8 @@
 > 目的：描述 **SystemMgr 框架本身**——所有基于此框架的 Roblox 项目共享的机制、约定、编码习惯。**不写具体项目的业务**（那些在 `docs/PROJECT_LOGIC.md`）。
 >
 > 使用规则：
-> - 新对话开始时与 `AGENTS.md` + `PROJECT_LOGIC.md` 一起读。
+> - 新对话先读 `docs/BOOTSTRAP.md`，再按任务类型读取本文相关章节。
+> - 写 Luau 前必须读 §8；只有动核心框架时才需要读全文。
 > - 跨项目复制时，整份 `FRAMEWORK.md` 可以原样带走；基本不需要按项目改。
 > - 如果框架本体升级（SystemMgr 改接口、生命周期顺序调整、桥接规则变化等），**只改这里**，不要把框架细节塞进 `PROJECT_LOGIC.md`。
 
@@ -85,7 +86,7 @@ local LoadOrder = { "PlayerSystem", "CharacterSystem" }
 客户端：把每个这样的函数挂到 `system.Server[fn]` 上做 `FireServer`。
 末端：把原参数追加 `{ sysName, funName }` 作为定位信息，远端按 `systems[sysName][funName](systems[sysName], ...)` 调用。
 
-服务端 remote 派发会先校验定位信息必须是合法的 `{ sysName: string, funName: string }`，且目标系统 / 方法真实存在；malformed 直连 RemoteEvent payload 会被直接丢弃。
+服务端 remote 派发会先校验定位信息必须是合法的 `{ sysName: string, funName: string }`，且目标系统 / 方法真实存在；malformed 直连 RemoteEvent payload 会被直接丢弃。客户端 remote 进入系统方法前，框架会强制清空第二个参数的 player slot，确保客户端不能伪造目标玩家；公开接口里常见的 `player = player or sender` 会落到真实 sender。
 
 调用约定：
 
@@ -96,7 +97,7 @@ local LoadOrder = { "PlayerSystem", "CharacterSystem" }
 | Client → Server | `self.Server:Fun(args)` |
 | 非关键高频广播 | 在 `args` 里写 `unreliable = true`，走 `UnreliableRemoteEvent` |
 
-`unreliable` 标记读取自第一个 payload table（即上表中的 `args.unreliable`），不是 varargs 包装表；桥接代理会据此选择 `RemoteEvent` 或 `UnreliableRemoteEvent`。
+`unreliable` 标记读取自第一个 payload table（即上表中的 `args.unreliable`），不是 varargs 包装表。
 
 ### 3.4 `whiteList`
 每个系统都应声明：
@@ -393,6 +394,7 @@ SystemMgr.systems.BackpackSystem:DeleteItems(SENDER, player, { items = ... })
 ## 11. 与其他文档的分工
 
 - **本文件（`FRAMEWORK.md`）**：跨项目复用的框架机制与约定。项目间几乎不改。
+- **`BOOTSTRAP.md`**：新对话的低成本启动路由，只告诉 agent 该按任务读哪些文档。
 - **`PROJECT_LOGIC.md`**：仅本项目的事实（活跃系统列表、业务玩法主线、已知遗留、速查）。换项目就重写。
 - **`TASK_STATE.md`**：当前在做什么、下一步是什么。每次会话都会写。
 - **`AGENTS.md`**：跨工具通用规则（读文档顺序、维护纪律、风格硬性要求）。

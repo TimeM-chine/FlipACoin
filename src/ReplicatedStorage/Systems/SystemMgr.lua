@@ -104,11 +104,6 @@ SystemMgr.systems = systems
 local RemoteEvent, UnreliableRemoteEvent, BindableEvent
 local RuntimeFolder
 
-local function shouldUseUnreliable(args)
-	local payload = args[1]
-	return typeof(payload) == "table" and payload.unreliable == true
-end
-
 local function getRuntimeFolder()
 	if RuntimeFolder and RuntimeFolder.Parent then
 		return RuntimeFolder
@@ -132,17 +127,31 @@ end
 local function HandleServerRemote(args)
 	local player = args[1]
 	local info = args[#args]
+	if typeof(info) ~= "table" then
+		return
+	end
 	local sysName = info.sysName
 	local fName = info.funName
+	if typeof(sysName) ~= "string" or typeof(fName) ~= "string" then
+		return
+	end
 	table.remove(args, #args)
 
 	-- Player-alive guard: reject requests from players who are leaving
 	if not player or not player:IsDescendantOf(game.Players) then
 		return
 	end
+	-- The bridge owns the target player slot; clients may not spoof another Player there.
+	args[2] = nil
 
 	-- whiteList check: block remote calls to whitelisted functions
-	local system = systems[sysName]
+	local system = rawget(systems, sysName)
+	if not system then
+		return
+	end
+	if typeof(system[fName]) ~= "function" then
+		return
+	end
 	if system and system.whiteList and table.find(system.whiteList, fName) then
 		warn(`[SystemMgr] Blocked remote call to whitelisted function: {sysName}.{fName}`)
 		return
@@ -157,6 +166,11 @@ local function HandleServerRemote(args)
 			warn(`Failed to call {fName} for {sysName}: {result}`)
 		end
 	end
+end
+
+local function ShouldUseUnreliable(args)
+	local firstArg = args[1]
+	return typeof(firstArg) == "table" and firstArg.unreliable == true
 end
 
 if IsServer then
@@ -255,7 +269,7 @@ function LoadSystem(name)
 				system.Client[funName] = function(inst, player, ...)
 					local args = { ... }
 					table.insert(args, { sysName = name, funName = funName })
-					if shouldUseUnreliable(args) then
+					if ShouldUseUnreliable(args) then
 						UnreliableRemoteEvent:FireClient(player, nil, nil, table.unpack(args))
 					else
 						RemoteEvent:FireClient(player, nil, nil, table.unpack(args))
@@ -266,7 +280,7 @@ function LoadSystem(name)
 					system.AllClients[funName] = function(inst, ...)
 						local args = { ... }
 						table.insert(args, { sysName = name, funName = funName })
-						if shouldUseUnreliable(args) then
+						if ShouldUseUnreliable(args) then
 							UnreliableRemoteEvent:FireAllClients(nil, nil, table.unpack(args))
 						else
 							RemoteEvent:FireAllClients(nil, nil, table.unpack(args))
@@ -308,7 +322,7 @@ function LoadSystem(name)
 				system.Server[funName] = function(inst, ...)
 					local args = { ... }
 					table.insert(args, { sysName = name, funName = funName })
-					if shouldUseUnreliable(args) then
+					if ShouldUseUnreliable(args) then
 						UnreliableRemoteEvent:FireServer(nil, table.unpack(args))
 					else
 						RemoteEvent:FireServer(nil, table.unpack(args))
@@ -362,7 +376,6 @@ function SystemMgr.Start()
 			end
 		end
 
-		-- Fix: use task.spawn for existing players (same as PlayerAdded event)
 		for _, player in ipairs(game.Players:GetPlayers()) do
 			HandlePlayerAdded(player)
 		end

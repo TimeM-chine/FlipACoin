@@ -1,461 +1,1528 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flip A Coin - UI Design Mockups</title>
+    <title>Flip A Coin UI Redesign</title>
     <style>
         :root {
-            --bg-dark: #1a1a1c;
-            --panel-bg: rgba(30, 30, 35, 0.85);
-            --panel-border: rgba(255, 255, 255, 0.1);
-            --text-main: #ffffff;
-            --text-muted: #a0a0a5;
-            --accent-gold: #ffd700;
-            --accent-blue: #4da6ff;
-            --accent-green: #4dff88;
-            --accent-red: #ff4d4d;
-            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --ink: #f8f4e8;
+            --muted: #c8c1ae;
+            --dim: #8e8779;
+            --panel: rgba(23, 26, 31, 0.88);
+            --panel-strong: rgba(15, 17, 22, 0.94);
+            --line: rgba(255, 255, 255, 0.13);
+            --line-hot: rgba(245, 191, 80, 0.62);
+            --gold: #f5bf50;
+            --gold-deep: #ba752f;
+            --teal: #59d3c3;
+            --mint: #8de384;
+            --rose: #ff7f8a;
+            --violet: #a99bff;
+            --blue: #78b7ff;
+            --shadow: rgba(0, 0, 0, 0.45);
+            --radius: 8px;
+            color-scheme: dark;
+        }
+
+        * {
+            box-sizing: border-box;
         }
 
         body {
-            background-color: #2c2f33;
-            color: var(--text-main);
-            font-family: var(--font-main);
             margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 40px;
+            min-height: 100vh;
+            background: #101318;
+            color: var(--ink);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            letter-spacing: 0;
         }
 
-        h1, h2 {
-            text-align: center;
-            color: var(--accent-gold);
-            margin-bottom: 10px;
+        button,
+        input {
+            font: inherit;
         }
 
-        .description {
-            text-align: center;
-            color: var(--text-muted);
-            margin-bottom: 30px;
+        button {
+            color: inherit;
+            cursor: pointer;
         }
 
-        .ui-container {
-            background-image: linear-gradient(45deg, #1a1a1d, #2a2d34);
-            border: 2px solid #3a3d45;
-            border-radius: 16px;
-            padding: 40px;
+        .stage {
             position: relative;
-            min-height: 400px;
+            min-height: 100vh;
             overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            background:
+                radial-gradient(circle at 50% 73%, rgba(244, 180, 75, 0.28), transparent 19rem),
+                linear-gradient(16deg, rgba(13, 17, 24, 0.36) 0 32%, transparent 32% 100%),
+                linear-gradient(106deg, rgba(90, 40, 42, 0.66), rgba(26, 31, 41, 0.55) 50%, rgba(39, 54, 61, 0.72)),
+                #2d211d;
         }
 
-        .ui-title {
+        .stage::before {
+            content: "";
             position: absolute;
-            top: 10px;
-            left: 20px;
-            font-size: 14px;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 2px;
+            inset: 0;
+            background:
+                repeating-linear-gradient(10deg, rgba(255, 224, 146, 0.10) 0 0.25rem, transparent 0.25rem 1.35rem),
+                linear-gradient(90deg, transparent 0 8%, rgba(0, 0, 0, 0.24) 8% 9%, transparent 9% 22%, rgba(0, 0, 0, 0.2) 22% 23%, transparent 23% 100%),
+                radial-gradient(ellipse at 48% 70%, rgba(181, 101, 44, 0.46), transparent 23rem);
+            opacity: 0.76;
         }
 
-        /* 1. CoinFlipHUD */
-        .hud-wrapper {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-            height: 100%;
-            margin-top: 50px;
+        .stage::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(180deg, rgba(0, 0, 0, 0.22), transparent 18%, transparent 72%, rgba(0, 0, 0, 0.34)),
+                radial-gradient(ellipse at center, transparent 38%, rgba(0, 0, 0, 0.38));
+            pointer-events: none;
         }
 
-        .stats-panel {
-            background: var(--panel-bg);
-            border: 1px solid var(--panel-border);
-            border-radius: 12px;
-            padding: 20px;
-            min-width: 200px;
-            backdrop-filter: blur(10px);
+        .room-lines,
+        .table-scene {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
         }
 
-        .stat-item {
-            margin-bottom: 15px;
-        }
-        .stat-label {
-            font-size: 12px;
-            color: var(--text-muted);
-            text-transform: uppercase;
-        }
-        .stat-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: var(--accent-gold);
-        }
-        .stat-value.streak {
-            color: var(--accent-red);
-            text-shadow: 0 0 10px rgba(255, 77, 77, 0.5);
+        .room-lines span {
+            position: absolute;
+            display: block;
+            background: rgba(255, 190, 92, 0.18);
+            box-shadow: 0 0 1.8rem rgba(255, 174, 68, 0.1);
         }
 
-        .action-panel {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 20px;
+        .beam-top {
+            top: 3.4rem;
+            left: -4rem;
+            right: -4rem;
+            height: 1rem;
+            transform: rotate(2deg);
         }
 
-        .flip-btn {
-            background: linear-gradient(135deg, #ffd700, #ffaa00);
-            border: none;
+        .beam-left {
+            top: -4rem;
+            left: 8%;
+            width: 0.8rem;
+            height: 72vh;
+            transform: rotate(-18deg);
+        }
+
+        .beam-right {
+            top: -5rem;
+            right: 12%;
+            width: 1rem;
+            height: 84vh;
+            transform: rotate(17deg);
+        }
+
+        .lantern {
+            position: absolute;
+            top: 12%;
+            width: 3rem;
+            height: 4.2rem;
+            border: 0.2rem solid rgba(58, 33, 24, 0.82);
+            background: radial-gradient(circle, rgba(255, 238, 137, 0.98), rgba(255, 174, 54, 0.62) 45%, rgba(70, 34, 18, 0.14));
+            box-shadow: 0 0 2.8rem rgba(255, 196, 88, 0.42);
+            opacity: 0.58;
+        }
+
+        .lantern.one {
+            left: 20%;
+        }
+
+        .lantern.two {
+            right: 22%;
+            top: 16%;
+        }
+
+        .table-scene .main-table {
+            position: absolute;
+            left: 50%;
+            bottom: 12%;
+            width: min(48vw, 45rem);
+            aspect-ratio: 2.3 / 1;
+            transform: translateX(-50%) perspective(40rem) rotateX(60deg);
             border-radius: 50%;
-            width: 120px;
-            height: 120px;
-            font-size: 28px;
-            font-weight: bold;
-            color: #000;
-            cursor: pointer;
-            box-shadow: 0 10px 20px rgba(255, 215, 0, 0.3), inset 0 -5px 15px rgba(0,0,0,0.2);
-            transition: transform 0.1s, box-shadow 0.1s;
-        }
-        .flip-btn:active {
-            transform: scale(0.95);
-            box-shadow: 0 5px 10px rgba(255, 215, 0, 0.3);
-        }
-        .flip-hint {
-            font-size: 14px;
-            color: var(--text-muted);
+            background:
+                radial-gradient(ellipse at center, rgba(255, 212, 128, 0.42), transparent 38%),
+                conic-gradient(from 45deg, rgba(165, 93, 39, 0.95), rgba(201, 133, 63, 0.96), rgba(136, 71, 35, 0.96), rgba(212, 146, 72, 0.96), rgba(165, 93, 39, 0.95));
+            border: 0.8rem solid rgba(120, 64, 36, 0.72);
+            box-shadow: 0 4rem 5rem rgba(0, 0, 0, 0.36);
+            opacity: 0.83;
         }
 
-        .upgrades-panel {
-            background: var(--panel-bg);
-            border: 1px solid var(--panel-border);
-            border-radius: 12px;
-            padding: 20px;
+        .chair {
+            position: absolute;
+            width: 4rem;
+            height: 2.2rem;
+            border-radius: 50%;
+            background: rgba(69, 35, 25, 0.8);
+            border: 0.18rem solid rgba(236, 169, 88, 0.24);
+            opacity: 0.68;
+        }
+
+        .chair.c1 { left: 26%; bottom: 23%; }
+        .chair.c2 { left: 36%; bottom: 11%; }
+        .chair.c3 { right: 36%; bottom: 11%; }
+        .chair.c4 { right: 26%; bottom: 23%; }
+
+        .app {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            padding: clamp(0.75rem, 1.8vw, 1.4rem);
+        }
+
+        .topbar {
+            position: fixed;
+            z-index: 5;
+            top: clamp(0.75rem, 1.8vw, 1.4rem);
+            left: clamp(0.75rem, 1.8vw, 1.4rem);
+            right: clamp(0.75rem, 1.8vw, 1.4rem);
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: start;
+            gap: 0.8rem;
+            pointer-events: none;
+        }
+
+        .brand,
+        .resource-pill,
+        .buff-strip,
+        .dock,
+        .hud,
+        .modal {
+            pointer-events: auto;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            min-width: 0;
+            padding: 0.62rem 0.72rem;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: rgba(15, 17, 22, 0.6);
+            box-shadow: 0 1rem 2rem var(--shadow);
+            backdrop-filter: blur(1rem);
+        }
+
+        .coin-mark {
+            display: grid;
+            place-items: center;
+            width: 2.45rem;
+            height: 2.45rem;
+            flex: 0 0 auto;
+            border-radius: 50%;
+            color: #24150a;
+            font-weight: 900;
+            background: radial-gradient(circle at 36% 28%, #fff1ad, #f3bd45 46%, #a55d29);
+            box-shadow: inset 0 -0.28rem 0 rgba(0, 0, 0, 0.22), 0 0 1.6rem rgba(245, 191, 80, 0.24);
+        }
+
+        .brand-title {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            backdrop-filter: blur(10px);
+            gap: 0.1rem;
+            min-width: 0;
         }
 
-        .upgrade-btn {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            padding: 10px 15px;
-            color: white;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 250px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        .upgrade-btn:hover {
-            background: rgba(255, 255, 255, 0.1);
-        }
-        .upgrade-info {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-        }
-        .upgrade-name {
-            font-weight: bold;
-            font-size: 14px;
-        }
-        .upgrade-lvl {
-            font-size: 12px;
-            color: var(--accent-blue);
-        }
-        .upgrade-cost {
-            color: var(--accent-green);
-            font-weight: bold;
+        .brand-title strong {
+            font-size: 1rem;
+            line-height: 1.05;
+            white-space: nowrap;
         }
 
-        /* 2. CoinFlipTableOverview */
-        .overview-panel {
-            background: var(--panel-bg);
-            border: 1px solid var(--panel-border);
-            border-radius: 12px;
-            padding: 20px;
-            width: 300px;
-            margin: 40px auto;
-            backdrop-filter: blur(10px);
+        .brand-title span {
+            color: var(--muted);
+            font-size: 0.73rem;
+            white-space: nowrap;
         }
-        .overview-header {
+
+        .resource-row {
+            justify-self: center;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            border-bottom: 1px solid var(--panel-border);
-            padding-bottom: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.55rem;
         }
-        .hype-bar-container {
-            height: 6px;
-            background: #333;
-            border-radius: 3px;
+
+        .resource-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            min-height: 2.4rem;
+            padding: 0.42rem 0.72rem;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: rgba(15, 17, 22, 0.7);
+            box-shadow: 0 0.8rem 1.6rem rgba(0, 0, 0, 0.24);
+            backdrop-filter: blur(1rem);
+        }
+
+        .resource-pill b {
+            font-size: 1rem;
+            white-space: nowrap;
+        }
+
+        .resource-pill span {
+            color: var(--dim);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+        }
+
+        .buff-strip {
+            justify-self: end;
+            display: grid;
+            gap: 0.38rem;
+            width: min(20vw, 16rem);
+            min-width: 12rem;
+            padding: 0.58rem;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: rgba(15, 17, 22, 0.66);
+            backdrop-filter: blur(1rem);
+        }
+
+        .buff-line {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 0.48rem;
+            font-size: 0.74rem;
+            color: var(--muted);
+        }
+
+        .mini-bar {
+            height: 0.4rem;
             overflow: hidden;
-            margin-bottom: 15px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
         }
-        .hype-bar-fill {
+
+        .mini-bar i {
+            display: block;
             height: 100%;
-            width: 75%;
-            background: linear-gradient(90deg, #ff4d4d, #ffd700);
-            box-shadow: 0 0 10px #ff4d4d;
+            border-radius: inherit;
+            background: linear-gradient(90deg, var(--teal), var(--gold));
         }
-        .seat-row {
+
+        .dock {
+            position: fixed;
+            z-index: 8;
+            top: 50%;
+            left: clamp(0.75rem, 1.8vw, 1.4rem);
+            transform: translateY(-50%);
+            display: grid;
+            gap: 0.55rem;
+            padding: 0.55rem;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: rgba(12, 14, 18, 0.72);
+            box-shadow: 0 1rem 2.6rem var(--shadow);
+            backdrop-filter: blur(1rem);
+        }
+
+        .dock-link {
+            position: relative;
+            display: grid;
+            place-items: center;
+            width: 3.25rem;
+            height: 3.25rem;
+            border: 1px solid rgba(255, 255, 255, 0.11);
+            border-radius: var(--radius);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .dock-link.active,
+        .dock-link:hover {
+            border-color: var(--line-hot);
+            background: rgba(245, 191, 80, 0.18);
+        }
+
+        .dock-link svg {
+            width: 1.45rem;
+            height: 1.45rem;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .dock-link .badge {
+            position: absolute;
+            top: -0.34rem;
+            right: -0.34rem;
+            min-width: 1.25rem;
+            height: 1.25rem;
+            display: grid;
+            place-items: center;
+            border-radius: 999px;
+            color: #17110a;
+            background: var(--mint);
+            font-size: 0.68rem;
+            font-weight: 900;
+        }
+
+        .tooltip {
+            position: absolute;
+            left: calc(100% + 0.55rem);
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 0.38rem 0.5rem;
+            border-radius: 6px;
+            color: var(--ink);
+            background: rgba(7, 8, 10, 0.92);
+            border: 1px solid var(--line);
+            font-size: 0.74rem;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .dock-link:hover .tooltip {
+            opacity: 1;
+        }
+
+        .hud {
+            position: fixed;
+            z-index: 7;
+            left: 50%;
+            bottom: clamp(0.75rem, 1.8vw, 1.4rem);
+            transform: translateX(-50%);
+            width: min(78rem, calc(100vw - 2rem));
+            display: grid;
+            grid-template-columns: minmax(13rem, 1fr) minmax(14rem, 18rem) minmax(18rem, 1.35fr);
+            gap: 0.75rem;
+            align-items: stretch;
+        }
+
+        .hud-panel {
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: rgba(15, 17, 22, 0.78);
+            box-shadow: 0 1rem 2.4rem var(--shadow);
+            backdrop-filter: blur(1rem);
+        }
+
+        .run-stats {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.55rem;
+            padding: 0.65rem;
+        }
+
+        .stat-card {
+            min-height: 4.2rem;
+            padding: 0.56rem;
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.055);
+        }
+
+        .label {
+            display: block;
+            margin-bottom: 0.26rem;
+            color: var(--dim);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+        }
+
+        .value {
+            display: block;
+            font-weight: 900;
+            font-size: clamp(1rem, 2vw, 1.45rem);
+            line-height: 1.08;
+        }
+
+        .accent-gold { color: var(--gold); }
+        .accent-teal { color: var(--teal); }
+        .accent-rose { color: var(--rose); }
+        .accent-mint { color: var(--mint); }
+        .accent-violet { color: var(--violet); }
+
+        .flip-panel {
+            position: relative;
+            display: grid;
+            place-items: center;
+            min-height: 9.2rem;
+            padding: 0.7rem;
+        }
+
+        .flip-button {
+            position: relative;
+            width: min(12rem, 80%);
+            aspect-ratio: 1;
+            border: 0;
+            border-radius: 50%;
+            color: #211407;
+            font-size: clamp(1.7rem, 3vw, 2.4rem);
+            font-weight: 1000;
+            background:
+                radial-gradient(circle at 34% 25%, #fff6bd, #ffd972 30%, #f1aa2d 62%, #a35a22);
+            box-shadow:
+                inset 0 -0.55rem 0 rgba(54, 27, 12, 0.34),
+                inset 0 0.42rem 0 rgba(255, 255, 255, 0.34),
+                0 1.1rem 2.6rem rgba(0, 0, 0, 0.38),
+                0 0 2.8rem rgba(245, 191, 80, 0.28);
+        }
+
+        .flip-button::before {
+            content: "";
+            position: absolute;
+            inset: 0.62rem;
+            border: 0.16rem solid rgba(79, 45, 17, 0.34);
+            border-radius: 50%;
+        }
+
+        .flip-button span {
+            position: relative;
+            z-index: 1;
+        }
+
+        .flip-result {
+            position: absolute;
+            bottom: 0.62rem;
+            left: 0.7rem;
+            right: 0.7rem;
             display: flex;
             justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
+            gap: 0.6rem;
+            color: var(--muted);
+            font-size: 0.78rem;
         }
-        .seat-row.featured {
-            background: rgba(255, 215, 0, 0.1);
+
+        .upgrade-panel {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            gap: 0.55rem;
+            padding: 0.65rem;
+        }
+
+        .panel-head,
+        .modal-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.7rem;
+        }
+
+        .panel-head h2,
+        .modal-head h1 {
+            margin: 0;
+            font-size: 0.9rem;
+            line-height: 1.1;
+        }
+
+        .panel-head small,
+        .modal-head small {
+            color: var(--dim);
+            font-size: 0.72rem;
+        }
+
+        .upgrade-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.55rem;
+        }
+
+        .upgrade-card,
+        .item-card,
+        .perk-card,
+        .summary-card {
+            border: 1px solid rgba(255, 255, 255, 0.10);
             border-radius: 6px;
-            padding: 8px;
-            border: 1px solid rgba(255, 215, 0, 0.3);
+            background: rgba(255, 255, 255, 0.06);
         }
-        .seat-player {
+
+        .upgrade-card {
+            min-height: 4.4rem;
+            padding: 0.55rem;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.45rem;
+            align-items: center;
+        }
+
+        .upgrade-card strong {
+            display: block;
+            font-size: 0.88rem;
+            margin-bottom: 0.12rem;
+        }
+
+        .upgrade-card span {
+            color: var(--muted);
+            font-size: 0.72rem;
+        }
+
+        .buy-chip,
+        .small-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 1.75rem;
+            padding: 0.22rem 0.48rem;
+            border: 1px solid rgba(245, 191, 80, 0.45);
+            border-radius: 999px;
+            color: var(--gold);
+            background: rgba(245, 191, 80, 0.12);
+            font-size: 0.72rem;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .screen {
+            position: fixed;
+            z-index: 10;
+            inset: 0;
+            display: none;
+            place-items: center;
+            padding: 5.8rem clamp(0.75rem, 1.8vw, 1.4rem) 1.4rem 5.6rem;
+            background: rgba(6, 8, 11, 0.2);
+        }
+
+        .screen:target {
+            display: grid;
+        }
+
+        .screen:target ~ .home-only {
+            opacity: 0.34;
+        }
+
+        .modal {
+            width: min(72rem, 100%);
+            max-height: calc(100vh - 7.2rem);
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--panel-strong);
+            box-shadow: 0 2rem 5rem rgba(0, 0, 0, 0.58);
+            backdrop-filter: blur(1.2rem);
+        }
+
+        .modal-head {
+            padding: 1rem;
+            border-bottom: 1px solid var(--line);
+            background: linear-gradient(90deg, rgba(245, 191, 80, 0.16), rgba(89, 211, 195, 0.08), transparent);
+        }
+
+        .modal-title {
             display: flex;
             align-items: center;
-            gap: 10px;
-        }
-        .seat-streak {
-            font-weight: bold;
-            color: var(--accent-gold);
+            gap: 0.7rem;
         }
 
-        /* 3. SeatInfoBillboard */
-        .billboard-wrapper {
+        .modal-icon {
+            display: grid;
+            place-items: center;
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: var(--radius);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .modal-icon svg,
+        .close-link svg {
+            width: 1.35rem;
+            height: 1.35rem;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .close-link {
+            display: grid;
+            place-items: center;
+            width: 2.55rem;
+            height: 2.55rem;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: var(--radius);
+            color: var(--ink);
+            background: rgba(255, 255, 255, 0.06);
+            text-decoration: none;
+        }
+
+        .modal-body {
+            min-height: 0;
+            overflow: auto;
+            padding: 1rem;
+        }
+
+        .rebirth-layout {
+            display: grid;
+            grid-template-columns: minmax(17rem, 0.9fr) minmax(0, 1.4fr);
+            gap: 1rem;
+        }
+
+        .summary-stack {
+            display: grid;
+            gap: 0.72rem;
+            align-content: start;
+        }
+
+        .summary-card {
+            padding: 0.9rem;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035));
+        }
+
+        .summary-card h3,
+        .perk-card h3,
+        .shop-card h3,
+        .inventory-detail h3 {
+            margin: 0 0 0.45rem;
+            font-size: 0.95rem;
+        }
+
+        .summary-card p,
+        .perk-card p,
+        .shop-card p,
+        .inventory-detail p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.78rem;
+            line-height: 1.45;
+        }
+
+        .gain-number {
+            display: block;
+            margin: 0.35rem 0;
+            color: var(--teal);
+            font-size: clamp(2.1rem, 4vw, 3.2rem);
+            line-height: 1;
+            font-weight: 1000;
+        }
+
+        .primary-action,
+        .secondary-action {
+            width: 100%;
+            min-height: 3.05rem;
+            border-radius: var(--radius);
+            font-weight: 900;
+        }
+
+        .primary-action {
+            border: 0;
+            color: #201408;
+            background: linear-gradient(180deg, #ffe08a, #f0a431);
+            box-shadow: inset 0 -0.2rem 0 rgba(0, 0, 0, 0.22), 0 1rem 2rem rgba(245, 191, 80, 0.18);
+        }
+
+        .secondary-action {
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(255, 255, 255, 0.07);
+        }
+
+        .perk-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.72rem;
+        }
+
+        .perk-card {
+            min-height: 11rem;
+            padding: 0.82rem;
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            gap: 0.62rem;
+        }
+
+        .level-track {
             display: flex;
-            justify-content: center;
+            gap: 0.32rem;
             align-items: center;
-            height: 300px;
-        }
-        .billboard {
-            background: rgba(20, 20, 25, 0.9);
-            border: 2px solid var(--accent-gold);
-            border-radius: 16px;
-            padding: 20px 30px;
-            text-align: center;
-            box-shadow: 0 15px 30px rgba(0,0,0,0.6), 0 0 20px rgba(255, 215, 0, 0.2);
-            transform: perspective(500px) rotateX(5deg);
-        }
-        .bb-name {
-            font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        .bb-streak {
-            font-size: 36px;
-            font-weight: 900;
-            color: var(--accent-red);
-            text-shadow: 0 0 15px rgba(255, 77, 77, 0.6);
-            margin-bottom: 10px;
-        }
-        .bb-coin {
-            font-size: 14px;
-            color: var(--accent-blue);
-            background: rgba(77, 166, 255, 0.1);
-            padding: 4px 10px;
-            border-radius: 12px;
-            display: inline-block;
         }
 
-        /* 4. AnnouncementBanner */
-        .banner-wrapper {
+        .level-dot {
+            height: 0.5rem;
+            flex: 1;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.11);
+        }
+
+        .level-dot.filled {
+            background: linear-gradient(90deg, var(--teal), var(--gold));
+        }
+
+        .perk-footer {
             display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            height: 200px;
-            padding-top: 40px;
-        }
-        .announcement-banner {
-            background: linear-gradient(90deg, transparent, rgba(255, 77, 77, 0.8), transparent);
-            padding: 15px 60px;
-            text-align: center;
-            animation: pulse 2s infinite;
-        }
-        .banner-text {
-            font-size: 28px;
-            font-weight: 900;
-            color: white;
-            text-shadow: 0 0 10px #fff, 0 0 20px #ff4d4d;
-            letter-spacing: 2px;
-        }
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 0.9; }
-            50% { transform: scale(1.05); opacity: 1; text-shadow: 0 0 20px #fff, 0 0 30px #ff4d4d; }
-            100% { transform: scale(1); opacity: 0.9; }
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.65rem;
         }
 
-        /* 5. SpectatorFeed */
-        .feed-panel {
-            background: transparent;
-            width: 350px;
-            margin-top: 40px;
+        .shop-layout {
+            display: grid;
+            grid-template-columns: 9rem minmax(0, 1fr) 18rem;
+            gap: 1rem;
         }
-        .feed-item {
-            background: rgba(0,0,0,0.4);
-            border-left: 3px solid var(--text-muted);
-            padding: 8px 12px;
-            margin-bottom: 8px;
-            border-radius: 0 8px 8px 0;
-            font-size: 14px;
-            animation: slideIn 0.3s ease-out;
+
+        .tabs {
+            display: grid;
+            align-content: start;
+            gap: 0.55rem;
         }
-        .feed-item.highlight {
-            border-left-color: var(--accent-gold);
-            background: rgba(255, 215, 0, 0.1);
+
+        .tab {
+            min-height: 2.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.6rem 0.7rem;
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: var(--radius);
+            color: var(--muted);
+            background: rgba(255, 255, 255, 0.045);
+            text-decoration: none;
+            font-weight: 800;
         }
-        @keyframes slideIn {
-            from { transform: translateX(-20px); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+
+        .tab.active,
+        .tab:hover {
+            color: var(--ink);
+            border-color: rgba(245, 191, 80, 0.5);
+            background: rgba(245, 191, 80, 0.13);
+        }
+
+        .shop-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem;
+        }
+
+        .shop-card {
+            position: relative;
+            min-height: 13.8rem;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: var(--radius);
+            background: rgba(255, 255, 255, 0.055);
+        }
+
+        .shop-art {
+            height: 6.6rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+            background: radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.42), transparent 2rem), linear-gradient(135deg, rgba(245, 191, 80, 0.32), rgba(120, 183, 255, 0.15));
+        }
+
+        .shop-art.coin-silver {
+            background: radial-gradient(circle at 50% 42%, #eef7ff, #9bb7c7 2rem, transparent 2.15rem), linear-gradient(135deg, rgba(120, 183, 255, 0.25), rgba(89, 211, 195, 0.13));
+        }
+
+        .shop-art.coin-ember {
+            background: radial-gradient(circle at 50% 42%, #ffe0a3, #dc5d32 2rem, transparent 2.15rem), linear-gradient(135deg, rgba(255, 127, 138, 0.24), rgba(245, 191, 80, 0.16));
+        }
+
+        .shop-art.table-luck {
+            background:
+                radial-gradient(ellipse at 50% 65%, rgba(141, 227, 132, 0.55), transparent 3.2rem),
+                linear-gradient(135deg, rgba(89, 211, 195, 0.22), rgba(245, 191, 80, 0.16));
+        }
+
+        .shop-art.table-bank {
+            background:
+                radial-gradient(ellipse at 50% 68%, rgba(245, 191, 80, 0.62), transparent 3.2rem),
+                linear-gradient(135deg, rgba(169, 155, 255, 0.21), rgba(245, 191, 80, 0.16));
+        }
+
+        .shop-content {
+            padding: 0.75rem;
+            display: grid;
+            gap: 0.58rem;
+        }
+
+        .stat-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.38rem;
+        }
+
+        .price-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.65rem;
+        }
+
+        .buy-button,
+        .equip-button {
+            min-height: 2.2rem;
+            padding: 0.35rem 0.72rem;
+            border: 0;
+            border-radius: var(--radius);
+            color: #201408;
+            background: linear-gradient(180deg, #ffe08a, #eda33a);
+            font-weight: 900;
+            white-space: nowrap;
+        }
+
+        .preview-panel {
+            display: grid;
+            align-content: start;
+            gap: 0.72rem;
+            padding: 0.8rem;
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: var(--radius);
+            background: rgba(255, 255, 255, 0.045);
+        }
+
+        .preview-scene {
+            position: relative;
+            min-height: 12rem;
+            overflow: hidden;
+            border-radius: 6px;
+            background:
+                radial-gradient(ellipse at 50% 66%, rgba(245, 191, 80, 0.42), transparent 5.8rem),
+                linear-gradient(160deg, rgba(89, 211, 195, 0.16), rgba(32, 20, 15, 0.62));
+            border: 1px solid rgba(255, 255, 255, 0.10);
+        }
+
+        .preview-scene::before {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: 1.5rem;
+            width: 11rem;
+            height: 5.2rem;
+            transform: translateX(-50%) perspective(20rem) rotateX(58deg);
+            border-radius: 50%;
+            background: conic-gradient(from 15deg, #8f4f31, #e0a052, #734228, #c98a45, #8f4f31);
+            border: 0.55rem solid rgba(49, 29, 22, 0.68);
+        }
+
+        .preview-scene::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: 2.9rem;
+            width: 4rem;
+            height: 4rem;
+            transform: translateX(-50%);
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 25%, #fff4b0, #f4be48 54%, #9d5a29);
+            box-shadow: 0 1.2rem 2rem rgba(0, 0, 0, 0.38);
+        }
+
+        .inventory-layout {
+            display: grid;
+            grid-template-columns: 9rem minmax(0, 1fr) 20rem;
+            gap: 1rem;
+        }
+
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.65rem;
+            align-content: start;
+        }
+
+        .item-card {
+            position: relative;
+            min-height: 10.5rem;
+            padding: 0.7rem;
+            display: grid;
+            grid-template-rows: 4rem auto 1fr auto;
+            gap: 0.42rem;
+        }
+
+        .item-card.equipped {
+            border-color: rgba(141, 227, 132, 0.62);
+            background: rgba(141, 227, 132, 0.08);
+        }
+
+        .item-icon {
+            display: grid;
+            place-items: center;
+            justify-self: center;
+            width: 4rem;
+            height: 4rem;
+            border-radius: 50%;
+            color: #231507;
+            font-size: 1.6rem;
+            font-weight: 1000;
+            background: radial-gradient(circle at 35% 25%, #fff4bd, #f2bd48 56%, #9d5928);
+            box-shadow: inset 0 -0.28rem 0 rgba(0, 0, 0, 0.22);
+        }
+
+        .item-icon.table {
+            border-radius: var(--radius);
+            background: linear-gradient(145deg, #b56d3a, #5f3629);
+            color: var(--ink);
+        }
+
+        .item-card strong {
+            font-size: 0.86rem;
+            line-height: 1.14;
+        }
+
+        .item-card small {
+            color: var(--dim);
+            font-size: 0.7rem;
+        }
+
+        .inventory-detail {
+            display: grid;
+            grid-template-rows: auto auto 1fr auto;
+            gap: 0.75rem;
+            align-content: start;
+            padding: 0.85rem;
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: var(--radius);
+            background: rgba(255, 255, 255, 0.045);
+        }
+
+        .loadout-slot {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.5rem;
+            align-items: center;
+            padding: 0.6rem;
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.045);
+        }
+
+        .loadout-slot strong {
+            display: block;
+            font-size: 0.82rem;
+        }
+
+        .loadout-slot span {
+            color: var(--muted);
+            font-size: 0.72rem;
+        }
+
+        @media (max-width: 980px) {
+            .topbar {
+                grid-template-columns: 1fr;
+                position: absolute;
+            }
+
+            .resource-row,
+            .buff-strip {
+                justify-self: stretch;
+            }
+
+            .buff-strip {
+                width: auto;
+                min-width: 0;
+            }
+
+            .dock {
+                top: auto;
+                left: 50%;
+                bottom: 0.7rem;
+                transform: translateX(-50%);
+                grid-auto-flow: column;
+                z-index: 12;
+            }
+
+            .dock .tooltip {
+                display: none;
+            }
+
+            .hud {
+                position: absolute;
+                left: 1rem;
+                right: 1rem;
+                bottom: 5.2rem;
+                width: auto;
+                transform: none;
+                grid-template-columns: 1fr;
+            }
+
+            .screen {
+                padding: 1rem 1rem 5.3rem;
+            }
+
+            .modal {
+                max-height: calc(100vh - 6.3rem);
+            }
+
+            .rebirth-layout,
+            .shop-layout,
+            .inventory-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .tabs {
+                grid-auto-flow: column;
+                overflow-x: auto;
+                padding-bottom: 0.25rem;
+            }
+
+            .tab {
+                white-space: nowrap;
+            }
+
+            .preview-panel {
+                display: none;
+            }
+        }
+
+        @media (max-width: 680px) {
+            .app {
+                padding: 0.75rem;
+            }
+
+            .brand-title span,
+            .resource-pill span,
+            .buff-strip {
+                display: none;
+            }
+
+            .resource-row {
+                justify-content: flex-start;
+            }
+
+            .run-stats,
+            .upgrade-grid,
+            .perk-grid,
+            .shop-grid,
+            .inventory-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .flip-panel {
+                min-height: 8.4rem;
+            }
+
+            .flip-button {
+                width: 8.8rem;
+            }
+
+            .modal-head {
+                align-items: start;
+            }
+
+            .modal-title {
+                min-width: 0;
+            }
         }
     </style>
 </head>
 <body>
+    <main class="stage" id="home">
+        <div class="room-lines" aria-hidden="true">
+            <span class="beam-top"></span>
+            <span class="beam-left"></span>
+            <span class="beam-right"></span>
+            <i class="lantern one"></i>
+            <i class="lantern two"></i>
+        </div>
+        <div class="table-scene" aria-hidden="true">
+            <div class="main-table"></div>
+            <div class="chair c1"></div>
+            <div class="chair c2"></div>
+            <div class="chair c3"></div>
+            <div class="chair c4"></div>
+        </div>
 
-    <h1>Flip A Coin - UI Mockups</h1>
-    <div class="description">Based on the Roblox Multiplayer Redesign Document</div>
+        <section id="rebirth" class="screen">
+            <div class="modal">
+                <header class="modal-head">
+                    <div class="modal-title">
+                        <div class="modal-icon">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                        </div>
+                        <div>
+                            <h1>重生</h1>
+                            <small>本局 Cash 与升级归零，永久属性保留</small>
+                        </div>
+                    </div>
+                    <a class="close-link" href="#home" aria-label="关闭">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </a>
+                </header>
+                <div class="modal-body rebirth-layout">
+                    <aside class="summary-stack">
+                        <div class="summary-card">
+                            <h3>本次可获得</h3>
+                            <span class="gain-number">+3</span>
+                            <p>重生点数</p>
+                        </div>
+                        <div class="summary-card">
+                            <h3>重置内容</h3>
+                            <p>Cash 12.4K -> 0<br>Value 8 / Combo 4 / Speed 3 / Bias 2 -> 0</p>
+                        </div>
+                        <div class="summary-card">
+                            <h3>下次门槛</h3>
+                            <p>需要 22.0K Cash，本局最佳连胜 8 可额外提高点数预估。</p>
+                        </div>
+                        <button class="primary-action">确认重生</button>
+                        <button class="secondary-action">继续本局</button>
+                    </aside>
 
-    <!-- 1. Main HUD -->
-    <div class="ui-container">
-        <div class="ui-title">1. CoinFlipHUD (Main Player Interface)</div>
-        <div class="hud-wrapper">
-            <!-- Left: Stats -->
-            <div class="stats-panel">
-                <div class="stat-item">
-                    <div class="stat-label">Current Cash</div>
-                    <div class="stat-value">$ 1,240</div>
+                    <section class="perk-grid" aria-label="重生属性">
+                        <article class="perk-card">
+                            <div>
+                                <h3>正面概率</h3>
+                                <p>永久提高 Heads 概率，上限与局内 Bias 分开计算。</p>
+                            </div>
+                            <div class="level-track" aria-label="等级 4 / 10">
+                                <i class="level-dot filled"></i><i class="level-dot filled"></i><i class="level-dot filled"></i><i class="level-dot filled"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i>
+                            </div>
+                            <div class="perk-footer">
+                                <span class="small-chip">当前 +8%</span>
+                                <button class="buy-button">升级 2 点</button>
+                            </div>
+                        </article>
+                        <article class="perk-card">
+                            <div>
+                                <h3>硬币价值</h3>
+                                <p>提高 Heads 奖励基础倍率，和 Coin、桌搭倍率相乘。</p>
+                            </div>
+                            <div class="level-track" aria-label="等级 3 / 10">
+                                <i class="level-dot filled"></i><i class="level-dot filled"></i><i class="level-dot filled"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i>
+                            </div>
+                            <div class="perk-footer">
+                                <span class="small-chip">当前 x1.18</span>
+                                <button class="buy-button">升级 1 点</button>
+                            </div>
+                        </article>
+                        <article class="perk-card">
+                            <div>
+                                <h3>开局资金</h3>
+                                <p>每次重生后带少量 Cash 入局，减少低速启动时间。</p>
+                            </div>
+                            <div class="level-track" aria-label="等级 1 / 8">
+                                <i class="level-dot filled"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i>
+                            </div>
+                            <div class="perk-footer">
+                                <span class="small-chip">当前 $30</span>
+                                <button class="buy-button">升级 1 点</button>
+                            </div>
+                        </article>
+                        <article class="perk-card">
+                            <div>
+                                <h3>连胜保温</h3>
+                                <p>提高失败后的最低保底收益，让长局更稳定。</p>
+                            </div>
+                            <div class="level-track" aria-label="等级 0 / 6">
+                                <i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i><i class="level-dot"></i>
+                            </div>
+                            <div class="perk-footer">
+                                <span class="small-chip">当前未解锁</span>
+                                <button class="buy-button">升级 2 点</button>
+                            </div>
+                        </article>
+                    </section>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-label">Current Streak</div>
-                    <div class="stat-value streak">🔥 4</div>
+            </div>
+        </section>
+
+        <section id="shop" class="screen">
+            <div class="modal">
+                <header class="modal-head">
+                    <div class="modal-title">
+                        <div class="modal-icon">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                        </div>
+                        <div>
+                            <h1>商店</h1>
+                            <small>购买 Coin 与桌搭，获得永久外观和加成</small>
+                        </div>
+                    </div>
+                    <a class="close-link" href="#home" aria-label="关闭">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </a>
+                </header>
+                <div class="modal-body shop-layout">
+                    <nav class="tabs" aria-label="商店分类">
+                        <a class="tab active" href="#shop">Coin</a>
+                        <a class="tab" href="#shop">桌搭</a>
+                        <a class="tab" href="#shop">礼包</a>
+                        <a class="tab" href="#shop">限时</a>
+                    </nav>
+
+                    <section class="shop-grid" aria-label="商店物品">
+                        <article class="shop-card">
+                            <div class="shop-art coin-silver"></div>
+                            <div class="shop-content">
+                                <h3>银月硬币</h3>
+                                <p>适合前期快速放大 Cash 收益。</p>
+                                <div class="stat-row">
+                                    <span class="small-chip">金币 x1.15</span>
+                                    <span class="small-chip">稀有</span>
+                                </div>
+                                <div class="price-row">
+                                    <strong class="accent-gold">$ 2,500</strong>
+                                    <button class="buy-button">购买</button>
+                                </div>
+                            </div>
+                        </article>
+                        <article class="shop-card">
+                            <div class="shop-art coin-ember"></div>
+                            <div class="shop-content">
+                                <h3>余烬硬币</h3>
+                                <p>高连胜时收益更强，适合冲榜。</p>
+                                <div class="stat-row">
+                                    <span class="small-chip">金币 x1.32</span>
+                                    <span class="small-chip">连胜 +4%</span>
+                                </div>
+                                <div class="price-row">
+                                    <strong class="accent-gold">$ 18K</strong>
+                                    <button class="buy-button">购买</button>
+                                </div>
+                            </div>
+                        </article>
+                        <article class="shop-card">
+                            <div class="shop-art table-luck"></div>
+                            <div class="shop-content">
+                                <h3>幸运烛台桌搭</h3>
+                                <p>强化正面概率和桌面氛围反馈。</p>
+                                <div class="stat-row">
+                                    <span class="small-chip">幸运 +3%</span>
+                                    <span class="small-chip">金币 x1.05</span>
+                                </div>
+                                <div class="price-row">
+                                    <strong class="accent-gold">$ 8,000</strong>
+                                    <button class="buy-button">购买</button>
+                                </div>
+                            </div>
+                        </article>
+                        <article class="shop-card">
+                            <div class="shop-art table-bank"></div>
+                            <div class="shop-content">
+                                <h3>金库桌搭</h3>
+                                <p>收益型桌搭，牺牲少量幸运换更高金币倍率。</p>
+                                <div class="stat-row">
+                                    <span class="small-chip">金币 x1.22</span>
+                                    <span class="small-chip">幸运 +1%</span>
+                                </div>
+                                <div class="price-row">
+                                    <strong class="accent-gold">$ 24K</strong>
+                                    <button class="buy-button">购买</button>
+                                </div>
+                            </div>
+                        </article>
+                    </section>
+
+                    <aside class="preview-panel">
+                        <div class="preview-scene" aria-hidden="true"></div>
+                        <div>
+                            <h3>当前装备预览</h3>
+                            <p>银月硬币 + 幸运烛台桌搭</p>
+                        </div>
+                        <div class="stat-row">
+                            <span class="small-chip">总金币 x1.21</span>
+                            <span class="small-chip">总幸运 +3%</span>
+                        </div>
+                        <button class="secondary-action">查看背包</button>
+                    </aside>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-label">Best Streak</div>
-                    <div class="stat-value" style="color: #fff; font-size: 18px;">7</div>
+            </div>
+        </section>
+
+        <section id="inventory" class="screen">
+            <div class="modal">
+                <header class="modal-head">
+                    <div class="modal-title">
+                        <div class="modal-icon">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7h-4a4 4 0 0 0-8 0H4v14h16Z"/><path d="M8 7a4 4 0 0 1 8 0"/></svg>
+                        </div>
+                        <div>
+                            <h1>背包</h1>
+                            <small>按类型管理物品，装备 Coin 与桌搭</small>
+                        </div>
+                    </div>
+                    <a class="close-link" href="#home" aria-label="关闭">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </a>
+                </header>
+                <div class="modal-body inventory-layout">
+                    <nav class="tabs" aria-label="背包分类">
+                        <a class="tab active" href="#inventory">Coin</a>
+                        <a class="tab" href="#inventory">桌搭</a>
+                        <a class="tab" href="#inventory">消耗品</a>
+                        <a class="tab" href="#inventory">其他</a>
+                    </nav>
+
+                    <section class="inventory-grid" aria-label="背包物品">
+                        <article class="item-card equipped">
+                            <div class="item-icon">H</div>
+                            <strong>银月硬币</strong>
+                            <small>金币 x1.15</small>
+                            <span class="small-chip">已装备</span>
+                        </article>
+                        <article class="item-card">
+                            <div class="item-icon">E</div>
+                            <strong>余烬硬币</strong>
+                            <small>金币 x1.32 / 连胜 +4%</small>
+                            <button class="equip-button">装备</button>
+                        </article>
+                        <article class="item-card">
+                            <div class="item-icon">B</div>
+                            <strong>黄铜硬币</strong>
+                            <small>金币 x1.05</small>
+                            <button class="equip-button">装备</button>
+                        </article>
+                        <article class="item-card equipped">
+                            <div class="item-icon table">桌</div>
+                            <strong>幸运烛台桌搭</strong>
+                            <small>幸运 +3% / 金币 x1.05</small>
+                            <span class="small-chip">已装备</span>
+                        </article>
+                        <article class="item-card">
+                            <div class="item-icon table">柜</div>
+                            <strong>金库桌搭</strong>
+                            <small>金币 x1.22 / 幸运 +1%</small>
+                            <button class="equip-button">装备</button>
+                        </article>
+                        <article class="item-card">
+                            <div class="item-icon table">灯</div>
+                            <strong>蓝焰桌灯</strong>
+                            <small>幸运 +2% / 速度 +3%</small>
+                            <button class="equip-button">装备</button>
+                        </article>
+                    </section>
+
+                    <aside class="inventory-detail">
+                        <div>
+                            <h3>当前装配</h3>
+                            <p>银月硬币与幸运烛台桌搭已生效。</p>
+                        </div>
+                        <div class="loadout-slot">
+                            <div>
+                                <strong>Coin</strong>
+                                <span>银月硬币</span>
+                            </div>
+                            <span class="small-chip">x1.15</span>
+                        </div>
+                        <div class="loadout-slot">
+                            <div>
+                                <strong>桌搭</strong>
+                                <span>幸运烛台桌搭</span>
+                            </div>
+                            <span class="small-chip">+3%</span>
+                        </div>
+                        <div class="summary-card">
+                            <h3>总加成</h3>
+                            <p>金币倍率 x1.21<br>幸运 +3%<br>连胜加成 +0%</p>
+                        </div>
+                        <button class="primary-action">应用装配</button>
+                    </aside>
                 </div>
             </div>
+        </section>
 
-            <!-- Center: Action -->
-            <div class="action-panel">
-                <button class="flip-btn">FLIP</button>
-                <div class="flip-hint">Press [SPACE] to Flip</div>
-            </div>
-
-            <!-- Right: Upgrades -->
-            <div class="upgrades-panel">
-                <div class="stat-label" style="margin-bottom: 5px;">Upgrades</div>
-                <button class="upgrade-btn">
-                    <div class="upgrade-info">
-                        <span class="upgrade-name">Value</span>
-                        <span class="upgrade-lvl">Lvl 3</span>
+        <div class="app home-only">
+            <header class="topbar">
+                <div class="brand">
+                    <div class="coin-mark">H</div>
+                    <div class="brand-title">
+                        <strong>Flip A Coin</strong>
+                        <span>8 人桌 · 5/8 入座</span>
                     </div>
-                    <span class="upgrade-cost">$ 24</span>
-                </button>
-                <button class="upgrade-btn">
-                    <div class="upgrade-info">
-                        <span class="upgrade-name">Combo</span>
-                        <span class="upgrade-lvl">Lvl 1</span>
+                </div>
+
+                <div class="resource-row" aria-label="玩家资源">
+                    <div class="resource-pill">
+                        <span>Cash</span>
+                        <b class="accent-gold">$12.4K</b>
                     </div>
-                    <span class="upgrade-cost">$ 32</span>
-                </button>
-                <button class="upgrade-btn">
-                    <div class="upgrade-info">
-                        <span class="upgrade-name">Speed</span>
-                        <span class="upgrade-lvl">Lvl 2</span>
+                    <div class="resource-pill">
+                        <span>Rebirth</span>
+                        <b class="accent-teal">7</b>
                     </div>
-                    <span class="upgrade-cost">$ 68</span>
-                </button>
-                <button class="upgrade-btn">
-                    <div class="upgrade-info">
-                        <span class="upgrade-name">Bias</span>
-                        <span class="upgrade-lvl">Lvl 0</span>
+                    <div class="resource-pill">
+                        <span>Best</span>
+                        <b class="accent-rose">8</b>
                     </div>
-                    <span class="upgrade-cost">$ 40</span>
-                </button>
-            </div>
+                </div>
+
+                <div class="buff-strip" aria-label="装备加成">
+                    <div class="buff-line"><span>金币</span><div class="mini-bar"><i style="width: 68%"></i></div><b>x1.21</b></div>
+                    <div class="buff-line"><span>幸运</span><div class="mini-bar"><i style="width: 34%"></i></div><b>+3%</b></div>
+                </div>
+            </header>
+
+            <nav class="dock" aria-label="主菜单">
+                <a class="dock-link active" href="#home" aria-label="主界面">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>
+                    <span class="tooltip">主界面</span>
+                </a>
+                <a class="dock-link" href="#rebirth" aria-label="重生">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                    <span class="badge">3</span>
+                    <span class="tooltip">重生</span>
+                </a>
+                <a class="dock-link" href="#shop" aria-label="商店">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                    <span class="tooltip">商店</span>
+                </a>
+                <a class="dock-link" href="#inventory" aria-label="背包">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7h-4a4 4 0 0 0-8 0H4v14h16Z"/><path d="M8 7a4 4 0 0 1 8 0"/></svg>
+                    <span class="tooltip">背包</span>
+                </a>
+            </nav>
+
+            <section class="hud" aria-label="主界面 HUD">
+                <div class="hud-panel run-stats">
+                    <div class="stat-card">
+                        <span class="label">本局 Cash</span>
+                        <span class="value accent-gold">$12.4K</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label">当前连胜</span>
+                        <span class="value accent-rose">5</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label">正面概率</span>
+                        <span class="value accent-teal">34%</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label">下次奖励</span>
+                        <span class="value accent-mint">$284</span>
+                    </div>
+                </div>
+
+                <div class="hud-panel flip-panel">
+                    <button class="flip-button"><span>FLIP</span></button>
+                    <div class="flip-result">
+                        <span>Heads +$284</span>
+                        <span>Tails +$1</span>
+                    </div>
+                </div>
+
+                <div class="hud-panel upgrade-panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>本局升级</h2>
+                            <small>重生后归零</small>
+                        </div>
+                        <span class="buy-chip">推荐 Bias</span>
+                    </div>
+                    <div class="upgrade-grid">
+                        <button class="upgrade-card">
+                            <span><strong>Value Lv.8</strong><span>硬币价值 x3.99</span></span>
+                            <b class="buy-chip">$2.4K</b>
+                        </button>
+                        <button class="upgrade-card">
+                            <span><strong>Combo Lv.4</strong><span>连胜每层 +34%</span></span>
+                            <b class="buy-chip">$1.8K</b>
+                        </button>
+                        <button class="upgrade-card">
+                            <span><strong>Speed Lv.3</strong><span>翻面间隔 1.37s</span></span>
+                            <b class="buy-chip">$980</b>
+                        </button>
+                        <button class="upgrade-card">
+                            <span><strong>Bias Lv.2</strong><span>局内正面 +5%</span></span>
+                            <b class="buy-chip">$720</b>
+                        </button>
+                    </div>
+                </div>
+            </section>
         </div>
-    </div>
-
-    <!-- 2. Table Overview -->
-    <div class="ui-container">
-        <div class="ui-title">2. CoinFlipTableOverview (Table Status & Hype)</div>
-        <div class="overview-panel">
-            <div class="overview-header">
-                <span style="font-weight: bold;">Table Status</span>
-                <span style="color: var(--accent-gold); font-size: 12px;">8/8 Seated</span>
-            </div>
-            
-            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 5px; display: flex; justify-content: space-between;">
-                <span>Table Hype</span>
-                <span style="color: var(--accent-red);">90/120</span>
-            </div>
-            <div class="hype-bar-container">
-                <div class="hype-bar-fill"></div>
-            </div>
-
-            <div class="seat-row">
-                <div class="seat-player">🪑 PlayerOne</div>
-                <div class="seat-streak">🔥 2</div>
-            </div>
-            <div class="seat-row featured">
-                <div class="seat-player">👑 <span style="color: var(--accent-gold); font-weight: bold;">LuckyGuy99</span></div>
-                <div class="seat-streak">🔥 7</div>
-            </div>
-            <div class="seat-row">
-                <div class="seat-player">🪑 NoobMaster</div>
-                <div class="seat-streak">0</div>
-            </div>
-            <div class="seat-row">
-                <div class="seat-player">🪑 CoinFlipper</div>
-                <div class="seat-streak">🔥 1</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 3. Billboard GUI -->
-    <div class="ui-container">
-        <div class="ui-title">3. SeatInfoBillboard (Floating above seats in 3D Workspace)</div>
-        <div class="billboard-wrapper">
-            <div class="billboard">
-                <div class="bb-name">LuckyGuy99</div>
-                <div class="bb-streak">🔥 7 STREAK</div>
-                <div class="bb-coin">🪙 Lucky Nickel</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 4. Announcement Banner -->
-    <div class="ui-container">
-        <div class="ui-title">4. AnnouncementBanner (Global High-Streak Broadcast)</div>
-        <div class="banner-wrapper">
-            <div class="announcement-banner">
-                <div class="banner-text">🔥 LUCKYGUY99 HIT A 7 STREAK! 🔥</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 5. Spectator Feed -->
-    <div class="ui-container">
-        <div class="ui-title">5. CoinFlipSpectatorFeed (Live Event Feed)</div>
-        <div class="feed-panel">
-            <div class="feed-item">
-                <span style="color: var(--accent-blue);">PlayerOne</span> flipped Tails. Streak lost!
-            </div>
-            <div class="feed-item highlight">
-                <span style="color: var(--accent-gold); font-weight: bold;">LuckyGuy99</span> flipped Heads! (🔥 8)
-            </div>
-            <div class="feed-item">
-                <span style="color: var(--accent-blue);">NoobMaster</span> bought Value Upgrade Lvl 1.
-            </div>
-            <div class="feed-item">
-                <span style="color: var(--accent-green);">CoinFlipper</span> took a seat.
-            </div>
-        </div>
-    </div>
-
+    </main>
 </body>
 </html>

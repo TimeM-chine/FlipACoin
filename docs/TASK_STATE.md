@@ -1,316 +1,122 @@
 # TASK_STATE
 
-最后更新：2026-05-05
+最后更新：2026-05-08
 
 > 目的：记录当前正在做什么、下一步是什么、已做验证、关键决策与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`。
 
 ## Active
 
-### 收尾验证：重生再绑定 / 旧表现清理回归
+### 2026-05-08 Mobile UI production and logic wiring
 
-- Started: 2026-04-19
-- Status: `进行中`
-- Owner: cross-session handoff
+- Started: 2026-05-08
+- Status: UI production pass complete; logic wiring not started yet.
 - Scope:
-  - 产品方向校准为单桌 `8` 人弱社交桌面运气游戏，参考“坐在桌上持续打牌 / 翻牌”的轻桌游体验。
-  - 每个服务器只有一张主桌，玩家进服后自动分配座位并立即坐下。
-  - 玩家暂时不能离座，也不做手动切桌。
-  - 镜头进入桌面沉浸视角，优先保证玩家能看到自己的 Flip、桌面和轻量同桌反馈。
-  - Flip 输入统一支持 HUD 点击、`Space`、手柄 `RT`。
-  - `Space` 不再触发跳跃或离座。
-  - 不再显示旧座位 `BillboardGui` / 复杂观战面板。
-  - 参考示意图重做 `Flip HUD`，主按钮居中，两侧承载信息。
-  - 保留弱社交桌面存在感：其他座位的 flip / streak / 高光只做低噪音反馈，不做强社交。
-  - 主 UI / Billboard / 世界资源改为 Studio 预制，代码只负责绑定与显隐。
+  - Main HUD: remove the top-left Brand / table population block from the live UI plan because players do not need table population status.
+  - Build Studio UI for main HUD entry buttons, Rebirth, Shop, and Inventory based on the latest HTML direction.
+  - Wire UI logic after the visual hierarchy is stable: open / close panels, sync player resources, purchase / equip flows, rebirth preview and confirmation.
+  - Keep the current one-button `FLIP` core loop prominent; new systems must feel like side panels around the table, not a replacement for the main loop.
+- Non-negotiable UI constraints:
+  - New UI size and position must be Scale-first (`UDim2` scale for `Size` / `Position`); avoid fixed pixel Offset for layout-critical sizing and placement.
+  - Offset is allowed only for small local details such as padding, stroke thickness, icon/text spacing, or minimum touch target polish when Scale cannot express it cleanly.
+  - Mobile / touch is the primary validation target for this pass.
+  - Safe area must be checked in runtime Play mode because the phone safe area only applies after the game is running.
+  - Studio is already switched to a phone device; validation route is: start Play -> capture screenshot -> inspect proportions, safe area, overlap, and touch target readability.
+- Task split:
+  - `UI-00` Source audit and target hierarchy: inspect current `StarterGui.Main`, `CoinFlipHUD`, `uiClient.client.lua`, `uiController.lua`, active systems, and existing unused `RebirthSystem` / `BackpackSystem` / shop-like legacy modules before editing.
+  - `UI-01` Main HUD production: remove top-left Brand/table-count concept; keep resources and equipment buffs only where they help decisions; place Rebirth / Shop / Inventory entry buttons in a mobile-safe location.
+  - `UI-02` Rebirth panel production: show reset impact, expected rebirth points, permanent upgrade cards, upgrade costs, and confirmation states.
+  - `UI-03` Shop panel production: support Coin and Desk Setup categories first; item cards show price, ownership, rarity/role, and stat bonuses such as coin multiplier, luck, and coin multiplier from desk setup.
+  - `UI-04` Inventory panel production: support category tabs and fixed equipment slots for Coin and Desk Setup; leave room for future item types without changing the main HUD.
+  - `LOGIC-01` Data contract planning: decide persisted keys and runtime state for rebirth points/upgrades, owned items, equipped Coin, equipped Desk Setup, and derived stat bonuses.
+  - `LOGIC-02` Server authority: implement purchase, equip, and rebirth confirmation on server first; client UI only requests actions and renders synced state.
+  - `LOGIC-03` Client binding: bind buttons through `uiController`, sync panels from `ClientData` / system payloads, and keep deterministic UI paths loud rather than over-guarded.
+  - `VAL-01` Mobile runtime validation: Play in current phone device, screenshot main HUD and each panel, then record whether safe area, proportions, text fit, touch targets, and close/open flows pass.
+  - `VAL-02` Regression checks: verify core Flip still works from HUD / `Space` / gamepad path where applicable, player still auto-seats, and rebirth returns player to a usable seat.
+- Next:
+  - `UI-00` source / hierarchy audit is complete.
+  - `UI-01` main HUD + Rebirth / Shop / Inventory Studio UI assets are in place.
+  - Next pass should start `LOGIC-01` with the data contract and runtime state plan, then wire server/client actions.
+  - `FRAMEWORK.md` §8 was read for this implementation pass on 2026-05-09.
+- Decisions:
+  - Brand/table population is removed from the main UI plan.
+  - UI production comes before logic wiring so the data contract can match the final visible surfaces.
+  - Rebirth, Shop, and Inventory are treated as first-class launch systems, but their panels must not obscure the `FLIP` loop unless intentionally opened.
+  - Any new persisted fields must be handled in one change across `Keys.DataKey`, `DefaultData`, `DebugData`, runtime read/write points, and downstream consumers.
+  - Legacy onboarding / spectator / overview overlays stay hidden during the new mobile UI pass so button entry opens are not blocked.
+  - The new panels are Scale-first and were validated in Studio Play on the phone device with screenshots for main HUD, Rebirth, Shop, and Inventory.
 
-Progress:
+## Current Baseline
 
-- 已完成旧围观优化方向重置。
-- 已完成第一人称社区方案检索，`Open FPC` 作为优先评估候选。
-- 已完成 `M0-03` Studio 资源清单冻结。
-- 已落 `M1-01` 自动分配空座位首版代码。
-- 已落 `M1-02 / M1-03` 强制坐席首版代码。
-- 已落 `M1-04` 旧 prompt / AFK 逻辑退场首版代码。
-- 已落 `M3-01 / M3-02 / M3-03` 统一 Flip 输入首版代码。
-- 已完成单人 Studio Play 回归，确认自动入座、`Space`、手柄 `RT` 与 HUD 点击共用 Flip 主路径。
-- 已落 `M2` 第一人称 fallback 首版模块，并完成单人 Studio Play 定向回归。
-- 已补 `TableSeatSystem` seat key、满桌等待队列与重生后回座位状态同步首版代码。
-- 已完成单人 Studio Play 回归，确认第一人称下重生后会重新坐回座位，HUD 与 `Space` Flip 继续正常。
-- 已完成产品方向校准：不再追多桌大厅，首发聚焦单桌 `8` 人、弱社交、强 `FLIP` 按钮、高频短循环。
-- 已落 `M4-01 / M4-02` 代码级退场首版：服务端不再刷新旧座位 Billboard，客户端隐藏旧 Billboard、spectator feed 和 table overview。
-- 已落 `M4-03 / M4-04` 首版：Studio 预制版 Flip HUD 现在是左 / 中 / 右三栏结构，主 HUD 绑定改为读取预制节点，不再为统计卡、升级按钮或 Leave 按钮运行时创建兜底资源。
-- 已按逻辑验证完成单桌 `8` 人满员链路审查：场景确认为 `8` 个 Seat，自动分配 / 满员等待 / 空位释放后再分配 / 重生回座 / 离服清理链路闭环成立。
-- 已补等待队列边界：等待玩家若在空位出现时角色暂不可坐，不会从等待队列丢失，会继续等待下一轮自动入座。
-- 已落 `M2-01` 桌面沉浸视角首版：平时保持可自由转向的头部第一人称，玩家能低头看到身体；自己的 Flip 期间短暂切到硬币跟随相机，落下后回自由第一人称。
-- 已完成单人 Studio Play sanity：玩家自动坐到 `Seat01`，idle 相机为 `Custom`、镜头贴头、头部透明；Flip 期间相机切到 `Scriptable` 跟硬币，结束后回 `Custom`。
-- 已修正头部姿态弱社交方案：本地相机 pitch / yaw 经 `CharacterSystem` 走 unreliable 上报，服务端限频 / clamp 后平滑驱动角色 `Neck` / `Waist.C0`，利用 Character 复制让服务端和其他客户端可见。
-- 已限制桌面第一人称左右转向：相机和头部姿态 yaw 相对 `HumanoidRootPart` clamp 到 `-90° ~ 90°`；同时客户端拦截默认 idle 动画轨道，避免长时间不动自动播放 idle 摆动。
-- 已完成 `M2-03` 单人重生再绑定回归：重生后相机仍回到 `Custom`，角色重新坐回 `Seat01`，HUD 与桌面绑定没有掉线。
-- 已完成 `M4-01 / M4-02` Studio 回归：旧 `SeatInfoBillboard` 全部保持关闭，`CoinFlipSpectatorFeed` / `CoinFlipTableOverview` 不再进入主流程可见状态。
-- 正在推进 `M2-02` 后续验证：先做移动端竖屏 HUD 遮挡 / 可读性探针，再视 Studio 能力补 Team Test 观感检查。
-- 已完成竖屏 HUD 压缩首版：触屏竖屏下隐藏 `InputHints`，`SeatLabel` 在竖屏触屏模式下收起，Flip / Result / Upgrade 区块同步压缩，避免按钮和升级项互相挤压。
-- 已尝试 `M2-02` Team Test 入口；本机 Studio 只成功启动单客户端 Play，未拿到第二客户端观察视角。
-- 已完成头部姿态单客户端真实链路探针：移动本地相机后，`Neck` 与 `Waist` 会经本地采样、remote、服务端 Motor6D 写入后发生变化，并能回正。
-- 已补工作流规则：能由 MCP 工具完成的事优先走 MCP，`computer use` 只在 MCP 做不到时兜底。
-- 已完成本轮 `M2-02` 后续尝试：Studio 菜单可切到 `Server & Clients` 并启动 Play，但本机仍只有 `1` 个玩家实例，未形成 B 客户端可观察视角；当前只能保留单客户端链路验证结论。
-- 已做一轮运行态 HUD 可读性 sanity：桌面运行视口下 Flip HUD 三栏、主按钮、升级项与顶部轻量信息可见；设备模拟器手机预设 / 竖屏切换在本轮工具链里未能稳定切入，未作为正式移动端视觉通过结论。
-- 已落同桌轻高光反馈首版：沿用 `CoinFlipSystem.ObservedFlip`，只在其他座位连续 Heads 至少 `2` streak 时给落点加一层短暂金色桌面光圈。
-- 已完成同桌轻高光源码检查与 MCP 单人 Play smoke：玩家仍能自动坐下，未见本次改动相关报错；真双客户端观感仍受本机环境限制。
-- 已完成 `CoinLandingPulse` 预制化收口：Studio `CoinVisuals` 每个座位视觉已补 `LandingPulse` / `StreakPulse`，客户端落点脉冲改为复用预制件，不再运行时创建 Part。
+- 首发方向：单桌 `8` 人弱社交桌面运气游戏；玩家进服后自动分配座位并立即坐下，暂不支持主动离座或手动切桌。
+- 核心循环：玩家面前一个明确的 `FLIP` 主按钮；HUD 点击、`Space`、手柄 `RT` 都走统一 Flip 入口，`Space` 不再触发跳跃或离座。
+- 桌面视角：idle 使用可自由转向的头部第一人称，自己的 Flip 期间临时跟随硬币，落下后回到 idle。
+- 弱社交反馈：其他座位的 flip / streak / 高光只做低噪音反馈；头部姿态经服务端驱动角色关节复制，用户真双客户端验证确认会同步到另一个客户端。
+- 主 UI / Billboard / 世界表现资源以 Studio 预制为目标；代码主要负责读取、绑定、显隐和更新数值。
+- 旧座位 Billboard、复杂观战面板、旧 spectator feed / table overview 已退出主流程。
+- 单桌满员链路按逻辑验证通过：`8` 个座位、自动分配、满员等待、空位释放后再分配、重生回座和离服清理闭环成立。
 
-Next:
+## Decisions
 
-- 若有可用真双客户端环境，补 `M2-02` 真实 B 客户端头部姿态观感检查；当前本机只保留单客户端链路验证结论。
-- 移动端竖屏 HUD 当前仍是源码级收敛 + 桌面运行 sanity；若设备模拟器能稳定切到手机竖屏，再补一次视觉截图/探针。
-- 后续表现收口再处理 `CoinFlipSystem/ui.lua` 剩余 onboarding fallback 与 `AnnouncementSystem/ui.lua` 顶部 banner runtime creation。
-
-Decisions:
-
-- 旧“围观优化版”计划已失效，不继续做多桌大厅、空位抢座引导、离座按钮、手动切桌、复杂观战面板。
+- 旧“围观优化版”计划已失效，不继续做多桌大厅、空位抢座引导、离座按钮、手动切桌或复杂观战面板。
 - 当前核心体验是“进服即坐下，面前一个巨大明确的 `FLIP` 按钮，循环简单但上头”。
 - 弱社交成立：不做强聊天 / 自由移动 / 主动组队，但要让玩家感觉自己坐在一张正在发生事的桌上。
-- 桌面沉浸视角前置，不排到最后；首发采用项目内两态相机：idle 是可自由转向的头部第一人称，自己的 Flip 期间才临时 `Scriptable` 跟硬币，先不接第三方 `Open FPC`。
+- 桌面沉浸视角前置；首发采用项目内两态相机，不接第三方 `Open FPC`。
 - 头部姿态只是弱互动反馈，不做全身 IK；采用服务端驱动角色关节 C0，客户端只上报相机相对身体的 pitch / yaw。
 - 玩家重生后应重新回到可用座位，不进入自由行走态。
-- 首发只有一张主桌，最大 `8` 人；满桌时做等待 / 降级处理。
-- “资源全部预制到 Studio”的口径是主资源预先存在，代码只负责读、绑、显隐、改字、改值。
-- 由于本机 Studio 难以稳定开启 `8` 个客户端，单桌满员这类高资源场景不强求实机 Team Test；采用源码状态机审查、场景资源检查、单客户端 sanity 与必要边界补丁作为可接受验证。
+- 复杂客户端视觉、多客户端、移动端设备或 Studio-only 观感验证交由用户手动确认；Codex 不用不稳定工具强行给出视觉通过结论，只记录可自动覆盖的源码 / 单客户端 sanity 和用户回传结果。
 
-Milestone Outline:
+## Known Follow-Ups
 
-- `M0` 范围冻结与资源清点：停掉旧围观方向，明确 HUD / 输入 / 相机 / 座位资源清单。
-- `M1` 单桌自动入座与强制坐席：服务端在唯一主桌分配空座位，`PlayerAdded / CharacterAdded` 后自动坐下，禁用离座、跳跃离座和 AFK 踢座主路径。
-- `M2` 桌面沉浸相机：优先保证桌面、自己的硬币、同桌轻量反馈可读；覆盖坐姿、头部遮挡、穿模、重生再绑定。
-- `M3` Flip 输入统一：HUD 点击、`Space`、手柄 `RT` 都走同一个 `RequestFlip` 入口，`Space` 不再导致跳跃。
-- `M4` HUD 重做与旧表现清理：删除旧座位 Billboard、spectator feed、table overview、复杂 featured seat 表现，HUD 改成 Studio 预制绑定，并补轻量同桌反馈。
-- `M5` 回归验证与文档续写：覆盖单人、单桌 `8` 人满员、重生、桌面视角和三输入。
-
-Current Code Conflicts To Remove:
-
-- `CoinFlipSystem/ui.lua` 仍保留 onboarding fallback 节点，这些是后续表现收口项，不影响当前主流程。
-- `AnnouncementSystem/ui.lua` 仍运行时创建顶部 banner；若首发最终改为纯预制表现，这块需要再收。
-- `ReplicatedFirst/LoadingScreen/Loader.lua` 仍有加载屏 runtime creation，属于更后面的预制化统一项。
-
-M0-03 Resource Freeze:
-
-- Current `StarterGui.Main.Elements` includes `CoinFlipHUD`、`CoinFlipOnboarding`、`CoinFlipTableOverview`、`CoinFlipSpectatorFeed` and `_backup` variants.
-- Current `CoinFlipHUD` includes `Content.LeftPanel`、`Content.CenterPanel`、`Content.RightPanel`。
-- `LeftPanel` includes Cash / Streak cards, `CenterPanel` includes `SeatLabel`、`ResultLabel`、`FlipButton`、`InputHints.SpaceHint`、`InputHints.GamepadRTHint`，`RightPanel` includes Chance / Speed cards and four upgrade buttons.
-- Legacy `Stats` / `Actions` containers may still exist under `Content` as hidden compatibility leftovers, but the active HUD binding no longer reads them.
-- Current `Workspace.CoinFlipTable` includes `Seats.Seat01` through `Seat08`、`Prompt`、`SeatInfoBillboard`、`Attachments`、`Assets.CoinVisuals`、`TableTop`、`TableBase`、`SpectatorZone`.
-- Each `Assets.CoinVisuals.SeatXXCoinVisual` now includes `Coin`、`Shadow`、`LandingPulse`、`StreakPulse` prebuilt parts.
-- New `CoinFlipHUD` should be Studio-prebuilt with `LeftPanel` cash / streak cards, `CenterPanel` flip button / result / input hints, and `RightPanel` chance / speed cards plus four upgrade buttons.
-- Each upgrade button should be prebuilt with `Title`、`Level`、`Cost`、`UICorner`、`UIStroke` and text constraints.
-- Input hint nodes should be prebuilt as `SpaceHint` and `GamepadRTHint`.
-- Camera module boundary: module under `StarterPlayer.StarterPlayerScripts.Modules.FirstPersonCamera` or equivalent; project adapter in `StarterPlayer.StarterPlayerScripts` or `CoinFlipSystem` client init; camera module only owns local camera, mouse behavior, local transparency, and respawn rebinding.
-- Seat resources to keep: `Workspace.CoinFlipTable.Seats` as automatic seat pool, `Attachments` as visual / camera anchors, `Assets.CoinVisuals` as coin visual presets.
-- Resources exiting the launch path: seat `Prompt` main flow, `SeatInfoBillboard`, `CoinFlipTableOverview`, `CoinFlipSpectatorFeed`, complex `featured seat`, spectator / audience presentation, empty-seat prompt onboarding.
-- Replacement presentation direction: one strong center `FLIP` button plus low-noise table signals for other seats, streak spikes, and all-table hype moments.
-- Runtime creation points still left in `CoinFlipSystem/ui.lua`: onboarding fallback nodes, table overview rows, legacy overview subtitle / empty label, and text / size constraints for non-main-HUD legacy paths.
-- `AnnouncementSystem/ui.lua` still creates the top banner at runtime. If launch keeps announcements, add a Studio-prebuilt banner template; otherwise remove this presentation path in cleanup.
-- `ReplicatedFirst/LoadingScreen/Loader.lua` still has loading-screen runtime creation. It is not blocking `M0-03`, but belongs in a later cleanup if the prebuilt-resource rule expands to loading UI.
-
-Task Table:
-
-| ID | Module | Priority | Status | Acceptance / Current Note | Updated |
-| --- | --- | --- | --- | --- | --- |
-| `M0-01` | 进度文档重置 | `P0` | `已完成` | 旧围观计划已清空，新需求口径已重置 | 2026-04-19 |
-| `M0-02` | 第一人称社区检索 | `P0` | `已完成` | `Open FPC` 可作为优先评估候选 | 2026-04-19 |
-| `M0-03` | Studio 资源清单冻结 | `P0` | `已完成` | 已确认预制资源、待退场旧资源、新 HUD 预制结构、输入提示节点与相机模块边界 | 2026-04-19 |
-| `M1-01` | 自动分配空座位 | `P0` | `已完成` | 逻辑验证确认 `8` 座顺序分配、满员等待、空位释放后再分配闭环成立 | 2026-05-01 |
-| `M1-02` | 自动坐下链路 | `P0` | `已完成` | 自动入座已接 `PlayerAdded / CharacterAdded` 与脱座回拉逻辑，单人 sanity 通过 | 2026-05-01 |
-| `M1-03` | 禁止离座与跳座 | `P0` | `进行中` | 已关闭 `RequestStand` 主路径、禁用跳跃状态与触屏跳跃按钮 | 2026-04-19 |
-| `M1-04` | 旧 prompt / AFK 逻辑退场 | `P1` | `进行中` | 已停掉客户端 `PromptShown` 主链路、服务端 AFK 踢座已关闭 | 2026-04-19 |
-| `M2-01` | 桌面沉浸视角评估 | `P0` | `已完成` | 已落两态相机：idle 头部第一人称可自由转向，自己的 Flip 期间跟随硬币，落下后回 idle | 2026-05-03 |
-| `M2-02` | 视角回退方案 | `P1` | `进行中` | 平时保留自由第一人称但 yaw 限制为 `-90° ~ 90°`；硬币跟随只在本地 Flip 期间接管；头部姿态由服务端驱动 Character 关节复制给同桌玩家 | 2026-05-03 |
-| `M2-03` | 重生与再绑定 | `P0` | `已完成` | 单人重生后再绑定已通过，HUD / 相机 / 坐席状态恢复正常；Team Test 归入 `M2-02` | 2026-05-04 |
-| `M3-01` | `Space` Flip 绑定 | `P0` | `进行中` | 已通过 `ContextActionService` 接到统一 Flip 入口 | 2026-04-19 |
-| `M3-02` | 手柄 `RT` Flip 绑定 | `P0` | `进行中` | 已通过 `ContextActionService` 接到统一 Flip 入口 | 2026-04-19 |
-| `M3-03` | HUD 点击 Flip 统一入口 | `P0` | `进行中` | HUD 点击、`Space`、`RT` 统一走 `requestFlip()` | 2026-04-19 |
-| `M4-01` | 移除旧座位 BillboardGui | `P0` | `已完成` | Studio 回归确认旧 `SeatInfoBillboard` 保持关闭，不再进入主流程 | 2026-05-04 |
-| `M4-02` | 移除旧围观 HUD 链路 | `P0` | `已完成` | Studio 回归确认 `CoinFlipSpectatorFeed`、`CoinFlipTableOverview`、复杂 featured seat 表现不再可见 | 2026-05-04 |
-| `M4-03` | 新 Flip HUD 预制资源 | `P0` | `已完成` | 已补 Studio 预制三栏结构：左侧 Cash/Streak，中间 Flip/结果/输入提示，右侧 Chance/Speed/四升级 | 2026-05-01 |
-| `M4-04` | HUD 绑定改为预制模式 | `P0` | `已完成` | 主 HUD 已改为读取预制节点，不再为统计卡、升级按钮或 Leave 按钮运行时创建兜底资源 | 2026-05-01 |
-| `M5-01` | 单人首轮回归 | `P0` | `已完成` | 单人 Play 确认自动坐下、HUD 可见，`Space` / HUD 点击 / `RT` 均可 Flip | 2026-05-01 |
-| `M5-02` | 单桌满员验证 | `P0` | `已完成` | 按逻辑验证口径通过：`8` 个座位、等待队列、空位再分配、重生回座与离服清理链路成立 | 2026-05-01 |
-| `M5-03` | 文档续接维护 | `P0` | `进行中` | 每轮实现后都回写本文件的状态、决策与测试结论 | 2026-05-01 |
-
-Status values:
-
-- `未开始`
-- `进行中`
-- `已完成`
-- `阻塞`
-
-## Validation Log
-
-### 2026-04-19 资源审计
-
-- Checked `StarterGui.Main.Elements`、`Workspace.CoinFlipTable`、活跃系统运行时创建点与旧围观链路。
-- Found existing `CoinFlipHUD`、`CoinFlipOnboarding`、`CoinFlipTableOverview`、`CoinFlipSpectatorFeed` and backups.
-- Found `CoinFlipHUD` 仍缺升级区等预制节点，`CoinFlipSystem/ui.lua` 仍靠 fallback 创建主节点。
-- Found `Seat01` 到 `Seat08` 仍带 `Prompt` 和 `SeatInfoBillboard`。
-- Result: `M0-03` completed; feeds `M4-01` through `M4-04`.
-
-### 2026-04-19 自动入座代码级校验
-
-- `TableSeatSystem` 已新增空座位选择与自动入座重试逻辑。
-- 新玩家进入时绑定 `CharacterAdded`，角色可用后自动调用 `RequestSit`。
-- 座位 `Prompt` 在代码路径里会被强制禁用，不再作为主流程入口。
-- `rojo build --output build-test.rbxlx` passed.
-- Remaining risk: 未做 Studio Play 真机回归；临时 `build-test.rbxlx` 当时因路径访问被拒绝未删除。
-
-### 2026-04-19 强制坐席代码级校验
-
-- 座椅 `Occupant` 变空时，若玩家仍存活，会重新进入自动入座流程。
-- `RequestStand` 不再触发离座清理，而是回到自动入座逻辑。
-- 服务端和客户端都禁用跳跃状态，触屏 `JumpButton` 已隐藏。
-- HUD 默认提示改成自动分配和 Flip 口径。
-- `rojo build --output build-test-2.rbxlx` passed.
-- Remaining risk: `LeaveSeatButton` 资源和 fallback 函数仍在，真正删链路放到 `M4`。
-
-### 2026-04-19 旧 prompt 退场与 Flip 输入统一代码级校验
-
-- 服务端不会再因 AFK 定时器把在线玩家踢离座位。
-- 客户端不再依赖座位 `Prompt` 作为 onboarding 或主交互入口。
-- `Space` 与手柄 `RT` 已通过 `ContextActionService` 接入，与 HUD 点击共享 `requestFlip()`。
-- `rojo build --output /tmp/flipacoin-codex-build.rbxlx` passed.
-- Remaining risk: spectator / overview / billboard 链路仍待 `M4` 清理。
-
-### 2026-04-19 单人 Studio Play 首轮回归
-
-- 玩家进入 Play 后自动落到 `Workspace.CoinFlipTable.Seats.Seat05`。
-- 角色 `Humanoid.Sit = true`，`JumpHeight = 0`。
-- `Space` 成功触发真实 Flip，HUD 返回 `Heads! +$ 7`。
-- 手柄 `RT` 成功触发真实 Flip，HUD 返回 `Tails! +$ 1 | Streak reset...`。
-- 两次输入后玩家都保持坐席。
-- Remaining risk: 只覆盖单人单桌，未覆盖重生、单桌 `8` 人满员。
-
-### 2026-04-20 第一人称 head-camera 定向回归
-
-- 第一人称从 `LockFirstPerson` 改为项目内 head-camera fallback。
-- Runtime check: `cameraToHeadDistance = 0`、`headHidden = 1`、`upperTorsoHidden = 0`、`mouseBehavior = Default`。
-- `Space` 在第一人称下仍可正常 Flip，角色保持坐席。
-- 重生后第一人称恢复，头部隐藏、身体可见。
-- Remaining risk: 使用项目内 fallback，不是 `Open FPC`。
-
-### 2026-04-20 重生回座位联动回归
-
-- 玩家进入后 HUD 显示 `Click FLIP, press Space, or press RT to flip.`。
-- `Space` 触发后 HUD 返回真实结算文案。
-- 角色重生后 `HumanoidState = Seated`。
-- HUD 重生后重新可见。
-- Runtime check: `cameraToHeadDistance = 0`、`hudVisible = true`。
-- Remaining risk: 单桌 `8` 人满员与等待 / 降级还没有实机覆盖。
-
-### 2026-05-01 旧桌面表现退场代码级校验
-
-- `TableSeatSystem` 的旧 `refreshSeatBillboards()` 已替换为 `disableSeatBillboards()`，保留座位状态同步，不再写入 Billboard 文案。
-- `CoinFlipSystem/ui.lua` 不再 `WaitForChild("SeatInfoBillboard")`，旧世界 Billboard 聚焦逻辑只会隐藏旧 Billboard。
-- `CoinFlipSpectatorFeed` 和 `CoinFlipTableOverview` 当前保持隐藏，不再进入主流程可见 UI。
-- `git diff --check` 通过。
-- Remaining risk: 尚未做 Studio Play 视觉回归，无法确认 Studio 内所有旧 Billboard 预制实例都被正确隐藏。
-
-### 2026-05-01 预制版 Flip HUD 首版回归
-
-- Studio `StarterGui.Main.Elements.CoinFlipHUD` 已补 `LeftPanel / CenterPanel / RightPanel` 三栏结构。
-- `LeftPanel` 绑定 Cash / Streak，`CenterPanel` 绑定 SeatLabel / ResultLabel / FlipButton / SpaceHint / GamepadRTHint，`RightPanel` 绑定 Chance / Speed 与四个升级按钮。
-- `CoinFlipSystem/ui.lua` 主 HUD 绑定已改为读取预制节点，不再为统计卡、升级按钮或 Leave 按钮运行时创建兜底资源。
-- 单人 Studio Play：玩家自动坐到 `Seat01`，HUD 可见，角色保持坐席。
-- `Space`、HUD 点击 `FLIP`、手柄 `RT` 均触发真实 Flip 结算，HUD Cash / streak / chance / speed / upgrade cost 文案正常更新。
-- `git diff --check` 通过。
-- Remaining risk: 仍未覆盖单桌 `8` 人满员；旧 overview / onboarding / announcement 的运行时 UI 创建点尚未统一预制或删除。
-
-### 2026-05-01 单桌满员逻辑验证
-
-- 验证口径调整：本机不强求开启 `8` 个 Studio 客户端，满员类验证采用逻辑审查 + 资源检查 + 单客户端 sanity。
-- Studio 资源检查：`Workspace.CoinFlipTable.Seats` 下存在 `8` 个 `Seat`。
-- 自动分配逻辑：`_FindOpenSeatKey()` 优先保持玩家当前座位，否则按 `_seatOrder` 找第一个无有效 owner 的座位。
-- 满员等待逻辑：无空位时 `_QueueAutoSeat()` 在重试后设置 `_playersWaitingForSeat[userId] = true` 并进入 `_seatWaitQueue`，客户端 seatState 会显示 `assignmentStatus = "full"`。
-- 空位释放逻辑：`clearSeatOwnership()` 清理 owner / player seat / activity 后调用 `_TryAssignWaitingPlayers()`，队头玩家会重新进入 `_QueueAutoSeat()`。
-- 重生回座逻辑：`CharacterAdded` 会重新 `_QueueAutoSeat()`；座椅 `Occupant` 为空但玩家仍存活时也会 defer 回拉自动入座。
-- 离服清理逻辑：`PlayerRemoving` 会断开 CharacterAdded、清 auto-seat token、移除等待队列项，再释放座位并广播。
-- 已补边界：等待玩家若在空位出现时角色暂不可坐，会继续留在等待队列，不再只 warn 后丢失等待状态。
-- 单客户端 sanity：启动后 HUD 可见、玩家坐在 `Seat01`、提示为 `Click FLIP, press Space, or press RT to flip.`。
-- `git diff --check` 通过。
-- Remaining risk: 未做真实网络延迟下多客户端竞争实测；后续若出现线上抢座异常，优先检查 `_seatOwners` 与实际 `Seat.Occupant` 的同步时序。
-
-### 2026-05-03 两态第一人称相机 sanity
-
-- `StarterPlayerScripts/Modules/FirstPersonCamera.lua` 保持文件名不变，但语义改为两态第一人称相机。
-- Idle：`camera.CameraType = Custom`，镜头每帧贴到头部位置，保留 Roblox 默认相机输入；头和配件本地透明，身体可见。
-- 本地 Flip：`CoinFlipSystem/ui.lua` 在自己的 `playCoinVisual()` 里调用 `FirstPersonCamera.FollowCoin()`，相机临时 `Scriptable` 并从头部视角看向硬币；`ObservedFlip()` 不触发相机跟随。
-- 单人 Studio Play 客户端探针：idle `cameraToHeadDistance = 0`、`headHidden = 1`、`FieldOfView = 70`；Flip 期间采到 `Scriptable` / FOV `68`，看向硬币点积最高约 `0.9999`；结束后回 `Custom` / FOV `70`。
-- Remaining risk: 未覆盖重生后再绑定、所有 `8` 个座位硬币跟随观感、移动端竖屏遮挡和真实多客户端观感。
-
-### 2026-05-03 头部姿态同步代码级校验
-
-- `SystemMgr` 的 unreliable 判断已改为读取第一个 payload table 的 `unreliable` 字段，移除旧的 varargs 包装表误判。
-- `FirstPersonCamera` 以约 `12Hz` 采样相机相对角色根部的 pitch / yaw，并通过 `CharacterSystem.Server:HeadPoseChanged({ unreliable = true })` 发送。
-- 初版采用服务端 `AllClients` unreliable 广播、客户端本地改关节，实测服务端不可见，其他客户端也没有稳定看到表现。
-- 已改为服务端按发送者 player 限频 / clamp 后在 Heartbeat 平滑改该角色 `Neck` 和可选 `Waist.C0`，超时约 `0.6s` 回正，利用 Character 属性复制让服务端和其他客户端可见。
-- 单人 Studio Play 探针：通过真实 `CharacterSystem.Server:HeadPoseChanged()` Remote 连续上报后，客户端读到复制回来的 `Neck.C0` / `Waist.C0` 均发生非零变化，并在约 `1s` 后回正；idle 相机仍为 `Custom`、镜头贴头、头透明、身体可见。
-- 补充优化：`FirstPersonCamera` 会把相机 look vector 相对 `HumanoidRootPart` 的 yaw clamp 到 `-90° ~ 90°`；`StarterCharacterScripts/char.client.lua` 拦截默认 `Animate.idle` / `Idle` 优先级轨道并立即停止。
-- Remaining risk: 尚未做真实双客户端 Team Test，无法从 B 客户端视觉确认 A 玩家摇头 / 点头幅度是否需要调参。
-
-### 2026-05-05 M2-02 Team Test 尝试与头部姿态链路探针
-
-- Team Test 尝试：从 Studio 顶部 `Test` 下拉选择 `Team Test / Server & Clients` 后启动 Play，本机仍只创建 `1` 个玩家实例，未形成可观察 B 客户端视角。
-- 单客户端链路验证：通过脚本实际改本地相机朝向，触发 `FirstPersonCamera` 采样并上报 `CharacterSystem:HeadPoseChanged()`，随后客户端读回本角色 `Neck.C0` 与 `Waist.C0` 均发生变化。
-- 回正验证：相机回到正向后，`Neck.C0` 与 `Waist.C0` 均从变更态回正，说明服务端 Heartbeat 超时 / 目标回零链路有效。
-- Remaining risk: 仍未从第二客户端肉眼确认 A 玩家点头 / 摇头幅度；后续若设备允许双客户端，应优先补这个观感项。
-
-### 2026-05-05 Server & Clients 与 HUD 可读性补探针
-
-- 从 Studio 顶部 `Test` 菜单切到 `Server & Clients` 后用 `F5` 启动 Play。
-- 运行后 `RunService:IsRunning() = true`，但 `Players:GetPlayers()` 仍只有 `MagicalHailuo` 一个玩家，未形成真实 B 客户端窗口或第二玩家实例。
-- 桌面运行视口下，Flip HUD 三栏、主按钮、升级项与顶部轻量信息可见，没有明显互相遮挡；这只算桌面 / 窄视口 sanity，不等于手机竖屏正式视觉验收。
-- 本轮未能稳定切入 Studio 手机设备预设 / 竖屏模式；移动端竖屏仍保留为后续设备条件满足时的补验项。
-
-### 2026-05-05 同桌轻高光反馈 smoke
-
-- `CoinFlipSystem.ObservedFlip` 仍沿用既有服务端观众广播；客户端只在观察到其他玩家 `Heads` 且 streak 至少为 `2` 时额外生成一层短暂金色落点光圈。
-- Studio MCP 确认 `CoinFlipSystem.Presets` 可正常 require，新视觉常量读取为 `StreakPulseMinimum = 2`、`StreakPulseEndSize = 3.8`、`StreakPulseDuration = 0.38`。
-- 单人 Play smoke：`RunService:IsRunning() = true`、`Players:GetPlayers() = 1`、玩家已自动坐下；控制台未见本次改动相关错误。
-- Remaining risk: 本机仍没有真实 B 客户端，无法肉眼确认其他玩家视角下的同桌 streak 光圈强度，后续有双客户端环境时补观感调参。
-
-### 2026-05-05 CoinLandingPulse 预制化 smoke
-
-- Studio MCP 已给 `Workspace.CoinFlipTable.Assets.CoinVisuals` 下 8 个 `SeatXXCoinVisual` 全部补齐 `LandingPulse` / `StreakPulse`，默认透明。
-- `CoinFlipSystem/ui.lua` 的落点脉冲改为 `WaitForChild("LandingPulse")` / `WaitForChild("StreakPulse")` 并复用 tween，不再 `Instance.new("Part")`。
-- MCP 单人 Play smoke：玩家自动坐下，`Space` 输入发送成功；控制台仍有既有 Studio / 插件 / 排行榜噪声，本次改动路径未观察到缺资源类报错。
-
-## Done
-
-### 2026-05-04 M2-03 重生与再绑定
-
-- Outcome: 单人 Studio Play 验证通过，重生后角色仍自动坐回 `Seat01`，相机回到 `Custom`，HUD 与桌面绑定恢复正常。
-
-### 2026-05-04 M4-01 / M4-02 旧表现清理回归
-
-- Outcome: 单人 Studio Play 验证通过，旧 `SeatInfoBillboard` 保持关闭，`CoinFlipSpectatorFeed` / `CoinFlipTableOverview` 不再进入主流程可见状态。
-
-### 2026-05-04 Docs 收敛与旧 Markdown 清理
-
-- Outcome: `docs/` 收敛为 `FRAMEWORK.md`、`PROJECT_LOGIC.md`、`TASK_STATE.md` 三份核心文档；旧策划、旧路线图、旧执行进度、旧系统拆分和旧架构梳理 Markdown 已删除，旧引用已改为核心文档说明。
-
-### 2026-05-01 文档状态迁移
-
-- Outcome: 新建 `docs/TASK_STATE.md`，把当前执行状态、任务表、决策、验证记录与后续项从旧进度文档迁入。
-- Source: 旧执行进度与旧路线图内容已迁移到 `TASK_STATE.md`，项目运行事实已迁移到 `PROJECT_LOGIC.md`。
-
-### 2026-05-01 产品方向校准
-
-- Outcome: 明确首发不是多桌大厅或强社交 simulator，而是单桌 `8` 人、弱社交、高频 Flip、强按钮反馈的桌面运气游戏。
-- Follow-up: 文档与后续实现都应优先服务“进服即坐下，面前一个巨大明确的 `FLIP` 按钮，短循环升级与 streak 情绪曲线”。
+当前没有明确排期的 follow-up。等待用户基于当前版本补充新的任务。
 
 ## Backlog / Ideas
 
 - `P2` 首发成长闭环：轻量 `RebirthSystem`、`CoinLoadoutSystem`、6 枚首发功能硬币、Auto Flip、少量每日目标、Profile XP。
 - `P3` 首发表现与运营：庆祝 VFX / SFX、桌面轻表情 / cheer、基础商城和 gamepass、核心埋点、移动端和触屏适配。
 - 可评估极简决策点：高 streak 后出现 `Cash Out` / `Double` / bonus choice，但不要破坏“一键 Flip”的主循环。
-- `P4 / v1.1`：Fate Cards、更完整个性化外观、私人桌主题、排行榜扩展、赛季化内容。
-- 清理旧 `TODO.md`、旧武器 / 锻造方向、`BaseSystem` 相关过时描述时，优先以当前代码和 `PROJECT_LOGIC.md` 为准。
+
+## Done
+
+### 2026-05-08 HTML UI redesign for rebirth / shop / inventory
+
+- Outcome: 将 `flip_a_coin_ui_design.html` 更新为新的静态 HTML UI 原型，覆盖主界面、重生、商店、背包；设计围绕当前单桌桌面视角和强 `FLIP` 主按钮，新功能通过左侧图标入口打开覆盖层。
+- Validation: `git diff --check` 通过；锚点目标检查通过；必需页面区块检查通过。Codex in-app browser 后端本轮不可用，未能做实际浏览器截图验证。
+
+### 2026-05-08 LoadingScreen legacy 退场
+
+- Outcome: 删除未启用的 `src/ReplicatedFirst/LoadingScreen` 旧加载屏目录；当前启动链只保留 `Loading.client.lua` 挂载 `RobStar`。同时清理了 `Loading.client.lua` 与 `RobStar.LocalScript` 中指向旧 LoadingScreen / Loader 的注释引用，并同步 `PROJECT_LOGIC.md`。
+- Validation: `git diff --check` 通过；引用扫描确认源码不再引用旧 `LoadingScreen` / `Loader.lua` 主路径；`rojo build --output /private/tmp/flipacoin-loading-check.rbxlx` 通过。
+
+### 2026-05-08 Announcement banner runtime creation 收口
+
+- Outcome: `AnnouncementSystem/ui.lua` 不再运行时创建顶部 `StreakAnnouncementBanner`；streak 播报保留 `uiController.SetNotification` 与可选音效。`PROJECT_LOGIC.md` 已同步为轻量 notification / sound 反馈口径。
+- Validation: `git diff --check` 通过；引用扫描确认 `AnnouncementSystem/ui.lua` 已无 `Instance.new`、`TweenService`、`StreakAnnouncementBanner`、banner UI 子节点残留。
+
+### 2026-05-08 CoinFlip onboarding fallback 收口
+
+- Outcome: `CoinFlipSystem/ui.lua` 不再绑定旧 `CoinFlipOnboarding` guide 子节点，也不再运行时创建 `ProgressText` / `Steps` / step chip；客户端只查找旧面板并保持隐藏。`PROJECT_LOGIC.md` 已同步为“服务端 onboarding 状态仍用于头顶文案和漏斗埋点，主 HUD 不再显示旧 guide 面板”。
+- Validation: `git diff --check` 通过；引用扫描确认旧 onboarding runtime creation 关键词不再存在于 `CoinFlipSystem/ui.lua`。`stylua --check` 未执行成功，因为当前 Aftman 配置未声明 stylua。
+
+### 2026-05-08 单桌桌面 Flip 核心体验收口
+
+- Outcome: 完成单桌 `8` 人方向校准、自动入座、强制坐席、统一 Flip 输入、两态第一人称相机、重生再绑定、头部姿态同步、旧 Billboard / 观战 UI 退场、三栏 Flip HUD 预制绑定、同桌轻高光与 coin pulse 预制化。
+- Validation: 单人 Studio Play 覆盖自动坐下、HUD、`Space` / HUD 点击 / `RT` Flip、重生回座、旧表现隐藏；单桌满员采用源码状态机审查 + 资源检查 + 单客户端 sanity；用户真双客户端验证确认头部姿态同步。
+
+### 2026-05-08 验证边界规则收口
+
+- Outcome: 已明确复杂客户端视觉、多客户端、移动端设备或 Studio-only 验证不作为 Codex 自动化阻塞项；Codex 记录可行验证，最终观感由用户手动确认并回写。
+
+### 2026-05-06 新对话启动路由优化
+
+- Outcome: 新增 `docs/BOOTSTRAP.md` 作为低成本启动路由；`AGENTS.md`、`FRAMEWORK.md`、`PROJECT_LOGIC.md` 已改为先读 bootstrap 和 `TASK_STATE.md` Active，再按任务类型读取相关章节。
+
+### 2026-05-04 Docs 收敛与旧 Markdown 清理
+
+- Outcome: `docs/` 收敛为 `FRAMEWORK.md`、`PROJECT_LOGIC.md`、`TASK_STATE.md` 三份核心文档；旧策划、旧路线图、旧执行进度、旧系统拆分和旧架构梳理 Markdown 已删除，旧引用已改为核心文档说明。
+
+### 2026-05-01 文档状态迁移与产品方向校准
+
+- Outcome: 新建 `docs/TASK_STATE.md` 并迁入当时的执行状态、任务表、决策、验证记录与后续项；明确首发不是多桌大厅或强社交 simulator，而是单桌 `8` 人、弱社交、高频 Flip、强按钮反馈的桌面运气游戏。
 
 ## Maintenance Rules
 

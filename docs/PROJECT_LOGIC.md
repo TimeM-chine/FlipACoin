@@ -6,11 +6,11 @@
 
 这份文档是给“新开 agent 窗口 / 新协作者”快速接管项目用的运行地图，不是策划案，也不是理想化架构说明。
 
-新窗口建议按这个顺序读：
+新窗口建议先走轻量启动路由：
 
-1. `docs/FRAMEWORK.md`
-2. `docs/PROJECT_LOGIC.md`
-3. `docs/TASK_STATE.md`
+1. `docs/BOOTSTRAP.md`
+2. `docs/TASK_STATE.md` 的 `## Active`
+3. 按任务类型再读本文相关章节或 `docs/FRAMEWORK.md` 相关章节
 4. 需要落代码时，再回到对应系统源码核实
 
 如果文档和代码冲突：
@@ -139,6 +139,7 @@ FlipACoin
   - 移除默认 Loading Screen
   - 把 `ReplicatedFirst.RobStar` 挂到 `PlayerGui`
   - 这是最早可见的加载体验
+  - 旧 `ReplicatedFirst.LoadingScreen` 已删除；不要再接回旧 `Loader.lua` 路径
 
 玩家脚本阶段：
 
@@ -384,7 +385,7 @@ FlipACoin
 客户端当前负责：
 
 - 显示 Flip HUD
-- 显示首局引导面板与按钮聚焦
+- 隐藏旧 `CoinFlipOnboarding` 面板，不再渲染首局 guide 浮层或按钮聚焦
 - 响应式布局
 - 让玩家面前的 `FLIP` 主按钮足够明确
 - 展示 Cash、streak、chance、speed、四项升级
@@ -407,7 +408,7 @@ FlipACoin
 
 当前额外要记住：
 
-- 首局引导链应围绕“进服即坐下，直接 Flip”：
+- 服务端仍维护首局引导链，主要用于头顶文案和漏斗埋点；客户端主 HUD 不再显示旧 guide 面板。引导链围绕“进服即坐下，直接 Flip”：
   - 自动入座
   - flip `3` 次
   - 购买首次升级
@@ -423,7 +424,7 @@ FlipACoin
   - `StarterCharacterScripts/char.client.lua` 会拦截默认 `idle` 动画轨道，避免玩家长时间不动时自动播放默认 idle 摆动
   - 其他玩家的 `ObservedFlip()` 不触发相机接管，只播放桌面硬币表现
   - 文件名仍沿用旧名，当前暂不重命名，避免扩大启动链改动
-- `SeatInfoBillboard`、`CoinFlipTableOverview`、`CoinFlipSpectatorFeed`、复杂 featured seat 表现都不再是首发主路径，当前代码级退场首版已把它们保持隐藏
+- `SeatInfoBillboard`、`CoinFlipTableOverview`、`CoinFlipSpectatorFeed`、旧 `CoinFlipOnboarding` 面板、复杂 featured seat 表现都不再是首发主路径，当前代码级退场首版已把它们保持隐藏
 - 但“弱社交”不等于完全无同桌反馈：保留或重做低噪音桌面信号，让玩家知道另外 7 个座位也在发生 Flip
 - `PlayerSystem:UpdatePlayerHeadGui()` 现在也会在引导期间把头顶文案切到当前下一步动作
 - 引导细状态写在 `guideData.coinFlipOnboarding`
@@ -440,13 +441,13 @@ FlipACoin
 
 当前职责：
 
-- 当 `CoinFlipSystem` 出现正面且 streak 到阈值时，生成高光播报
+- 当 `CoinFlipSystem` 出现正面且 streak 到阈值时，生成轻量播报
 - 当前阈值是：
   - `4`
   - `6`
   - `8`
   - `10`
-- 客户端动态创建顶部 banner，并通过 `uiController.SetNotification` 再打一层通知
+- 客户端不再动态创建顶部 banner；当前只通过 `uiController.SetNotification` 和可选音效做低噪音反馈
 
 当前依赖关系：
 
@@ -750,8 +751,10 @@ FlipACoin
 
 - `docs/FRAMEWORK.md`
   - SystemMgr 框架机制、生命周期、桥接约定和编码习惯
+- `docs/BOOTSTRAP.md`
+  - 新对话启动路由：先读什么、什么时候再读框架或项目事实
 - `docs/PROJECT_LOGIC.md`
-  - 运行地图，优先级最高
+  - 项目事实运行地图；判断当前玩法、系统和资源事实时优先看这里
 - `docs/TASK_STATE.md`
   - 当前 active 任务、下一步、决策、验证记录和 backlog 的唯一实时状态源
 

@@ -2,25 +2,27 @@
 
 ## First Read
 
-Before answering questions about this repository or making changes in it, read **in this order**:
+Before answering questions about this repository or making changes in it, use this startup route:
 
-1. `docs/FRAMEWORK.md` — the generic SystemMgr framework (shared across all projects built on this framework). Covers system registration, bridge pattern (`self.Client / AllClients / Server`), `whiteList`, `SENDER`, lifecycle orchestration, data layer (ProfileService → DataManager → PlayerServerClass → ClientData), standard system file layout, **and the canonical coding-habits checklist in §8 — read it before writing Luau in this repo**.
-2. `docs/PROJECT_LOGIC.md` — this repository's specific facts: active systems list, gameplay main loop, project constants, persisted schema, known legacy quirks, lookup table.
-3. `docs/TASK_STATE.md` — current active tasks, progress, decisions, backlog (cross-session / cross-device handoff log). Check `## Active` before starting work so you do not duplicate or contradict in-flight work.
+1. `docs/BOOTSTRAP.md` — the cheap startup router for deciding which docs are needed.
+2. `docs/TASK_STATE.md` — read only the `## Active` section first so you do not duplicate or contradict in-flight work.
+3. Read `docs/FRAMEWORK.md` / `docs/PROJECT_LOGIC.md` by task type, as routed by `BOOTSTRAP.md`.
 
 Rule of thumb:
 
-- If it's about **how the framework itself works** → `FRAMEWORK.md`.
-- If it's about **what this specific repo has / does** → `PROJECT_LOGIC.md`.
-- If it's about **what we're currently doing** → `TASK_STATE.md`.
+- If you will write Luau → read `FRAMEWORK.md` §8 before editing.
+- If it's about **how the framework itself works** → read the relevant `FRAMEWORK.md` sections; read the full file for core framework changes.
+- If it's about **what this specific repo has / does** → read the relevant `PROJECT_LOGIC.md` sections.
+- If it's about **what we're currently doing** → start with `TASK_STATE.md` `## Active`, then read deeper only as needed.
 
 ## Working Rules
 
-- Use `docs/PROJECT_LOGIC.md` first for orientation, then verify details in source files before making assumptions.
+- Use `docs/BOOTSTRAP.md` first for orientation, then verify details in source files before making assumptions.
 - If the document and current code disagree, trust the current code and update the document when appropriate.
 - Do not assume every directory under `src/ReplicatedStorage/Systems` is active; check `SystemMgr.lua`.
 - For code-only Luau changes, do not run `rojo build` as validation; the Rojo structure is already known-good. Reserve Rojo build checks for project mapping, instance tree, asset structure, or Rojo config changes.
 - If an operation can be completed with an MCP tool, prefer MCP over Codex `computer use`; use `computer use` only when MCP cannot do the job.
+- For complex client-side visual, multi-client, mobile-device, or Studio-only validation that MCP / automation tools cannot verify reliably, do not force a weak automated conclusion. Record source review and feasible single-client sanity checks, then leave final visual / feel validation to the user and write back the user's result when provided.
 
 ### Task State Maintenance (`docs/TASK_STATE.md`)
 
@@ -76,9 +78,10 @@ The **canonical coding-habits checklist is `docs/FRAMEWORK.md` §8** (30 items).
 
 ## Separation Of Concerns
 
-Four-tier split. Do not duplicate content across tiers:
+Five-tier split. Do not duplicate content across tiers:
 
 - `AGENTS.md` — cross-tool working rules (reading order, doc maintenance rules, non-negotiable style requirements).
+- `docs/BOOTSTRAP.md` — cheap startup router; tells new conversations what to read next without duplicating project facts.
 - `docs/FRAMEWORK.md` — the SystemMgr framework itself. Portable across all projects built on this framework.
 - `docs/PROJECT_LOGIC.md` — facts specific to this repository (active systems, gameplay, constants, legacy).
 - `docs/TASK_STATE.md` — live task progress and cross-session handoff state.
