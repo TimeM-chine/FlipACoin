@@ -90,6 +90,10 @@ local DefaultData = {
 	ownedCoins = {
 		["Rusty Penny"] = true,
 	},
+	equippedDeskSetup = "Folding Table",
+	ownedDeskSetups = {
+		["Folding Table"] = true,
+	},
 	rebirthTree = {
 		polishedStart = 0,
 		chainStart = 0,

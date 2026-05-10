@@ -67,10 +67,11 @@ end
 
 local function normalizeRunData(playerIns)
 	local runData = playerIns:GetOneData(dataKey.runData)
+	local rebirthTree = playerIns:GetOneData(dataKey.rebirthTree)
 	local needsUpdate = false
 
 	if typeof(runData) ~= "table" then
-		runData = table.clone(Presets.RunDataDefaults)
+		runData = Presets.BuildRunBaseline(rebirthTree)
 		needsUpdate = true
 	else
 		for key, defaultValue in pairs(Presets.RunDataDefaults) do
@@ -79,6 +80,7 @@ local function normalizeRunData(playerIns)
 				needsUpdate = true
 			end
 		end
+		needsUpdate = Presets.ApplyRunBaseline(runData, rebirthTree) or needsUpdate
 	end
 
 	if needsUpdate then
@@ -86,6 +88,149 @@ local function normalizeRunData(playerIns)
 	end
 
 	return runData
+end
+
+local function normalizeGrowthData(playerIns)
+	local ownedCoins = playerIns:GetOneData(dataKey.ownedCoins)
+	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin)
+	local ownedDeskSetups = playerIns:GetOneData(dataKey.ownedDeskSetups)
+	local equippedDeskSetup = playerIns:GetOneData(dataKey.equippedDeskSetup)
+	local rebirthTree = playerIns:GetOneData(dataKey.rebirthTree)
+	local needsRunUpdate = false
+
+	if typeof(ownedCoins) ~= "table" then
+		ownedCoins = {
+			["Rusty Penny"] = true,
+		}
+		playerIns:SetOneData(dataKey.ownedCoins, ownedCoins)
+	end
+	if not Presets.GetShopItem("coin", equippedCoin) or not ownedCoins[equippedCoin] then
+		equippedCoin = "Rusty Penny"
+		ownedCoins[equippedCoin] = true
+		playerIns:SetOneData(dataKey.equippedCoin, equippedCoin)
+		playerIns:SetOneData(dataKey.ownedCoins, ownedCoins)
+	end
+
+	if typeof(ownedDeskSetups) ~= "table" then
+		ownedDeskSetups = {
+			["Folding Table"] = true,
+		}
+		playerIns:SetOneData(dataKey.ownedDeskSetups, ownedDeskSetups)
+	end
+	if not Presets.GetShopItem("desk", equippedDeskSetup) or not ownedDeskSetups[equippedDeskSetup] then
+		equippedDeskSetup = "Folding Table"
+		ownedDeskSetups[equippedDeskSetup] = true
+		playerIns:SetOneData(dataKey.equippedDeskSetup, equippedDeskSetup)
+		playerIns:SetOneData(dataKey.ownedDeskSetups, ownedDeskSetups)
+	end
+
+	if typeof(rebirthTree) ~= "table" then
+		rebirthTree = {
+			polishedStart = 0,
+			chainStart = 0,
+			quickStart = 0,
+			luckyStart = 0,
+		}
+		playerIns:SetOneData(dataKey.rebirthTree, rebirthTree)
+	end
+	for _, upgradeKey in ipairs(Presets.Growth.RebirthUpgradeOrder) do
+		if typeof(rebirthTree[upgradeKey]) ~= "number" then
+			rebirthTree[upgradeKey] = 0
+			needsRunUpdate = true
+		end
+	end
+	if needsRunUpdate then
+		playerIns:SetOneData(dataKey.rebirthTree, rebirthTree)
+	end
+
+	return {
+		ownedCoins = ownedCoins,
+		equippedCoin = equippedCoin,
+		ownedDeskSetups = ownedDeskSetups,
+		equippedDeskSetup = equippedDeskSetup,
+		rebirthTree = rebirthTree,
+	}
+end
+
+local function getOwnedKey(category)
+	if category == "coin" then
+		return dataKey.ownedCoins
+	end
+	if category == "desk" then
+		return dataKey.ownedDeskSetups
+	end
+
+	return nil
+end
+
+local function getEquippedKey(category)
+	if category == "coin" then
+		return dataKey.equippedCoin
+	end
+	if category == "desk" then
+		return dataKey.equippedDeskSetup
+	end
+
+	return nil
+end
+
+local function buildLoadoutBonuses(playerIns)
+	local growthData = normalizeGrowthData(playerIns)
+	return Presets.BuildLoadoutBonuses(growthData.equippedCoin, growthData.equippedDeskSetup)
+end
+
+local function buildRebirthUpgrades(rebirthTree)
+	local upgrades = {}
+
+	for _, upgradeKey in ipairs(Presets.Growth.RebirthUpgradeOrder) do
+		local config = Presets.GetRebirthUpgradeConfig(upgradeKey)
+		local level = rebirthTree[upgradeKey] or 0
+		local cost = Presets.GetRebirthUpgradeCost(upgradeKey, level)
+		if Presets.IsRebirthUpgradeMaxed(upgradeKey, level) then
+			cost = nil
+		end
+		table.insert(upgrades, {
+			key = upgradeKey,
+			displayName = config.displayName,
+			description = config.description,
+			level = level,
+			maxLevel = config.maxLevel,
+			cost = cost,
+		})
+	end
+
+	return upgrades
+end
+
+local function buildGrowthState(playerIns, runData, derivedStats)
+	local growthData = normalizeGrowthData(playerIns)
+	local cash = playerIns:GetOneData(dataKey.wins)
+	local rebirthPoints = playerIns:GetOneData(dataKey.fateShards)
+	local pointGain = Presets.GetRebirthPointGain(cash)
+
+	return {
+		cash = cash,
+		rebirth = playerIns:GetOneData(dataKey.rebirth),
+		rebirthPoints = rebirthPoints,
+		fateShards = rebirthPoints,
+		pointGain = pointGain,
+		canRebirth = pointGain > 0,
+		rebirthMinCash = Presets.Growth.Rebirth.MinCash,
+		rebirthCashPerPoint = Presets.Growth.Rebirth.CashPerPoint,
+		rebirthCashAfterReset = Presets.Growth.Rebirth.CashAfterReset,
+		loadout = {
+			equippedCoin = growthData.equippedCoin,
+			equippedDeskSetup = growthData.equippedDeskSetup,
+			ownedCoins = table.clone(growthData.ownedCoins),
+			ownedDeskSetups = table.clone(growthData.ownedDeskSetups),
+		},
+		rebirthTree = table.clone(growthData.rebirthTree),
+		rebirthUpgrades = buildRebirthUpgrades(growthData.rebirthTree),
+		shopItems = Presets.Growth.ShopItems,
+		runDataAfterReset = Presets.BuildRunBaseline(growthData.rebirthTree),
+		derivedStats = derivedStats,
+		runData = table.clone(runData),
+	}
 end
 
 local function getSeatState(player)
@@ -104,15 +249,18 @@ local function buildClientState(player)
 
 	local runData = normalizeRunData(playerIns)
 	local wins = playerIns:GetOneData(dataKey.wins)
+	local bonusStats = buildLoadoutBonuses(playerIns)
+	local derivedStats = Presets.BuildDerivedStats(runData, bonusStats)
 
 	return {
 		cash = wins,
 		wins = wins,
 		runData = table.clone(runData),
-		derivedStats = Presets.BuildDerivedStats(runData),
+		derivedStats = derivedStats,
 		nextCosts = Presets.GetNextCosts(runData),
 		seatState = getSeatState(player),
 		onboarding = Onboarding.BuildState(playerIns),
+		growthState = buildGrowthState(playerIns, runData, derivedStats),
 	}
 end
 
@@ -265,7 +413,8 @@ function CoinFlipSystem:RequestFlip(sender, player)
 
 	local seatId = seatSystem:GetPlayerSeatId(player)
 	local runData = normalizeRunData(playerIns)
-	local isHeads = math.random() < Presets.GetHeadsChance(runData)
+	local bonusStats = buildLoadoutBonuses(playerIns)
+	local isHeads = math.random() < Presets.GetHeadsChance(runData, bonusStats)
 	local reward = 0
 	playerIns:SetOneData(dataKey.lifetimeFlips, playerIns:GetOneData(dataKey.lifetimeFlips) + 1)
 	runData.flipsThisRun += 1
@@ -273,7 +422,7 @@ function CoinFlipSystem:RequestFlip(sender, player)
 	if isHeads then
 		runData.currentStreak += 1
 		runData.headsThisRun += 1
-		reward = Presets.GetHeadsReward(runData)
+		reward = Presets.GetHeadsReward(runData, bonusStats)
 		runData.cashEarnedThisRun += reward
 		runData.bestStreakThisRun = math.max(runData.bestStreakThisRun, runData.currentStreak)
 
@@ -294,7 +443,7 @@ function CoinFlipSystem:RequestFlip(sender, player)
 		runData.currentStreak = 0
 	end
 
-	playerState.nextFlipAt = now + Presets.GetFlipInterval(runData)
+	playerState.nextFlipAt = now + Presets.GetFlipInterval(runData, bonusStats)
 	playerIns:SetOneData(dataKey.runData, runData)
 	applyOnboardingAction(self, player, "flip", {
 		flipCount = runData.flipsThisRun,
@@ -373,6 +522,208 @@ function CoinFlipSystem:BuyUpgrade(sender, player, args)
 	seatSystem:RefreshAudienceState(SENDER)
 	syncPlayerState(self, player, {
 		upgradePurchased = upgradeKey,
+	})
+end
+
+function CoinFlipSystem:RequestShopPurchase(sender, player, args)
+	if not IsServer then
+		return
+	end
+
+	player = player or sender
+	if sender ~= SENDER and sender ~= player then
+		return
+	end
+	if typeof(args) ~= "table" then
+		return
+	end
+
+	local category = Presets.ResolveShopCategory(args.category)
+	local item = Presets.GetShopItem(category, args.itemId)
+	if not category or not item then
+		return
+	end
+
+	local ownedKey = getOwnedKey(category)
+	local equippedKey = getEquippedKey(category)
+	local playerIns = GetPlayerIns(player, false)
+	if not playerIns then
+		return
+	end
+
+	normalizeGrowthData(playerIns)
+	local ownedItems = playerIns:GetOneData(ownedKey)
+	if ownedItems[item.id] then
+		playerIns:SetOneData(equippedKey, item.id)
+		refreshCashDisplays(player)
+		SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
+		syncPlayerState(self, player, {
+			equippedItem = item.id,
+			equippedCategory = category,
+		})
+		return
+	end
+
+	local wins = playerIns:GetOneData(dataKey.wins)
+	if wins < item.cost then
+		SystemMgr.systems.GuiSystem:SetNotification(SENDER, player, {
+			text = "Not enough Cash",
+			lastTime = 2,
+		})
+		syncPlayerState(self, player)
+		return
+	end
+
+	playerIns:SetOneData(dataKey.wins, wins - item.cost)
+	ownedItems[item.id] = true
+	playerIns:SetOneData(ownedKey, ownedItems)
+	playerIns:SetOneData(equippedKey, item.id)
+
+	refreshCashDisplays(player)
+	SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
+	syncPlayerState(self, player, {
+		purchasedItem = item.id,
+		equippedItem = item.id,
+		equippedCategory = category,
+	})
+end
+
+function CoinFlipSystem:RequestEquipItem(sender, player, args)
+	if not IsServer then
+		return
+	end
+
+	player = player or sender
+	if sender ~= SENDER and sender ~= player then
+		return
+	end
+	if typeof(args) ~= "table" then
+		return
+	end
+
+	local category = Presets.ResolveShopCategory(args.category)
+	local item = Presets.GetShopItem(category, args.itemId)
+	if not category or not item then
+		return
+	end
+
+	local ownedKey = getOwnedKey(category)
+	local equippedKey = getEquippedKey(category)
+	local playerIns = GetPlayerIns(player, false)
+	if not playerIns then
+		return
+	end
+
+	normalizeGrowthData(playerIns)
+	local ownedItems = playerIns:GetOneData(ownedKey)
+	if not ownedItems[item.id] then
+		return
+	end
+
+	playerIns:SetOneData(equippedKey, item.id)
+	refreshCashDisplays(player)
+	SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
+	syncPlayerState(self, player, {
+		equippedItem = item.id,
+		equippedCategory = category,
+	})
+end
+
+function CoinFlipSystem:RequestRebirth(sender, player)
+	if not IsServer then
+		return
+	end
+
+	player = player or sender
+	if sender ~= SENDER and sender ~= player then
+		return
+	end
+
+	local playerIns = GetPlayerIns(player, false)
+	if not playerIns then
+		return
+	end
+
+	local wins = playerIns:GetOneData(dataKey.wins)
+	local pointGain = Presets.GetRebirthPointGain(wins)
+	if pointGain <= 0 then
+		SystemMgr.systems.GuiSystem:SetNotification(SENDER, player, {
+			text = "Build more Cash before rebirth",
+			lastTime = 2,
+		})
+		syncPlayerState(self, player)
+		return
+	end
+
+	local growthData = normalizeGrowthData(playerIns)
+	local resetRunData = Presets.BuildRunBaseline(growthData.rebirthTree)
+	playerIns:SetOneData(dataKey.wins, Presets.Growth.Rebirth.CashAfterReset)
+	playerIns:SetOneData(dataKey.fateShards, playerIns:GetOneData(dataKey.fateShards) + pointGain)
+	playerIns:SetOneData(dataKey.rebirth, playerIns:GetOneData(dataKey.rebirth) + 1)
+	playerIns:SetOneData(dataKey.runData, resetRunData)
+
+	SystemMgr.systems.TableSeatSystem:RegisterActivity(SENDER, player)
+	refreshCashDisplays(player)
+	SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
+	syncPlayerState(self, player, {
+		rebirthed = true,
+		rebirthPointGain = pointGain,
+	})
+end
+
+function CoinFlipSystem:RequestRebirthUpgrade(sender, player, args)
+	if not IsServer then
+		return
+	end
+
+	player = player or sender
+	if sender ~= SENDER and sender ~= player then
+		return
+	end
+	if typeof(args) ~= "table" or typeof(args.upgradeKey) ~= "string" then
+		return
+	end
+
+	local config = Presets.GetRebirthUpgradeConfig(args.upgradeKey)
+	if not config then
+		return
+	end
+
+	local playerIns = GetPlayerIns(player, false)
+	if not playerIns then
+		return
+	end
+
+	local growthData = normalizeGrowthData(playerIns)
+	local currentLevel = growthData.rebirthTree[args.upgradeKey] or 0
+	if Presets.IsRebirthUpgradeMaxed(args.upgradeKey, currentLevel) then
+		return
+	end
+
+	local cost = Presets.GetRebirthUpgradeCost(args.upgradeKey, currentLevel)
+	local rebirthPoints = playerIns:GetOneData(dataKey.fateShards)
+	if rebirthPoints < cost then
+		SystemMgr.systems.GuiSystem:SetNotification(SENDER, player, {
+			text = "Not enough Rebirth Points",
+			lastTime = 2,
+		})
+		syncPlayerState(self, player)
+		return
+	end
+
+	growthData.rebirthTree[args.upgradeKey] = currentLevel + 1
+	playerIns:SetOneData(dataKey.fateShards, rebirthPoints - cost)
+	playerIns:SetOneData(dataKey.rebirthTree, growthData.rebirthTree)
+
+	local runData = normalizeRunData(playerIns)
+	if Presets.ApplyRunBaseline(runData, growthData.rebirthTree) then
+		playerIns:SetOneData(dataKey.runData, runData)
+	end
+
+	refreshCashDisplays(player)
+	SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
+	syncPlayerState(self, player, {
+		rebirthUpgradePurchased = args.upgradeKey,
 	})
 end
 

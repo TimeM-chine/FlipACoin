@@ -21,6 +21,24 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer.PlayerGui
 
 ---- main ----
+PlayerGui.Main.DisplayOrder = 10
+
+local openingUi = PlayerGui:FindFirstChild("OpeningUI")
+if openingUi then
+	local openingFrame = openingUi:FindFirstChild("Frame")
+	if openingFrame and openingFrame:IsA("GuiObject") then
+		openingFrame.Visible = false
+	end
+end
+
+local notifications = PlayerGui:FindFirstChild("Notifications")
+if notifications then
+	local tipFrame = notifications:FindFirstChild("TipFrame")
+	if tipFrame and tipFrame:IsA("GuiObject") then
+		tipFrame.Visible = false
+	end
+end
+
 -- local vsLabel = PlayerGui.Main:FindFirstChild("vsLabel")
 -- if vsLabel then
 --     vsLabel.Text = "ver "..GameConfig.version

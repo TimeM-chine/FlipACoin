@@ -154,6 +154,8 @@ FlipACoin
 - `src/StarterGui/Main/uiClient.client.lua`
   - 关闭默认背包
   - 做触屏 / 手柄适配
+  - 将 `Main.DisplayOrder` 提到 Roblox `TouchGui` 之上，避免移动端触控层挡住主 UI 点击
+  - 隐藏当前主线不用的 legacy `OpeningUI.Frame` 与 `Notifications.TipFrame`，避免它们覆盖主 UI hit test
   - 把主界面的按钮统一绑到 `uiController`
   - 关闭默认重置按钮
 
@@ -374,6 +376,7 @@ FlipACoin
 - 检查玩家是否已入座
 - 处理 `RequestFlip`
 - 按 `GameConfig.FlipACoin` 计算正面概率、奖励、速度
+- 按当前装配的 Coin / Desk Setup 加成修正正面概率和 Cash 倍率
 - 写入 `runData`
 - 维护首局 `coinFlipOnboarding` 引导状态
 - 累积 `wins / bestStreak / lifetimeFlips / lifetimeHeads / lifetimeCashEarned`
@@ -381,6 +384,7 @@ FlipACoin
 - 广播本次 flip 给同桌玩家，用于低噪音桌面反馈
 - 驱动 streak 播报
 - 处理升级购买
+- 处理首发 Shop 购买、Inventory 装备、Rebirth 确认和永久 `rebirthTree` 升级
 
 客户端当前负责：
 
@@ -389,12 +393,17 @@ FlipACoin
 - 响应式布局
 - 让玩家面前的 `FLIP` 主按钮足够明确
 - 展示 Cash、streak、chance、speed、四项升级
+- 绑定 Rebirth / Shop / Inventory 面板入口并渲染服务端同步的成长状态
 - 展示同桌玩家的轻量状态 / streak / flip 结果
 - 播放 coin flip 可视表现
 
 关键玩法数据：
 
 - 本局成长写入 `dataKey.runData`
+- 重生点复用 `dataKey.fateShards`，UI 文案显示为 Rebirth Points
+- Coin 装配写入 `equippedCoin / ownedCoins`
+- Desk Setup 装配写入 `equippedDeskSetup / ownedDeskSetups`
+- 永久重生升级写入 `rebirthTree`
 - 四项升级：
   - `valueLevel`
   - `comboLevel`
@@ -405,6 +414,13 @@ FlipACoin
 
 - `GameConfig.FlipACoin`
 - `CoinFlipSystem/Presets.lua`
+
+当前首发成长配置在 `CoinFlipSystem/Presets.lua`：
+
+- `Growth.ShopItems.coin`：首发 Coin 商品、价格、稀有度 / 角色、Cash 倍率和 luck 加成
+- `Growth.ShopItems.desk`：首发 Desk Setup 商品、价格、稀有度 / 角色、Cash 倍率和 luck 加成
+- `Growth.Rebirth`：重生最低 Cash、Cash 到点数换算、单次点数上限、重生后 Cash
+- `Growth.RebirthUpgrades`：`polishedStart / chainStart / quickStart / luckyStart` 四个永久起步升级
 
 当前额外要记住：
 
@@ -604,12 +620,15 @@ FlipACoin
 存档里当前和首发主线最相关的字段：
 
 - `wins`
+- `fateShards`
 - `bestStreak`
 - `lifetimeFlips`
 - `lifetimeHeads`
 - `lifetimeCashEarned`
 - `equippedCoin`
 - `ownedCoins`
+- `equippedDeskSetup`
+- `ownedDeskSetups`
 - `autoFlipUnlocked`
 - `rebirthTree`
 - `runData`
@@ -670,6 +689,8 @@ FlipACoin
 当前约定：
 
 - 主 HUD 绑定读取 Studio 预制节点，不再为统计卡、升级按钮或离座按钮运行时创建兜底资源。
+- `CoinFlipSystem/ui.lua` 现在也绑定 `Buttons.CoinFlipMenu` 和 `Frames.Rebirth / Shop / Inventory`，这些面板读取服务端同步的 `growthState`。
+- `CoinFlipMenu` 资源仍从 `Main.Buttons` 读取，但运行时会 reparent 到 `Main`，避免 `Folder -> Frame -> TextButton` 层级在移动端 hit test 中丢失点击。
 - 旧 `Stats` / `Actions` 容器如果仍存在，只是隐藏兼容遗留，不是当前主 HUD 数据源。
 
 ### 10.3 UI 延迟初始化模式
