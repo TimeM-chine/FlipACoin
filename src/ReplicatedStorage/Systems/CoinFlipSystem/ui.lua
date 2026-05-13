@@ -1,7 +1,6 @@
 local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
 local Replicated = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
@@ -18,14 +17,11 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local Main = PlayerGui:WaitForChild("Main")
 local Elements = Main:WaitForChild("Elements")
 local Buttons = Main:WaitForChild("Buttons")
-local Frames = Main:WaitForChild("Frames")
 local uiController = require(Main:WaitForChild("uiController"))
-local FirstPersonCamera =
-	require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Modules"):WaitForChild("FirstPersonCamera"))
 
 local CoinFlipSystem = SystemMgr.systems.CoinFlipSystem
 local TableSeatSystem = SystemMgr.systems.TableSeatSystem
-local VisualConfig = Presets.Visuals
+local EffectSystem = SystemMgr.systems.EffectSystem
 local LayoutConfig = Presets.UiLayout
 
 local function findFirstByNames(parent, names)
@@ -41,9 +37,6 @@ end
 
 local Hud = Elements:WaitForChild("CoinFlipHUD")
 local CoinFlipMenu = Buttons:WaitForChild("CoinFlipMenu")
-local RebirthFrame = Frames:WaitForChild("Rebirth")
-local ShopFrame = Frames:WaitForChild("Shop")
-local InventoryFrame = Frames:WaitForChild("Inventory")
 local Content = Hud:WaitForChild("Content")
 local ContentListLayout = Content:WaitForChild("PanelListLayout")
 local LeftPanel = Content:WaitForChild("LeftPanel")
@@ -106,47 +99,9 @@ local UpgradeTitles = {
 	biasLevel = "Bias",
 }
 
-local RebirthSummary = RebirthFrame:WaitForChild("Body"):WaitForChild("Summary")
-local RebirthPerks = RebirthFrame.Body:WaitForChild("Perks")
-local RebirthPointGain = RebirthSummary:WaitForChild("PointGain")
-local RebirthResetPreview = RebirthSummary:WaitForChild("ResetPreview")
-local RebirthConfirmButton = RebirthSummary:WaitForChild("ConfirmButton")
-local RebirthKeepRunButton = RebirthSummary:WaitForChild("KeepRunButton")
-local RebirthPerkCards = {
-	RebirthPerks:WaitForChild("Perk1"),
-	RebirthPerks:WaitForChild("Perk2"),
-	RebirthPerks:WaitForChild("Perk3"),
-	RebirthPerks:WaitForChild("Perk4"),
-}
-
-local ShopBody = ShopFrame:WaitForChild("Body")
-local ShopTabs = ShopBody:WaitForChild("Tabs")
-local ShopItems = ShopBody:WaitForChild("Items")
-local ShopPreview = ShopBody:WaitForChild("Preview")
-local ShopItemCards = {
-	ShopItems:WaitForChild("Item1"),
-	ShopItems:WaitForChild("Item2"),
-	ShopItems:WaitForChild("Item3"),
-	ShopItems:WaitForChild("Item4"),
-}
-
-local InventoryBody = InventoryFrame:WaitForChild("Body")
-local InventoryTabs = InventoryBody:WaitForChild("Tabs")
-local InventoryItems = InventoryBody:WaitForChild("Items")
-local InventoryLoadout = InventoryBody:WaitForChild("Loadout")
-local InventoryItemCards = {
-	InventoryItems:WaitForChild("Item1"),
-	InventoryItems:WaitForChild("Item2"),
-	InventoryItems:WaitForChild("Item3"),
-	InventoryItems:WaitForChild("Item4"),
-	InventoryItems:WaitForChild("Item5"),
-	InventoryItems:WaitForChild("Item6"),
-}
-
 local CoinFlipUi = {}
 local initialized = false
 local flipInputBound = false
-local activeVisuals = {}
 local currentSeatId
 local currentFlipInterval = 1.8
 local localFlipCooldownEndsAt = 0
@@ -165,9 +120,6 @@ local currentRunSnapshot = {
 	nextCosts = {},
 	derivedStats = {},
 }
-local currentGrowthState = {}
-local selectedShopCategory = "coin"
-local selectedInventoryCategory = "coin"
 local FlipInputActionName = "COIN_FLIP_REQUEST"
 
 local StatsCards = {
@@ -199,251 +151,6 @@ local StatsCards = {
 
 for layoutOrder, entry in ipairs(StatsCards) do
 	entry.card.LayoutOrder = layoutOrder
-end
-
-local function getGrowthLoadout()
-	return currentGrowthState.loadout or {}
-end
-
-local function getOwnedItems(category)
-	local loadout = getGrowthLoadout()
-	if category == "coin" then
-		return loadout.ownedCoins or {}
-	end
-	if category == "desk" then
-		return loadout.ownedDeskSetups or {}
-	end
-
-	return {}
-end
-
-local function getEquippedItem(category)
-	local loadout = getGrowthLoadout()
-	if category == "coin" then
-		return loadout.equippedCoin or "Rusty Penny"
-	end
-	if category == "desk" then
-		return loadout.equippedDeskSetup or "Folding Table"
-	end
-
-	return ""
-end
-
-local function formatMultiplier(multiplier)
-	return `x{math.round((multiplier or 1) * 100) / 100}`
-end
-
-local function formatLuck(luckBonus)
-	return `+{math.round((luckBonus or 0) * 1000) / 10}% Luck`
-end
-
-local function describeItemStats(stats)
-	return `{formatMultiplier(stats and stats.coinMultiplier or 1)} Cash | {formatLuck(stats and stats.luckBonus or 0)}`
-end
-
-local function setTextIfPresent(parent, childName, text)
-	local label = parent:FindFirstChild(childName)
-	if label and label:IsA("TextLabel") then
-		label.Text = text
-	end
-end
-
-local function setButtonText(button, text, isEnabled)
-	button.Text = text
-	button.AutoButtonColor = isEnabled
-	button.Active = isEnabled
-end
-
-local function styleSmallButtonText(button, textSize)
-	button.TextScaled = false
-	button.TextSize = textSize
-	button.TextWrapped = false
-	button.TextTruncate = Enum.TextTruncate.AtEnd
-	button.TextXAlignment = Enum.TextXAlignment.Center
-	button.TextYAlignment = Enum.TextYAlignment.Center
-	button.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-	button.TextStrokeTransparency = 1
-	button.LineHeight = 1
-
-	local constraint = button:FindFirstChild("GrowthTextSizeConstraint") or button:FindFirstChild("CodexTextSizeConstraint")
-	if not constraint then
-		constraint = Instance.new("UITextSizeConstraint")
-		constraint.Parent = button
-	end
-	constraint.Name = "GrowthTextSizeConstraint"
-	constraint.MinTextSize = math.max(11, textSize - 5)
-	constraint.MaxTextSize = textSize
-end
-
-local function styleCategoryTab(button)
-	button.Size = UDim2.fromScale(0.92, 0.15)
-	styleSmallButtonText(button, 15)
-end
-
-local function applyGrowthTextPolish()
-	styleSmallButtonText(RebirthFrame.X, 22)
-	styleSmallButtonText(ShopFrame.X, 22)
-	styleSmallButtonText(InventoryFrame.X, 22)
-	styleSmallButtonText(RebirthConfirmButton, 22)
-	styleSmallButtonText(RebirthKeepRunButton, 22)
-	styleCategoryTab(ShopTabs.CoinTab)
-	styleCategoryTab(ShopTabs.DeskTab)
-	styleCategoryTab(InventoryTabs.CoinTab)
-	styleCategoryTab(InventoryTabs.DeskTab)
-	styleCategoryTab(InventoryTabs.OtherTab)
-
-	InventoryLoadout.ApplyButton.Visible = false
-	InventoryLoadout.ApplyButton.Active = false
-	InventoryLoadout.ApplyButton.Selectable = false
-
-	for _, card in ipairs(RebirthPerkCards) do
-		styleSmallButtonText(card.UpgradeButton, 16)
-	end
-
-	for _, card in ipairs(ShopItemCards) do
-		styleSmallButtonText(card.BuyButton, 14)
-	end
-
-	for _, card in ipairs(InventoryItemCards) do
-		styleSmallButtonText(card.EquipButton, 13)
-	end
-end
-
-local function updateTabButton(button, isSelected)
-	button.AutoButtonColor = not isSelected
-	button.BackgroundTransparency = isSelected and 0.08 or 0.26
-end
-
-local function updateLoadoutSummary()
-	local equippedCoin = getEquippedItem("coin")
-	local equippedDesk = getEquippedItem("desk")
-	local bonuses = Presets.BuildLoadoutBonuses(equippedCoin, equippedDesk)
-	InventoryLoadout.CoinSlot.Value.Text = equippedCoin
-	InventoryLoadout.DeskSlot.Value.Text = equippedDesk
-	InventoryLoadout.TotalBonus.Text = describeItemStats(bonuses)
-	ShopPreview.Equipped.Text = `{equippedCoin} / {equippedDesk}`
-	ShopPreview.TotalBonus.Text = describeItemStats(bonuses)
-end
-
-local function updateRebirthPanel()
-	local pointGain = currentGrowthState.pointGain or 0
-	local rebirthPoints = currentGrowthState.rebirthPoints or currentGrowthState.fateShards or 0
-	local minCash = currentGrowthState.rebirthMinCash or Presets.Growth.Rebirth.MinCash
-	local cashAfterReset = currentGrowthState.rebirthCashAfterReset or Presets.Growth.Rebirth.CashAfterReset
-	local canRebirth = currentGrowthState.canRebirth == true
-
-	RebirthPointGain.Label.Text = "Rebirth Points"
-	RebirthPointGain.Value.Text = `+{pointGain} now | {rebirthPoints} banked`
-	RebirthResetPreview.Title.Text = "Reset preview"
-	RebirthResetPreview.Desc.Text =
-		`Cash resets to $ {Util.FormatNumber(cashAfterReset, true)} and run upgrades restart from permanent perks. Need $ {Util.FormatNumber(minCash, true)} minimum.`
-	setButtonText(RebirthConfirmButton, canRebirth and "Rebirth" or `Need $ {Util.FormatNumber(minCash, true)}`, canRebirth)
-	RebirthKeepRunButton.Text = "Keep Run"
-
-	local upgradesByKey = {}
-	for _, entry in ipairs(currentGrowthState.rebirthUpgrades or {}) do
-		upgradesByKey[entry.key] = entry
-	end
-
-	for index, upgradeKey in ipairs(Presets.Growth.RebirthUpgradeOrder) do
-		local card = RebirthPerkCards[index]
-		local config = Presets.GetRebirthUpgradeConfig(upgradeKey)
-		local entry = upgradesByKey[upgradeKey] or {
-			level = 0,
-			maxLevel = config.maxLevel,
-			cost = Presets.GetRebirthUpgradeCost(upgradeKey, 0),
-		}
-		card.Title.Text = config.displayName
-		card.Desc.Text = config.description
-		card.Chip.Text = `Lv.{entry.level}/{entry.maxLevel}`
-		if entry.cost then
-			setButtonText(card.UpgradeButton, `{entry.cost} RP`, rebirthPoints >= entry.cost)
-		else
-			setButtonText(card.UpgradeButton, "MAX", false)
-		end
-	end
-end
-
-local function updateShopPanel()
-	updateTabButton(ShopTabs.CoinTab, selectedShopCategory == "coin")
-	updateTabButton(ShopTabs.DeskTab, selectedShopCategory == "desk")
-	ShopPreview.Title.Text = selectedShopCategory == "coin" and "Coin Loadout" or "Desk Setup"
-
-	local ownedItems = getOwnedItems(selectedShopCategory)
-	local equippedItem = getEquippedItem(selectedShopCategory)
-	local cash = currentGrowthState.cash or currentRunSnapshot.cash or 0
-	local items = Presets.Growth.ShopItems[selectedShopCategory] or {}
-
-	for index, card in ipairs(ShopItemCards) do
-		local item = items[index]
-		card.Visible = item ~= nil
-		if item then
-			local isOwned = ownedItems[item.id] == true
-			local isEquipped = equippedItem == item.id
-			setTextIfPresent(card, "Name", item.displayName)
-			card.Bonus.Text = `{item.rarity} | {item.role} | {describeItemStats(item.stats)}`
-			card.Price.Text = item.cost == 0 and "Starter" or `$ {Util.FormatNumber(item.cost, true)}`
-			if isEquipped then
-				setButtonText(card.BuyButton, "On", false)
-			elseif isOwned then
-				setButtonText(card.BuyButton, "Equip", true)
-			else
-				setButtonText(card.BuyButton, cash >= item.cost and "Buy" or "Need", cash >= item.cost)
-			end
-		end
-	end
-
-	updateLoadoutSummary()
-end
-
-local function updateInventoryPanel()
-	updateTabButton(InventoryTabs.CoinTab, selectedInventoryCategory == "coin")
-	updateTabButton(InventoryTabs.DeskTab, selectedInventoryCategory == "desk")
-	updateTabButton(InventoryTabs.OtherTab, selectedInventoryCategory == "other")
-
-	local ownedItems = getOwnedItems(selectedInventoryCategory)
-	local equippedItem = getEquippedItem(selectedInventoryCategory)
-	local visibleIndex = 0
-
-	for _, card in ipairs(InventoryItemCards) do
-		card.Visible = false
-	end
-
-	if selectedInventoryCategory == "other" then
-		local card = InventoryItemCards[1]
-		card.Visible = true
-		setTextIfPresent(card, "Name", "Coming Soon")
-		card.Bonus.Text = "Future item types"
-		setButtonText(card.EquipButton, "Locked", false)
-		updateLoadoutSummary()
-		return
-	end
-
-	for _, item in ipairs(Presets.Growth.ShopItems[selectedInventoryCategory] or {}) do
-		if ownedItems[item.id] then
-			visibleIndex += 1
-			local card = InventoryItemCards[visibleIndex]
-			if not card then
-				break
-			end
-			card.Visible = true
-			setTextIfPresent(card, "Name", item.displayName)
-			card.Bonus.Text = describeItemStats(item.stats)
-			if equippedItem == item.id then
-				setButtonText(card.EquipButton, "On", false)
-			else
-				setButtonText(card.EquipButton, "Equip", true)
-			end
-		end
-	end
-
-	updateLoadoutSummary()
-end
-
-local function updateGrowthPanels()
-	updateRebirthPanel()
-	updateShopPanel()
-	updateInventoryPanel()
 end
 
 local function getViewportSize()
@@ -575,22 +282,6 @@ local function getSeatRecord(seatId)
 	return TableSeatSystem:GetSeatRecordByDisplayId(seatId)
 end
 
-local function getCoinVisualsFolder(seatId)
-	local seatRecord = getSeatRecord(seatId)
-	local tableModel = seatRecord and seatRecord.tableModel or getTableModel()
-	local assets = tableModel and tableModel:FindFirstChild("Assets")
-	return assets and assets:FindFirstChild("CoinVisuals") or nil
-end
-
-local function getSeatAttachment(seatId)
-	local seatRecord = getSeatRecord(seatId)
-	local tableModel = seatRecord and seatRecord.tableModel or getTableModel()
-	local rawSeatId = seatRecord and seatRecord.rawSeatId or seatId
-	local attachmentsFolder = tableModel and tableModel:FindFirstChild("Attachments")
-	local marker = attachmentsFolder and attachmentsFolder:FindFirstChild(`{rawSeatId}Marker`)
-	return marker and marker:FindFirstChildWhichIsA("Attachment") or nil
-end
-
 local function getSeatPart(seatId)
 	local seatRecord = getSeatRecord(seatId)
 	if seatRecord and seatRecord.seat then
@@ -714,38 +405,6 @@ local function applyUpgradeButtonLayout(profile)
 	end
 end
 
-local function applyGrowthMenuLayout(profile)
-	if CoinFlipMenu.Parent ~= Main then
-		CoinFlipMenu.Parent = Main
-	end
-
-	if profile.isMobile then
-		CoinFlipMenu.AnchorPoint = Vector2.new(1, 0.5)
-		CoinFlipMenu.Position = profile.isPortrait and UDim2.fromScale(0.965, 0.34) or UDim2.fromScale(0.965, 0.42)
-		CoinFlipMenu.Size = profile.isPortrait and UDim2.fromScale(0.2, 0.24) or UDim2.fromScale(0.09, 0.34)
-	else
-		CoinFlipMenu.AnchorPoint = Vector2.new(0, 0.5)
-		CoinFlipMenu.Position = UDim2.fromScale(0.035, 0.5)
-		CoinFlipMenu.Size = UDim2.fromScale(0.12, 0.32)
-	end
-end
-
-local function applyGrowthPanelLayout(profile)
-	if not profile.isMobile then
-		return
-	end
-
-	local panelAnchor = Vector2.new(0.5, 0.5)
-	local panelPosition = profile.isPortrait and UDim2.fromScale(0.5, 0.52) or UDim2.fromScale(0.65, 0.51)
-	local panelSize = profile.isPortrait and UDim2.fromScale(0.92, 0.76) or UDim2.fromScale(0.62, 0.72)
-
-	for _, panel in ipairs({ RebirthFrame, ShopFrame, InventoryFrame }) do
-		panel.AnchorPoint = panelAnchor
-		panel.Position = panelPosition
-		panel.Size = panelSize
-	end
-end
-
 local function applyHudLayout(profile)
 	Hud.AnchorPoint = Vector2.new(0.5, 1)
 	Hud.Position = UDim2.fromScale(0.5, profile.hudY)
@@ -811,137 +470,17 @@ local function applyHudLayout(profile)
 
 	applyStatCardLayout(profile)
 	applyUpgradeButtonLayout(profile)
-	applyGrowthMenuLayout(profile)
-	applyGrowthPanelLayout(profile)
-end
-
-local function getTableSurfaceData(tableTop)
-	local axisRecords = {
-		{
-			size = tableTop.Size.X,
-			normal = tableTop.CFrame.RightVector,
-		},
-		{
-			size = tableTop.Size.Y,
-			normal = tableTop.CFrame.UpVector,
-		},
-		{
-			size = tableTop.Size.Z,
-			normal = -tableTop.CFrame.LookVector,
-		},
-	}
-
-	table.sort(axisRecords, function(a, b)
-		return a.size < b.size
-	end)
-
-	local normal = axisRecords[1].normal
-	if normal:Dot(Vector3.yAxis) < 0 then
-		normal = -normal
-	end
-
-	return normal, axisRecords[1].size * 0.5
-end
-
-local function getFlipPositions(seatId, coinSize)
-	local seatRecord = getSeatRecord(seatId)
-	local tableModel = seatRecord and seatRecord.tableModel or getTableModel()
-	local tableTop = tableModel and tableModel:FindFirstChild("TableTop")
-	if not tableTop then
-		return nil, nil, nil
-	end
-
-	local centerAttachment = tableTop.TableCenterAttachment
-	local seatAttachment = getSeatAttachment(seatId)
-	local seatPart = getSeatPart(seatId)
-	local startPos
-	if seatAttachment then
-		startPos = seatAttachment.WorldPosition + Vector3.new(0, VisualConfig.CoinStartHeight, 0)
-	elseif seatPart then
-		startPos = seatPart.Position + Vector3.new(0, 1.25 + VisualConfig.CoinStartHeight, 0)
-	else
-		return nil, nil, nil
-	end
-
-	local tableNormal, halfThickness = getTableSurfaceData(tableTop)
-	local surfaceCenter = tableTop.Position + (tableNormal * halfThickness)
-	local centerPos = surfaceCenter
-	local outward = startPos - surfaceCenter
-	outward = outward - (tableNormal * outward:Dot(tableNormal))
-	if outward.Magnitude < 0.001 then
-		outward = Vector3.new(1, 0, 0)
-	else
-		outward = outward.Unit
-	end
-
-	local endPos = centerPos
-		+ (outward * VisualConfig.LandingRadius)
-		+ (tableNormal * ((coinSize.X * 0.5) + VisualConfig.CoinSurfaceGap))
-
-	return startPos, endPos, tableNormal
-end
-
-local function getCoinVisual(seatId)
-	local seatRecord = getSeatRecord(seatId)
-	local rawSeatId = seatRecord and seatRecord.rawSeatId or seatId
-	local coinVisualsFolder = getCoinVisualsFolder(seatId)
-	local visualModel = coinVisualsFolder and coinVisualsFolder:FindFirstChild(`{rawSeatId}CoinVisual`)
-	if not visualModel then
-		return nil
-	end
-
-	return visualModel,
-		visualModel:WaitForChild("Coin"),
-		visualModel:WaitForChild("Shadow"),
-		visualModel:WaitForChild("LandingPulse"),
-		visualModel:WaitForChild("StreakPulse")
-end
-
-local function setCoinVisualEnabled(coin, shadow, enabled)
-	coin.Transparency = enabled and 0 or 1
-	shadow.Transparency = enabled and VisualConfig.ShadowBaseTransparency or 1
-	coin.TopFace.Enabled = enabled
-	coin.BottomFace.Enabled = enabled
-end
-
-local function hidePulseVisual(pulse)
-	pulse.Transparency = 1
-end
-
-local function playLandingPulse(pulse, position, color, options)
-	local startSize = options and options.startSize or VisualConfig.PulseStartSize
-	local endSize = options and options.endSize or VisualConfig.PulseEndSize
-	local duration = options and options.duration or VisualConfig.PulseDuration
-	local transparency = options and options.transparency or 0.18
-
-	pulse.Color = color
-	pulse.Transparency = transparency
-	pulse.Size = Vector3.new(VisualConfig.ShadowHeight, startSize, startSize)
-	pulse.CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90))
-
-	local tween = TweenService:Create(
-		pulse,
-		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{
-			Size = Vector3.new(VisualConfig.ShadowHeight, endSize, endSize),
-			Transparency = 1,
-		}
-	)
-	tween:Play()
-	tween.Completed:Once(function()
-		hidePulseVisual(pulse)
-	end)
 end
 
 local function updateResultText(text, tone)
 	resultFlashToken += 1
 	local token = resultFlashToken
-	local resultColor = VisualConfig.ResultNeutralColor
+	local resultColor = Color3.fromRGB(232, 236, 242)
 
 	if tone == "Heads" then
-		resultColor = VisualConfig.ResultHeadsColor
+		resultColor = Color3.fromRGB(255, 225, 109)
 	elseif tone == "Tails" then
-		resultColor = VisualConfig.ResultTailsColor
+		resultColor = Color3.fromRGB(255, 173, 156)
 	end
 
 	ResultLabel.Text = text
@@ -960,170 +499,6 @@ local function updateResultText(text, tone)
 			return
 		end
 		ResultLabel.TextColor3 = resultColor
-	end)
-end
-
-local function clearCoinVisual(seatId)
-	local visual = activeVisuals[seatId]
-	if not visual then
-		return
-	end
-
-	activeVisuals[seatId] = nil
-	if visual.connection then
-		visual.connection:Disconnect()
-	end
-	if visual.shouldFollowCamera then
-		FirstPersonCamera.ReturnToFirstPerson(visual.coin)
-	end
-	visual.shadow.Size = visual.baseShadowSize
-	hidePulseVisual(visual.landingPulse)
-	hidePulseVisual(visual.streakPulse)
-	setCoinVisualEnabled(visual.coin, visual.shadow, false)
-end
-
-local function playCoinVisual(seatId, result, landedCallback, shouldFollowCamera, visualOptions)
-	if typeof(seatId) ~= "string" then
-		if landedCallback then
-			landedCallback()
-		end
-		return
-	end
-
-	local visualModel, coin, shadow, landingPulse, streakPulse = getCoinVisual(seatId)
-	if not visualModel or not coin or not shadow or not landingPulse or not streakPulse then
-		if landedCallback then
-			landedCallback()
-		end
-		return
-	end
-	local baseCoinSize = coin.Size
-	local baseShadowSize = shadow.Size
-	local startPos, endPos, tableNormal = getFlipPositions(seatId, baseCoinSize)
-	if not startPos or not endPos or not tableNormal then
-		if landedCallback then
-			landedCallback()
-		end
-		return
-	end
-
-	clearCoinVisual(seatId)
-	setCoinVisualEnabled(coin, shadow, true)
-	shadow.Size = baseShadowSize
-
-	local visual = {
-		model = visualModel,
-		coin = coin,
-		shadow = shadow,
-		landingPulse = landingPulse,
-		streakPulse = streakPulse,
-		baseShadowSize = baseShadowSize,
-		shouldFollowCamera = shouldFollowCamera == true,
-	}
-	activeVisuals[seatId] = visual
-
-	local startTime = os.clock()
-	local arcHeight =
-		math.max(VisualConfig.ArcHeight, (startPos - endPos).Magnitude * VisualConfig.ArcHeightTravelFactor)
-	local travel = endPos - startPos
-	local airborneDuration = VisualConfig.TravelDuration
-	local finalRotation = math.rad(VisualConfig.SpinTurns * 360) + (result == "Tails" and math.pi or 0)
-	local airborneRotation = math.rad((VisualConfig.SpinTurns + 0.35) * 360) + (result == "Tails" and math.pi or 0)
-	local shadowPos = endPos
-		- (tableNormal * ((baseCoinSize.X * 0.5) + VisualConfig.CoinSurfaceGap))
-		+ (tableNormal * ((baseShadowSize.X * 0.5) + VisualConfig.ShadowSurfaceGap))
-	local observedStreak = visualOptions and (visualOptions.streak or 0) or 0
-	local shouldShowObservedStreakPulse = visualOptions
-		and visualOptions.isObserved == true
-		and result == "Heads"
-		and observedStreak >= VisualConfig.StreakPulseMinimum
-
-	coin.CFrame = CFrame.new(startPos) * CFrame.Angles(0, 0, math.rad(90))
-	shadow.CFrame = CFrame.new(startPos.X, shadowPos.Y, startPos.Z) * CFrame.Angles(0, 0, math.rad(90))
-	if visual.shouldFollowCamera then
-		FirstPersonCamera.FollowCoin(coin, {
-			duration = airborneDuration + VisualConfig.LandingDuration + (VisualConfig.ResultRevealDelay or 0) + 0.08,
-		})
-	end
-
-	visual.connection = RunService.RenderStepped:Connect(function()
-		local currentVisual = activeVisuals[seatId]
-		if currentVisual ~= visual then
-			if visual.connection then
-				visual.connection:Disconnect()
-			end
-			return
-		end
-
-		local alpha = math.clamp((os.clock() - startTime) / airborneDuration, 0, 1)
-		local height = math.sin(alpha * math.pi) * arcHeight
-		local position = startPos + (travel * alpha) + Vector3.new(0, height, 0)
-		local flipAngle = airborneRotation * alpha
-		local bankAngle = math.sin(alpha * math.pi) * VisualConfig.BankAngle
-		local shadowAlpha = math.clamp(height / arcHeight, 0, 1)
-		local shadowScale = VisualConfig.ShadowMaxScale
-			- ((VisualConfig.ShadowMaxScale - VisualConfig.ShadowMinScale) * shadowAlpha)
-		local shadowTransparency = VisualConfig.ShadowBaseTransparency
-			+ ((VisualConfig.ShadowMaxTransparency - VisualConfig.ShadowBaseTransparency) * shadowAlpha)
-
-		coin.CFrame = CFrame.new(position) * CFrame.Angles(flipAngle, 0, math.rad(90)) * CFrame.Angles(0, bankAngle, 0)
-		shadow.CFrame = CFrame.new(position.X, shadowPos.Y, position.Z) * CFrame.Angles(0, 0, math.rad(90))
-		shadow.Size = Vector3.new(baseShadowSize.X, baseCoinSize.Y * shadowScale, baseCoinSize.Z * shadowScale)
-		shadow.Transparency = shadowTransparency
-
-		if alpha < 1 then
-			return
-		end
-
-		visual.connection:Disconnect()
-		visual.connection = nil
-
-		local pulseColor = result == "Heads" and VisualConfig.HeadsPulseColor or VisualConfig.TailsPulseColor
-		playLandingPulse(landingPulse, shadowPos, pulseColor)
-		if shouldShowObservedStreakPulse then
-			local streakPulseBonus = math.clamp(observedStreak - VisualConfig.StreakPulseMinimum, 0, 6) * 0.16
-			playLandingPulse(streakPulse, shadowPos, VisualConfig.StreakPulseColor, {
-				startSize = VisualConfig.StreakPulseStartSize,
-				endSize = VisualConfig.StreakPulseEndSize + streakPulseBonus,
-				duration = VisualConfig.StreakPulseDuration,
-				transparency = 0.22,
-			})
-		end
-
-		local settleTween = TweenService:Create(
-			coin,
-			TweenInfo.new(VisualConfig.LandingDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{
-				CFrame = CFrame.new(endPos) * CFrame.Angles(finalRotation, 0, math.rad(90)),
-			}
-		)
-		settleTween:Play()
-
-		local shadowTween = TweenService:Create(
-			shadow,
-			TweenInfo.new(VisualConfig.LandingDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{
-				CFrame = CFrame.new(shadowPos) * CFrame.Angles(0, 0, math.rad(90)),
-				Size = baseShadowSize,
-				Transparency = VisualConfig.ShadowBaseTransparency,
-			}
-		)
-		shadowTween:Play()
-
-		settleTween.Completed:Once(function()
-			if visual.shouldFollowCamera then
-				FirstPersonCamera.ReturnToFirstPerson(coin)
-			end
-			if landedCallback then
-				task.delay(VisualConfig.ResultRevealDelay or 0, landedCallback)
-			end
-			task.delay(VisualConfig.CleanupDelay, function()
-				local latestVisual = activeVisuals[seatId]
-				if latestVisual == visual then
-					clearCoinVisual(seatId)
-				end
-			end)
-		end)
 	end)
 end
 
@@ -1182,114 +557,6 @@ local function bindFlipInput()
 		Enum.KeyCode.Space,
 		Enum.KeyCode.ButtonR2
 	)
-end
-
-local function bindGrowthPanels()
-	RebirthFrame.Visible = false
-	ShopFrame.Visible = false
-	InventoryFrame.Visible = false
-
-	uiController.SetButtonHoverAndClick(CoinFlipMenu.RebirthButton, function()
-		updateGrowthPanels()
-		uiController.OpenFrame("Rebirth")
-	end)
-	uiController.SetButtonHoverAndClick(CoinFlipMenu.ShopButton, function()
-		updateGrowthPanels()
-		uiController.OpenFrame("Shop")
-	end)
-	uiController.SetButtonHoverAndClick(CoinFlipMenu.InventoryButton, function()
-		updateGrowthPanels()
-		uiController.OpenFrame("Inventory")
-	end)
-
-	uiController.SetButtonHoverAndClick(RebirthFrame.X, function()
-		uiController.CloseFrame("Rebirth")
-	end)
-	uiController.SetButtonHoverAndClick(ShopFrame.X, function()
-		uiController.CloseFrame("Shop")
-	end)
-	uiController.SetButtonHoverAndClick(InventoryFrame.X, function()
-		uiController.CloseFrame("Inventory")
-	end)
-
-	uiController.SetButtonHoverAndClick(RebirthConfirmButton, function()
-		CoinFlipSystem.Server:RequestRebirth()
-	end)
-	uiController.SetButtonHoverAndClick(RebirthKeepRunButton, function()
-		uiController.CloseFrame("Rebirth")
-	end)
-	for index, upgradeKey in ipairs(Presets.Growth.RebirthUpgradeOrder) do
-		local boundUpgradeKey = upgradeKey
-		uiController.SetButtonHoverAndClick(RebirthPerkCards[index].UpgradeButton, function()
-			CoinFlipSystem.Server:RequestRebirthUpgrade({
-				upgradeKey = boundUpgradeKey,
-			})
-		end)
-	end
-
-	uiController.SetButtonHoverAndClick(ShopTabs.CoinTab, function()
-		selectedShopCategory = "coin"
-		updateShopPanel()
-	end)
-	uiController.SetButtonHoverAndClick(ShopTabs.DeskTab, function()
-		selectedShopCategory = "desk"
-		updateShopPanel()
-	end)
-	for index, card in ipairs(ShopItemCards) do
-		local boundIndex = index
-		uiController.SetButtonHoverAndClick(card.BuyButton, function()
-			local item = (Presets.Growth.ShopItems[selectedShopCategory] or {})[boundIndex]
-			if not item then
-				return
-			end
-			if getOwnedItems(selectedShopCategory)[item.id] then
-				CoinFlipSystem.Server:RequestEquipItem({
-					category = selectedShopCategory,
-					itemId = item.id,
-				})
-			else
-				CoinFlipSystem.Server:RequestShopPurchase({
-					category = selectedShopCategory,
-					itemId = item.id,
-				})
-			end
-		end)
-	end
-
-	uiController.SetButtonHoverAndClick(InventoryTabs.CoinTab, function()
-		selectedInventoryCategory = "coin"
-		updateInventoryPanel()
-	end)
-	uiController.SetButtonHoverAndClick(InventoryTabs.DeskTab, function()
-		selectedInventoryCategory = "desk"
-		updateInventoryPanel()
-	end)
-	uiController.SetButtonHoverAndClick(InventoryTabs.OtherTab, function()
-		selectedInventoryCategory = "other"
-		updateInventoryPanel()
-	end)
-	for index, card in ipairs(InventoryItemCards) do
-		local boundIndex = index
-		uiController.SetButtonHoverAndClick(card.EquipButton, function()
-			if selectedInventoryCategory == "other" then
-				return
-			end
-
-			local visibleIndex = 0
-			for _, item in ipairs(Presets.Growth.ShopItems[selectedInventoryCategory] or {}) do
-				if getOwnedItems(selectedInventoryCategory)[item.id] then
-					visibleIndex += 1
-					if visibleIndex == boundIndex then
-						CoinFlipSystem.Server:RequestEquipItem({
-							category = selectedInventoryCategory,
-							itemId = item.id,
-						})
-						return
-					end
-				end
-			end
-		end)
-	end
 end
 
 local function updateTableOverview(seatState)
@@ -1380,10 +647,8 @@ function CoinFlipUi.Init()
 	uiController.HideUnitWhenPush(Hud)
 	uiController.HideUnitWhenPush(CoinFlipMenu)
 	ensureLeaveButton()
-	applyGrowthTextPolish()
 	bindViewportLayout()
 	bindFlipInput()
-	bindGrowthPanels()
 
 	uiController.SetButtonHoverAndClick(FlipButton, function()
 		requestFlip()
@@ -1408,17 +673,18 @@ function CoinFlipUi.SyncRunState(args)
 		nextCosts = args.nextCosts or {},
 		derivedStats = args.derivedStats or {},
 	}
-	currentGrowthState = args.growthState or currentGrowthState
 	ClientData:SetOneData(dataKey.wins, cash)
 	ClientData:SetOneData(dataKey.runData, args.runData)
-	if args.growthState then
-		ClientData:SetOneData(dataKey.rebirth, args.growthState.rebirth)
-		ClientData:SetOneData(dataKey.fateShards, args.growthState.fateShards)
-		ClientData:SetOneData(dataKey.rebirthTree, args.growthState.rebirthTree)
-		ClientData:SetOneData(dataKey.equippedCoin, args.growthState.loadout.equippedCoin)
-		ClientData:SetOneData(dataKey.ownedCoins, args.growthState.loadout.ownedCoins)
-		ClientData:SetOneData(dataKey.equippedDeskSetup, args.growthState.loadout.equippedDeskSetup)
-		ClientData:SetOneData(dataKey.ownedDeskSetups, args.growthState.loadout.ownedDeskSetups)
+	if args.loadoutState then
+		ClientData:SetOneData(dataKey.equippedCoin, args.loadoutState.equippedCoin)
+		ClientData:SetOneData(dataKey.ownedCoins, args.loadoutState.ownedCoins)
+		ClientData:SetOneData(dataKey.equippedDeskSetup, args.loadoutState.equippedDeskSetup)
+		ClientData:SetOneData(dataKey.ownedDeskSetups, args.loadoutState.ownedDeskSetups)
+	end
+	if args.rebirthState then
+		ClientData:SetOneData(dataKey.rebirth, args.rebirthState.rebirth)
+		ClientData:SetOneData(dataKey.fateShards, args.rebirthState.fateShards)
+		ClientData:SetOneData(dataKey.rebirthTree, args.rebirthState.rebirthTree)
 	end
 	CashValue.Text = `$ {Util.FormatNumber(cash, true)}`
 	ChanceValue.Text = `{math.round((args.derivedStats.headsChance or 0) * 1000) / 10}%`
@@ -1434,28 +700,32 @@ function CoinFlipUi.SyncRunState(args)
 
 	updateTableOverview(args.seatState)
 	CoinFlipUi.UpdateOnboarding(args.onboarding)
-	updateGrowthPanels()
 end
 
 function CoinFlipUi.FlipResolved(args)
 	awaitingFlipResponse = false
-	playCoinVisual(args.seatState and args.seatState.seatId, args.result, function()
-		CoinFlipUi.SyncRunState(args)
-		local failureFollowUpText = buildFailureFollowUpText()
+	EffectSystem:PlayCoinFlipVisual(nil, nil, {
+		seatId = args.seatState and args.seatState.seatId,
+		result = args.result,
+		shouldFollowCamera = true,
+		landedCallback = function()
+			CoinFlipUi.SyncRunState(args)
+			local failureFollowUpText = buildFailureFollowUpText()
 
-		if args.result == "Heads" then
-			updateResultText(`Heads! +$ {Util.FormatNumber(args.reward or 0, true)}`, "Heads")
-		elseif (args.reward or 0) > 0 then
-			updateResultText(
-				`Tails! +$ {Util.FormatNumber(args.reward, true)} | Streak reset. {failureFollowUpText}`,
-				"Tails"
-			)
-			maybeShowFailureFollowUpNotification(failureFollowUpText)
-		else
-			updateResultText(`Tails! Streak reset. {failureFollowUpText}`, "Tails")
-			maybeShowFailureFollowUpNotification(failureFollowUpText)
-		end
-	end, true)
+			if args.result == "Heads" then
+				updateResultText(`Heads! +$ {Util.FormatNumber(args.reward or 0, true)}`, "Heads")
+			elseif (args.reward or 0) > 0 then
+				updateResultText(
+					`Tails! +$ {Util.FormatNumber(args.reward, true)} | Streak reset. {failureFollowUpText}`,
+					"Tails"
+				)
+				maybeShowFailureFollowUpNotification(failureFollowUpText)
+			else
+				updateResultText(`Tails! Streak reset. {failureFollowUpText}`, "Tails")
+				maybeShowFailureFollowUpNotification(failureFollowUpText)
+			end
+		end,
+	})
 end
 
 function CoinFlipUi.SeatStateChanged(args)
@@ -1492,10 +762,14 @@ function CoinFlipUi.ObservedFlip(args)
 		return
 	end
 
-	playCoinVisual(args.seatId, args.result, function()
-	end, false, {
-		isObserved = true,
-		streak = args.streak or 0,
+	EffectSystem:PlayCoinFlipVisual(nil, nil, {
+		seatId = args.seatId,
+		result = args.result,
+		shouldFollowCamera = false,
+		visualOptions = {
+			isObserved = true,
+			streak = args.streak or 0,
+		},
 	})
 end
 

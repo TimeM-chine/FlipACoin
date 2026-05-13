@@ -7,6 +7,115 @@ local ItemType = Keys.ItemType
 
 local EcoPresets = {}
 
+EcoPresets.ShopCategoryAliases = table.freeze({
+	coin = "coin",
+	coins = "coin",
+	desk = "desk",
+	desks = "desk",
+	desksetup = "desk",
+	desksetups = "desk",
+})
+
+EcoPresets.LoadoutDefaults = table.freeze({
+	equippedCoin = "Rusty Penny",
+	equippedDeskSetup = "Folding Table",
+})
+
+EcoPresets.GrowthShopItems = {
+	coin = table.freeze({
+		{
+			id = "Rusty Penny",
+			displayName = "Rusty Penny",
+			rarity = "Common",
+			role = "Starter",
+			cost = 0,
+			stats = {
+				coinMultiplier = 1,
+				luckBonus = 0,
+			},
+		},
+		{
+			id = "Lucky Nickel",
+			displayName = "Lucky Nickel",
+			rarity = "Uncommon",
+			role = "Luck",
+			cost = 180,
+			stats = {
+				coinMultiplier = 1.05,
+				luckBonus = 0.025,
+			},
+		},
+		{
+			id = "Combo Quarter",
+			displayName = "Combo Quarter",
+			rarity = "Rare",
+			role = "Streak",
+			cost = 520,
+			stats = {
+				coinMultiplier = 1.16,
+				luckBonus = 0.01,
+			},
+		},
+		{
+			id = "Royal Doubloon",
+			displayName = "Royal Doubloon",
+			rarity = "Epic",
+			role = "Cash",
+			cost = 1400,
+			stats = {
+				coinMultiplier = 1.35,
+				luckBonus = 0.018,
+			},
+		},
+	}),
+	desk = table.freeze({
+		{
+			id = "Folding Table",
+			displayName = "Folding Table",
+			rarity = "Common",
+			role = "Starter",
+			cost = 0,
+			stats = {
+				coinMultiplier = 1,
+				luckBonus = 0,
+			},
+		},
+		{
+			id = "Green Felt",
+			displayName = "Green Felt",
+			rarity = "Uncommon",
+			role = "Steady",
+			cost = 260,
+			stats = {
+				coinMultiplier = 1.08,
+				luckBonus = 0.008,
+			},
+		},
+		{
+			id = "Arcade Desk",
+			displayName = "Arcade Desk",
+			rarity = "Rare",
+			role = "Fast Cash",
+			cost = 760,
+			stats = {
+				coinMultiplier = 1.18,
+				luckBonus = 0.012,
+			},
+		},
+		{
+			id = "Velvet Casino",
+			displayName = "Velvet Casino",
+			rarity = "Epic",
+			role = "Premium",
+			cost = 1800,
+			stats = {
+				coinMultiplier = 1.30,
+				luckBonus = 0.02,
+			},
+		},
+	}),
+}
+
 EcoPresets.Products = {
 	cardPacks = {
 		cardPack1 = {
@@ -537,5 +646,48 @@ for code, config in pairs(redeemCodes) do
 	EcoPresets.redeemCodes[string.upper(code)] = config
 end
 redeemCodes = nil
+
+function EcoPresets.ResolveShopCategory(category)
+	if typeof(category) ~= "string" then
+		return nil
+	end
+
+	return EcoPresets.ShopCategoryAliases[string.lower(category)]
+end
+
+function EcoPresets.GetShopItem(category, itemId)
+	local resolvedCategory = EcoPresets.ResolveShopCategory(category)
+	if not resolvedCategory or typeof(itemId) ~= "string" then
+		return nil
+	end
+
+	for _, item in ipairs(EcoPresets.GrowthShopItems[resolvedCategory]) do
+		if item.id == itemId then
+			return item
+		end
+	end
+
+	return nil
+end
+
+function EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDeskSetup)
+	local bonuses = {
+		coinMultiplier = 1,
+		luckBonus = 0,
+	}
+	local equippedItems = {
+		EcoPresets.GetShopItem("coin", equippedCoin),
+		EcoPresets.GetShopItem("desk", equippedDeskSetup),
+	}
+
+	for _, item in ipairs(equippedItems) do
+		if item and item.stats then
+			bonuses.coinMultiplier *= item.stats.coinMultiplier or 1
+			bonuses.luckBonus += item.stats.luckBonus or 0
+		end
+	end
+
+	return bonuses
+end
 
 return EcoPresets

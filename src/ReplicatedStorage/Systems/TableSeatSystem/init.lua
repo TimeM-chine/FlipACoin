@@ -222,6 +222,14 @@ local function syncCoinFlipSeatState(self, player, seatState)
 	})
 end
 
+local function refreshPlayerDecoration(player)
+	GetSystemMgr().systems.DecorationSystem:RefreshPlayerDecoration(SENDER, player)
+end
+
+local function clearPlayerDecoration(player)
+	GetSystemMgr().systems.DecorationSystem:ClearPlayerDecoration(SENDER, player)
+end
+
 local function broadcastSeatStates(self)
 	local systemMgr = GetSystemMgr()
 
@@ -253,6 +261,7 @@ local function clearSeatOwnership(self, player)
 	end
 	self._playerSeats[player.UserId] = nil
 	self._lastActivity[player.UserId] = nil
+	clearPlayerDecoration(player)
 
 	if seatRecord and seatRecord.seat then
 		local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
@@ -416,6 +425,7 @@ function TableSeatSystem:_EnsureSeatCatalog()
 							self._playersWaitingForSeat = self._playersWaitingForSeat or {}
 							self._playersWaitingForSeat[occupantPlayer.UserId] = nil
 							refreshPromptAttributes(self, seatKey)
+							refreshPlayerDecoration(occupantPlayer)
 							GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(occupantPlayer)
 							broadcastSeatStates(self)
 							GetSystemMgr().systems.CoinFlipSystem:HandleGuideSit(SENDER, occupantPlayer)
@@ -899,6 +909,7 @@ function TableSeatSystem:RequestSit(sender, player, args)
 		self._playerSeats[player.UserId] = seatKey
 		self._lastActivity[player.UserId] = os.clock()
 		refreshPromptAttributes(self, seatKey)
+		refreshPlayerDecoration(player)
 		GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(player)
 		broadcastSeatStates(self)
 		return true
@@ -910,6 +921,7 @@ function TableSeatSystem:RequestSit(sender, player, args)
 		self._playerSeats[player.UserId] = seatKey
 		self._lastActivity[player.UserId] = os.clock()
 		refreshPromptAttributes(self, seatKey)
+		refreshPlayerDecoration(player)
 		GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(player)
 		broadcastSeatStates(self)
 		return true

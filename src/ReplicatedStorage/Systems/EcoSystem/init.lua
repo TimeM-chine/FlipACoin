@@ -36,7 +36,10 @@ local EcoUi = { pendingCalls = {} }
 setmetatable(EcoUi, Types.mt)
 
 local EcoSystem: Types.System = {
-	whiteList = {},
+	whiteList = {
+		"GetLoadoutState",
+		"GetLoadoutBonuses",
+	},
 	players = {},
 	tasks = {},
 	IsLoaded = false,
@@ -141,6 +144,79 @@ function GetSystemMgr()
 		SENDER = SystemMgr.SENDER
 	end
 	return SystemMgr
+end
+
+local function getOwnedKey(category)
+	if category == "coin" then
+		return dataKey.ownedCoins
+	end
+	if category == "desk" then
+		return dataKey.ownedDeskSetups
+	end
+
+	return nil
+end
+
+local function getEquippedKey(category)
+	if category == "coin" then
+		return dataKey.equippedCoin
+	end
+	if category == "desk" then
+		return dataKey.equippedDeskSetup
+	end
+
+	return nil
+end
+
+local function normalizeLoadoutData(playerIns)
+	local ownedCoins = playerIns:GetOneData(dataKey.ownedCoins)
+	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin)
+	local ownedDeskSetups = playerIns:GetOneData(dataKey.ownedDeskSetups)
+	local equippedDeskSetup = playerIns:GetOneData(dataKey.equippedDeskSetup)
+
+	if typeof(ownedCoins) ~= "table" then
+		ownedCoins = {
+			[EcoPresets.LoadoutDefaults.equippedCoin] = true,
+		}
+		playerIns:SetOneData(dataKey.ownedCoins, ownedCoins)
+	end
+	if not EcoPresets.GetShopItem("coin", equippedCoin) or not ownedCoins[equippedCoin] then
+		equippedCoin = EcoPresets.LoadoutDefaults.equippedCoin
+		ownedCoins[equippedCoin] = true
+		playerIns:SetOneData(dataKey.equippedCoin, equippedCoin)
+		playerIns:SetOneData(dataKey.ownedCoins, ownedCoins)
+	end
+
+	if typeof(ownedDeskSetups) ~= "table" then
+		ownedDeskSetups = {
+			[EcoPresets.LoadoutDefaults.equippedDeskSetup] = true,
+		}
+		playerIns:SetOneData(dataKey.ownedDeskSetups, ownedDeskSetups)
+	end
+	if not EcoPresets.GetShopItem("desk", equippedDeskSetup) or not ownedDeskSetups[equippedDeskSetup] then
+		equippedDeskSetup = EcoPresets.LoadoutDefaults.equippedDeskSetup
+		ownedDeskSetups[equippedDeskSetup] = true
+		playerIns:SetOneData(dataKey.equippedDeskSetup, equippedDeskSetup)
+		playerIns:SetOneData(dataKey.ownedDeskSetups, ownedDeskSetups)
+	end
+
+	return {
+		ownedCoins = ownedCoins,
+		equippedCoin = equippedCoin,
+		ownedDeskSetups = ownedDeskSetups,
+		equippedDeskSetup = equippedDeskSetup,
+	}
+end
+
+local function refreshCashDisplays(player)
+	SystemMgr.systems.PlayerSystem:UpdateLeaderStats(player)
+	SystemMgr.systems.PlayerSystem:UpdatePlayerHeadGui(player)
+end
+
+local function refreshDeskDecoration(player, category)
+	if category == "desk" then
+		SystemMgr.systems.DecorationSystem:RefreshPlayerDecoration(SENDER, player)
+	end
 end
 
 function EcoSystem:Init()
@@ -401,6 +477,7 @@ function EcoSystem:PlayerAdded(sender, player, args)
 		args = {
 			gamePasses = playerIns:GetOneData(dataKey.gamePasses),
 			wins = playerIns:GetOneData(dataKey.wins),
+			loadoutState = self:GetLoadoutState(SENDER, player),
 			limitedPets = GlobalDataModule.GetMemoryStore("LimitedPets"),
 		}
 		self.Client:PlayerAdded(player, args)
@@ -414,6 +491,8 @@ function EcoSystem:PlayerAdded(sender, player, args)
 		for _, call in ipairs(pendingCalls) do
 			EcoUi[call.functionName](table.unpack(call.args))
 		end
+
+		EcoUi.SyncLoadoutState(args)
 	end
 end
 
@@ -492,6 +571,183 @@ function EcoSystem:AddResource(sender, player, args: { resourceType: string, cou
 			end
 		end
 	end
+end
+
+function EcoSystem:GetLoadoutState(sender, player)
+	if IsServer then
+		if sender ~= SENDER then
+			return nil
+		end
+
+		local playerIns = PlayerServerClass.GetIns(player)
+		if not playerIns then
+			return nil
+		end
+
+		local loadoutData = normalizeLoadoutData(playerIns)
+		return {
+			equippedCoin = loadoutData.equippedCoin,
+			equippedDeskSetup = loadoutData.equippedDeskSetup,
+			ownedCoins = table.clone(loadoutData.ownedCoins),
+			ownedDeskSetups = table.clone(loadoutData.ownedDeskSetups),
+			shopItems = EcoPresets.GrowthShopItems,
+			derivedStats = EcoPresets.BuildLoadoutBonuses(loadoutData.equippedCoin, loadoutData.equippedDeskSetup),
+		}
+	else
+		return ClientData:GetOneData("loadoutState")
+	end
+end
+
+function EcoSystem:GetLoadoutBonuses(sender, player)
+	if IsServer then
+		if sender ~= SENDER then
+			return {
+				coinMultiplier = 1,
+				luckBonus = 0,
+			}
+		end
+
+		local playerIns = PlayerServerClass.GetIns(player)
+		if not playerIns then
+			return {
+				coinMultiplier = 1,
+				luckBonus = 0,
+			}
+		end
+
+		local loadoutData = normalizeLoadoutData(playerIns)
+		return EcoPresets.BuildLoadoutBonuses(loadoutData.equippedCoin, loadoutData.equippedDeskSetup)
+	else
+		local loadoutState = ClientData:GetOneData("loadoutState") or {}
+		return loadoutState.derivedStats
+	end
+end
+
+function EcoSystem:RequestShopPurchase(sender, player, args)
+	if IsServer then
+		player = player or sender
+		if sender ~= SENDER and sender ~= player then
+			return
+		end
+		if typeof(args) ~= "table" then
+			return
+		end
+
+		local category = EcoPresets.ResolveShopCategory(args.category)
+		local item = EcoPresets.GetShopItem(category, args.itemId)
+		if not category or not item then
+			return
+		end
+
+		local ownedKey = getOwnedKey(category)
+		local equippedKey = getEquippedKey(category)
+		local playerIns = PlayerServerClass.GetIns(player)
+		if not playerIns then
+			return
+		end
+
+		normalizeLoadoutData(playerIns)
+		local ownedItems = playerIns:GetOneData(ownedKey)
+		if ownedItems[item.id] then
+			playerIns:SetOneData(equippedKey, item.id)
+			refreshCashDisplays(player)
+			refreshDeskDecoration(player, category)
+			SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
+			SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
+				equippedItem = item.id,
+				equippedCategory = category,
+			})
+			return
+		end
+
+		local wins = playerIns:GetOneData(dataKey.wins)
+		if wins < item.cost then
+			SystemMgr.systems.GuiSystem:SetNotification(SENDER, player, {
+				text = "Not enough Cash",
+				lastTime = 2,
+			})
+			SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player)
+			return
+		end
+
+		self:AddResource(SENDER, player, {
+			resourceType = dataKey.wins,
+			count = -item.cost,
+			reason = "shop",
+		})
+		ownedItems[item.id] = true
+		playerIns:SetOneData(ownedKey, ownedItems)
+		playerIns:SetOneData(equippedKey, item.id)
+
+		refreshDeskDecoration(player, category)
+		SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
+		SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
+			purchasedItem = item.id,
+			equippedItem = item.id,
+			equippedCategory = category,
+		})
+	else
+		--
+	end
+end
+
+function EcoSystem:RequestEquipItem(sender, player, args)
+	if IsServer then
+		player = player or sender
+		if sender ~= SENDER and sender ~= player then
+			return
+		end
+		if typeof(args) ~= "table" then
+			return
+		end
+
+		local category = EcoPresets.ResolveShopCategory(args.category)
+		local item = EcoPresets.GetShopItem(category, args.itemId)
+		if not category or not item then
+			return
+		end
+
+		local ownedKey = getOwnedKey(category)
+		local equippedKey = getEquippedKey(category)
+		local playerIns = PlayerServerClass.GetIns(player)
+		if not playerIns then
+			return
+		end
+
+		normalizeLoadoutData(playerIns)
+		local ownedItems = playerIns:GetOneData(ownedKey)
+		if not ownedItems[item.id] then
+			return
+		end
+
+		playerIns:SetOneData(equippedKey, item.id)
+		refreshCashDisplays(player)
+		refreshDeskDecoration(player, category)
+		SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
+		SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
+			equippedItem = item.id,
+			equippedCategory = category,
+		})
+	else
+		--
+	end
+end
+
+function EcoSystem:SyncLoadoutState(sender, player, args)
+	if IsServer then
+		return
+	end
+
+	local loadoutState = args and args.loadoutState
+	if loadoutState then
+		ClientData:SetOneData("loadoutState", loadoutState)
+		ClientData:SetOneData(dataKey.equippedCoin, loadoutState.equippedCoin)
+		ClientData:SetOneData(dataKey.ownedCoins, loadoutState.ownedCoins)
+		ClientData:SetOneData(dataKey.equippedDeskSetup, loadoutState.equippedDeskSetup)
+		ClientData:SetOneData(dataKey.ownedDeskSetups, loadoutState.ownedDeskSetups)
+	end
+
+	EcoUi.SyncLoadoutState(args)
 end
 
 function EcoSystem:GiveItem(sender, player, args: { itemType: string, count: number, name: string, reason: string })

@@ -1,15 +1,41 @@
 # TASK_STATE
 
-最后更新：2026-05-10
+最后更新：2026-05-14
 
 > 目的：记录当前正在做什么、下一步是什么、已做验证、关键决策与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`。
 
 ## Active
 
-### 2026-05-08 Mobile UI production and logic wiring
+### 2026-05-14 Decoration system
+
+- Started: 2026-05-14
+- Status: `CODE-COMPLETE / NEEDS-STUDIO-PLAY-CHECK` renamed to generalized `DecorationSystem` and added runtime migration for `Workspace.TableDecoration`.
+- Scope:
+  - Confirm existing Desk Setup purchase / equip / persistence / bonus logic.
+  - Add `DecorationSystem` to own Workspace-visible decoration models.
+  - Wire Desk Setup equip and seat lifecycle changes to refresh per-seat decoration models.
+  - Move or migrate `Workspace.TableDecoration` under the new system asset folder.
+- Next:
+  - `DecorationSystem` created, registered in `SystemMgr`, and wired to clone / replace / clear per-seat Desk Setup models.
+  - `EcoSystem` now refreshes table decoration after successful Desk Setup purchase / equip.
+  - `TableSeatSystem` now refreshes or clears player decoration on seat ownership changes and player removal.
+  - `DecorationSystem` startup now migrates `Workspace.TableDecoration` into `DecorationSystem.Assets.TableDecoration` at runtime if the model is still in Workspace.
+  - If `Workspace.TableDecoration` has exact Desk Setup child models, they are used by item id; otherwise the single model is stored as `Default` and reused for all Desk Setup items until distinct assets are added.
+  - `PROJECT_LOGIC.md` updated for the new active system and asset contract.
+  - `rojo build default.project.json --output /private/tmp/flip_decoration_system_check.rbxl` passed on 2026-05-14.
+  - `git diff --check` passed on 2026-05-14 after the `DecorationSystem` rename.
+  - `stylua` could not run because the Aftman-managed tool is not listed in `aftman.toml`; `selene` is not installed locally.
+  - For permanent source-backed assets, move the live `Workspace.TableDecoration` Studio instance into `ReplicatedStorage.Systems.DecorationSystem.Assets.TableDecoration` and split / name child models as `Folding Table`, `Green Felt`, `Arcade Desk`, `Velvet Casino`.
+- Decisions:
+  - Desk Setup visuals are per seated player, not a single global table decoration.
+  - Existing persisted keys `equippedDeskSetup / ownedDeskSetups` remain the source of truth.
+  - `DecorationSystem` is named broadly because it should also own future visual decorations such as player stools.
+  - Missing exact Desk Setup models should use a migrated `Default` table decoration when available; only warn when neither exact nor default assets exist.
+
+### 2026-05-08 Growth UI production and logic wiring
 
 - Started: 2026-05-08
-- Status: `VAL-09` tab layout adjusted away from left touch controls; only real touch category-tab switching remains for user confirmation.
+- Status: `DESKTOP-FOCUS` runtime mobile-only growth menu / panel repositioning removed; Studio-authored button and frame positions are the current layout source of truth.
 - Scope:
   - Main HUD: remove the top-left Brand / table population block from the live UI plan because players do not need table population status.
   - Build Studio UI for main HUD entry buttons, Rebirth, Shop, and Inventory based on the latest HTML direction.
@@ -18,26 +44,25 @@
 - Non-negotiable UI constraints:
   - New UI size and position must be Scale-first (`UDim2` scale for `Size` / `Position`); avoid fixed pixel Offset for layout-critical sizing and placement.
   - Offset is allowed only for small local details such as padding, stroke thickness, icon/text spacing, or minimum touch target polish when Scale cannot express it cleanly.
-  - Mobile / touch is the primary validation target for this pass.
-  - Safe area must be checked in runtime Play mode because the phone safe area only applies after the game is running.
-  - Studio is already switched to a phone device; validation route is: start Play -> capture screenshot -> inspect proportions, safe area, overlap, and touch target readability.
+  - Desktop / Studio-authored UI layout is the primary validation target for this pass; the current game does not support mobile.
+  - Runtime code should not move growth entry buttons or Rebirth / Shop / Inventory frames for mobile-only TouchGui concerns.
 - Task split:
   - `UI-00` Source audit and target hierarchy: inspect current `StarterGui.Main`, `CoinFlipHUD`, `uiClient.client.lua`, `uiController.lua`, active systems, and existing unused `RebirthSystem` / `BackpackSystem` / shop-like legacy modules before editing.
-  - `UI-01` Main HUD production: remove top-left Brand/table-count concept; keep resources and equipment buffs only where they help decisions; place Rebirth / Shop / Inventory entry buttons in a mobile-safe location.
+  - `UI-01` Main HUD production: remove top-left Brand/table-count concept; keep resources and equipment buffs only where they help decisions; place Rebirth / Shop / Inventory entry buttons in a stable desktop location.
   - `UI-02` Rebirth panel production: show reset impact, expected rebirth points, permanent upgrade cards, upgrade costs, and confirmation states.
   - `UI-03` Shop panel production: support Coin and Desk Setup categories first; item cards show price, ownership, rarity/role, and stat bonuses such as coin multiplier, luck, and coin multiplier from desk setup.
   - `UI-04` Inventory panel production: support category tabs and fixed equipment slots for Coin and Desk Setup; leave room for future item types without changing the main HUD.
   - `LOGIC-01` Data contract planning: decide persisted keys and runtime state for rebirth points/upgrades, owned items, equipped Coin, equipped Desk Setup, and derived stat bonuses.
   - `LOGIC-02` Server authority: implement purchase, equip, and rebirth confirmation on server first; client UI only requests actions and renders synced state.
   - `LOGIC-03` Client binding: bind buttons through `uiController`, sync panels from `ClientData` / system payloads, and keep deterministic UI paths loud rather than over-guarded.
-  - `VAL-01` Mobile runtime validation: Play in current phone device, screenshot main HUD and each panel, then record whether safe area, proportions, text fit, touch targets, and close/open flows pass.
+  - `VAL-01` Studio runtime validation: Play, screenshot main HUD and each panel, then record whether proportions, text fit, click targets, and close/open flows pass.
   - `VAL-02` Regression checks: verify core Flip still works from HUD / `Space` / gamepad path where applicable, player still auto-seats, and rebirth returns player to a usable seat.
 - Next:
   - `UI-00` source / hierarchy audit is complete.
   - `UI-01` main HUD + Rebirth / Shop / Inventory Studio UI assets are in place.
   - `LOGIC-01` data contract uses existing `fateShards` as Rebirth Points, existing `rebirthTree` as permanent upgrade tree, existing `equippedCoin / ownedCoins`, and new `equippedDeskSetup / ownedDeskSetups`.
   - `LOGIC-02` server authority is now in `CoinFlipSystem`: purchase, equip, rebirth confirmation, rebirth upgrade, and loadout-derived flip bonuses.
-  - `LOGIC-03` client binding is now in `CoinFlipSystem/ui.lua`: `Buttons.CoinFlipMenu` opens `Frames.Rebirth / Shop / Inventory`, renders synced `growthState`, and sends server requests only.
+  - `LOGIC-03` client binding initially landed in `CoinFlipSystem/ui.lua`; the 2026-05-13 responsibility migration moves Shop / Inventory bindings to `EcoSystem/ui.lua` and Rebirth bindings to `RebirthSystem/ui.lua`.
   - `VAL-01` Studio phone screenshots captured for main HUD, Rebirth, Shop, and Inventory after moving the growth menu away from the left touch controls and shrinking/right-shifting growth panels.
   - MCP synthetic clicking reliably covered `FLIP`, but remained unreliable for Rebirth / Shop / Inventory entry and close buttons; final touch feel should be confirmed manually on device / Studio touch input.
   - `VAL-02` Studio single-client regression passed on 2026-05-10: auto-seat on join to `Seat01`, HUD `FLIP` click, `Space`, and simulated `ButtonR2` all triggered flips and updated Cash while preserving the seat.
@@ -64,27 +89,40 @@
   - `VAL-09` landscape tab target layout adjusted on 2026-05-10: growth panels now use `Position = UDim2.fromScale(0.65, 0.51)` and `Size = UDim2.fromScale(0.62, 0.72)` on mobile landscape, moving Shop / Inventory category tabs away from the left TouchGui thumbstick area.
   - `VAL-09` Studio phone screenshot checked on 2026-05-10: Shop panel still fits cleanly, tab labels remain readable, item cards and loadout preview do not overlap, and the tab column is no longer visually sitting over the left stick.
   - MCP `user_mouse_input` remains unreliable for `uiController.SetButtonHoverAndClick` buttons, including the already user-confirmed growth entry buttons, so it is not authoritative for tab touch confirmation.
+  - `VAL-10` runtime hit-test on 2026-05-12 found Shop `DeskTab` center resolves first to the tab itself, with no TouchGui or panel overlay above it; MCP click still did not trigger the `uiController` binding, matching earlier tool unreliability.
+  - `VAL-10` category tab target polish applied on 2026-05-12: Shop and Inventory category tabs now get runtime `Size = UDim2.fromScale(0.92, 0.2)` and fixed Bold size `16`, raising phone runtime tab height from about 33px to about 44px while staying Scale-first.
+  - `VAL-10` uncovered and disabled a legacy transparent `Main.Frames.noUse.Notifications` frame on 2026-05-12; it was visible / interactable and could appear above the Shop tab in hit-test order.
+  - `VAL-10` runtime verification after the legacy overlay fix passed on 2026-05-12: `noUse.Notifications` is `Visible=false` / `Interactable=false`, Shop and Inventory tab centers resolve first to their own tab objects, and phone screenshots show no card / loadout overlap.
+  - `VAL-11` source review on 2026-05-13 confirmed category tabs are still bound through `uiController.SetButtonHoverAndClick`, growth panel layout remains Scale-first on mobile, and no extra source-side hit-test blocker was found after the `noUse` overlay fix.
+  - `VAL-11` validation on 2026-05-13: `git diff --check` passed cleanly.
+  - `DESKTOP-01` direction changed on 2026-05-13: user confirmed the game does not support mobile, so left-side growth entry buttons are acceptable and mobile-only repositioning should be removed.
+  - `DESKTOP-01` source update on 2026-05-13: removed runtime growth menu and growth panel layout overrides from `CoinFlipSystem/ui.lua`, so `CoinFlipMenu` and `Frames.Rebirth / Shop / Inventory` keep their Studio-authored positions during Play.
+  - `DESKTOP-01` validation on 2026-05-13: source scan found no remaining runtime position / size overrides for `CoinFlipMenu` or the growth frames; `git diff --check` passed.
+  - `DESKTOP-02` selected tab visual fix applied on 2026-05-13: `EcoSystem/ui.lua` now sets explicit selected / idle background and text colors in the shared Shop / Inventory category tab update path, so clicked tabs visibly switch to the yellow selected state.
+  - `DESKTOP-02` validation on 2026-05-13: `git diff --check` passed; `selene` was not available in the local shell.
   - Console notes from validation: one `CashCard` error came from an incorrect assistant probe path, not game code; `Sit : param is not a Humanoid or humanoid is dead` appeared during forced death but recovered to a seated state; existing Studio style warnings for `RoundedCorner8` are not represented in Rojo source search.
-  - `FRAMEWORK.md` §8 was read for this implementation pass on 2026-05-10.
+  - `FRAMEWORK.md` §8 was read for this implementation pass on 2026-05-10 and again on 2026-05-13 for the selected tab visual fix.
 - Decisions:
   - Brand/table population is removed from the main UI plan.
   - UI production comes before logic wiring so the data contract can match the final visible surfaces.
   - Rebirth, Shop, and Inventory are treated as first-class launch systems, but their panels must not obscure the `FLIP` loop unless intentionally opened.
   - Any new persisted fields must be handled in one change across `Keys.DataKey`, `DefaultData`, `DebugData`, runtime read/write points, and downstream consumers.
   - Rebirth Points reuse persisted `fateShards` instead of adding a duplicate point currency.
-  - Legacy `RebirthSystem` remains disabled because it depends on currently inactive systems and old UI paths; the launch Rebirth flow is handled inside active `CoinFlipSystem`.
-  - Legacy onboarding / spectator / overview overlays stay hidden during the new mobile UI pass so button entry opens are not blocked.
-  - The new panels are Scale-first and were validated in Studio Play on the phone device with screenshots for main HUD, Rebirth, Shop, and Inventory.
-  - `CoinFlipMenu` is reparented from `Main.Buttons` to `Main` at runtime so its nested TextButtons can sit above touch controls and receive input reliably.
-  - `Main.DisplayOrder` is raised above Roblox `TouchGui`; legacy `OpeningUI.Frame` and `Notifications.TipFrame` are hidden at UI startup because they were covering current main UI hit tests.
-  - Rebirth button labels should avoid `TextScaled` at small button heights; fixed text sizes read cleaner on the phone viewport.
-  - Shop / Inventory small buttons follow the same fixed-size Bold text rule; status labels should stay short enough to fit the actual phone button width.
+  - `RebirthSystem` was re-enabled on 2026-05-13 and now owns the launch Rebirth flow; old legacy dependencies remain bypassed for the Flip A Coin path.
+  - Legacy onboarding / spectator / overview overlays stay hidden during the new growth UI pass so button entry opens are not blocked.
+  - The new panels are Scale-first; current layout decisions should be validated against desktop / Studio-authored positions.
+  - `CoinFlipMenu` should keep its Studio-authored hierarchy and transform; do not reparent or reposition it for mobile-only touch controls.
+  - `Main.DisplayOrder` is raised above engine / legacy overlays; legacy `OpeningUI.Frame` and `Notifications.TipFrame` are hidden at UI startup because they were covering current main UI hit tests.
+  - Rebirth button labels should avoid `TextScaled` at small button heights; fixed text sizes read cleaner in compact panels.
+  - Shop / Inventory small buttons follow the same fixed-size Bold text rule; status labels should stay short enough to fit compact button widths.
   - Inventory loadout applies immediately from item cards, so an unbound separate Apply button should stay hidden unless a real staged-loadout flow is added.
   - Studio-only UI polish should be codified in runtime UI setup when the corresponding instances are not represented as Rojo source files.
-  - Category tabs should stay larger than the original 0.12 scale height on phone; 0.15 scale height is the current compromise between touch target and compact panel layout.
-  - Mobile landscape growth panels should stay shifted right and slightly narrower so left-side category tabs do not compete with Roblox TouchGui controls.
+  - Category tabs should stay large enough for clear desktop clicking; current runtime style uses `0.20` scale height with fixed Bold size `16`.
+  - Category tab selected state should be explicit in runtime code instead of relying on Studio-authored initial colors.
+  - Growth panels should keep their Studio-authored transforms; do not shrink or shift them for unsupported mobile layouts.
   - Temporary validation helper names should not remain in runtime-created Studio instances; use project-facing names for UI helper instances.
-  - Next manual validation should focus on Shop / Inventory category tab touch feel and any remaining visual polish, especially text clarity and spacing under real phone input.
+  - Legacy frames under `Main.Frames.noUse` should stay non-interactable during the current main UI flow so transparent old UI cannot steal hit tests from Rebirth / Shop / Inventory.
+  - Next validation should focus on desktop / Studio Play layout and any remaining visual polish.
 
 ## Current Baseline
 
@@ -117,6 +155,24 @@
 - 可评估极简决策点：高 streak 后出现 `Cash Out` / `Double` / bonus choice，但不要破坏“一键 Flip”的主循环。
 
 ## Done
+
+### 2026-05-13 Inventory tab selected-state fix
+
+- Outcome: `EcoSystem/ui.lua` now applies explicit selected / idle background and text colors in `updateTabButton()`, making clicked Shop / Inventory category tabs visibly switch to the yellow selected state.
+- Validation: `git diff --check` passed. `selene` was attempted but is not installed in the local shell.
+- Decisions: Keep the visual state fix in the shared tab update function so Shop and Inventory remain consistent.
+
+### 2026-05-13 System responsibility migration
+
+- Outcome: Moved Shop / Inventory authority and UI into `EcoSystem`, Rebirth authority and UI into `RebirthSystem`, coin flip visual playback into `EffectSystem`, and settings lookup / particle factor helpers into `SettingSystem`; `CoinFlipSystem` now keeps the flip loop, run upgrades, onboarding, and HUD state orchestration.
+- Validation: `git diff --check` passed; selected Stylua check passed for newly written / refactored files; source scans found no old `CoinFlipSystem.Server:RequestShopPurchase`, `RequestEquipItem`, `RequestRebirth`, or `RequestRebirthUpgrade` calls and no coin visual implementation left in `CoinFlipSystem/ui.lua`.
+- Remaining validation: Studio Play should still confirm HUD, own / observed flip visuals, Shop purchase/equip, Inventory equip, Rebirth confirm, Rebirth upgrade, and Settings audio/effect behavior.
+- Decisions: Use source name `SettingSystem`; no persisted key rename or new required schema key.
+
+### 2026-05-13 Cursor validation boundary rule
+
+- Outcome: `AGENTS.md` already had the MCP / weak automation boundary; added the same rule to `.cursor/rules/50-testing-and-validation.mdc` so Cursor rules also say to record feasible checks and leave MCP-unreliable validation to the user.
+- Validation: Rule scan confirmed the existing `AGENTS.md` rule and the new Cursor rule.
 
 ### 2026-05-08 HTML UI redesign for rebirth / shop / inventory
 

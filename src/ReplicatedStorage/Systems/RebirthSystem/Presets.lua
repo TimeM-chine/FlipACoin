@@ -1855,4 +1855,132 @@ for i = 1, 180 do
     end
 end
 
+RebirthPresets.RunDataDefaults = table.freeze({
+	valueLevel = 0,
+	comboLevel = 0,
+	speedLevel = 0,
+	biasLevel = 0,
+	currentStreak = 0,
+	bestStreakThisRun = 0,
+	cashEarnedThisRun = 0,
+	flipsThisRun = 0,
+	headsThisRun = 0,
+})
+
+RebirthPresets.RunUpgradeOrder = table.freeze({
+	"valueLevel",
+	"comboLevel",
+	"speedLevel",
+	"biasLevel",
+})
+
+RebirthPresets.FlipACoin = {
+	Rebirth = {
+		MinCash = 250,
+		CashPerPoint = 250,
+		MaxPointGain = 8,
+		CashAfterReset = 30,
+	},
+	Upgrades = {
+		polishedStart = {
+			displayName = "Polished Start",
+			description = "+1 Value level after each rebirth",
+			runDataKey = "valueLevel",
+			runDataStep = 1,
+			costBase = 1,
+			costGrowth = 2,
+			maxLevel = 5,
+		},
+		chainStart = {
+			displayName = "Chain Start",
+			description = "+1 Combo level after each rebirth",
+			runDataKey = "comboLevel",
+			runDataStep = 1,
+			costBase = 1,
+			costGrowth = 2,
+			maxLevel = 5,
+		},
+		quickStart = {
+			displayName = "Quick Start",
+			description = "+1 Speed level after each rebirth",
+			runDataKey = "speedLevel",
+			runDataStep = 1,
+			costBase = 1,
+			costGrowth = 2,
+			maxLevel = 5,
+		},
+		luckyStart = {
+			displayName = "Lucky Start",
+			description = "+1 Bias level after each rebirth",
+			runDataKey = "biasLevel",
+			runDataStep = 1,
+			costBase = 1,
+			costGrowth = 2,
+			maxLevel = 5,
+		},
+	},
+	UpgradeOrder = table.freeze({
+		"polishedStart",
+		"chainStart",
+		"quickStart",
+		"luckyStart",
+	}),
+}
+
+function RebirthPresets.GetFlipACoinUpgradeConfig(upgradeKey)
+	return RebirthPresets.FlipACoin.Upgrades[upgradeKey]
+end
+
+function RebirthPresets.GetFlipACoinUpgradeCost(upgradeKey, currentLevel)
+	local config = RebirthPresets.GetFlipACoinUpgradeConfig(upgradeKey)
+	if not config then
+		return nil
+	end
+
+	return math.round(config.costBase * (config.costGrowth ^ currentLevel))
+end
+
+function RebirthPresets.IsFlipACoinUpgradeMaxed(upgradeKey, currentLevel)
+	local config = RebirthPresets.GetFlipACoinUpgradeConfig(upgradeKey)
+	return config and currentLevel >= config.maxLevel
+end
+
+function RebirthPresets.GetFlipACoinPointGain(cash)
+	local config = RebirthPresets.FlipACoin.Rebirth
+	if cash < config.MinCash then
+		return 0
+	end
+
+	return math.clamp(math.floor(cash / config.CashPerPoint), 1, config.MaxPointGain)
+end
+
+function RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree)
+	local baseline = table.clone(RebirthPresets.RunDataDefaults)
+	rebirthTree = rebirthTree or {}
+
+	for _, upgradeKey in ipairs(RebirthPresets.FlipACoin.UpgradeOrder) do
+		local config = RebirthPresets.GetFlipACoinUpgradeConfig(upgradeKey)
+		local level = rebirthTree[upgradeKey] or 0
+		if config and config.runDataKey then
+			baseline[config.runDataKey] += level * config.runDataStep
+		end
+	end
+
+	return baseline
+end
+
+function RebirthPresets.ApplyFlipACoinRunBaseline(runData, rebirthTree)
+	local baseline = RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree)
+	local changed = false
+
+	for _, upgradeKey in ipairs(RebirthPresets.RunUpgradeOrder) do
+		if (runData[upgradeKey] or 0) < baseline[upgradeKey] then
+			runData[upgradeKey] = baseline[upgradeKey]
+			changed = true
+		end
+	end
+
+	return changed
+end
+
 return RebirthPresets

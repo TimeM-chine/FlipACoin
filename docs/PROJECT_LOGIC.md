@@ -1,6 +1,6 @@
 # PROJECT_LOGIC
 
-更新时间：2026-05-04
+更新时间：2026-05-14
 
 ## 1. 这份文档的定位
 
@@ -153,9 +153,9 @@ FlipACoin
 
 - `src/StarterGui/Main/uiClient.client.lua`
   - 关闭默认背包
-  - 做触屏 / 手柄适配
-  - 将 `Main.DisplayOrder` 提到 Roblox `TouchGui` 之上，避免移动端触控层挡住主 UI 点击
-  - 隐藏当前主线不用的 legacy `OpeningUI.Frame` 与 `Notifications.TipFrame`，避免它们覆盖主 UI hit test
+  - 做手柄适配；少量触屏样式兼容仍留存但不是当前目标平台
+  - 将 `Main.DisplayOrder` 提高，避免引擎 / legacy 覆盖层挡住主 UI 点击
+  - 隐藏当前主线不用的 legacy `OpeningUI.Frame`、`Notifications.TipFrame`，并禁用 `Main.Frames.noUse` 下旧 UI 的交互，避免它们覆盖主 UI hit test
   - 把主界面的按钮统一绑到 `uiController`
   - 关闭默认重置按钮
 
@@ -198,10 +198,15 @@ FlipACoin
 - `AnnouncementSystem`
 - `CharacterSystem`
 - `CoinFlipSystem`
+- `EcoSystem`
+- `EffectSystem`
 - `GuiSystem`
 - `MusicSystem`
 - `PlayerSystem`
+- `RebirthSystem`
+- `SettingSystem`
 - `TableSeatSystem`
+- `DecorationSystem`
 
 没有在这里注册的系统，即使目录还在，也默认不参与运行时主链路。
 
@@ -335,6 +340,7 @@ FlipACoin
 - 同步座位状态给客户端
 - 为同桌轻量桌面反馈提供座位状态
 - 通知 `CoinFlipSystem` 当前座位态变化
+- 通知 `DecorationSystem` 在入座 / 离座时刷新或清理玩家装饰模型
 
 依赖的场景约定：
 
@@ -360,6 +366,31 @@ FlipACoin
   - `featuredSeatReason`
 - 这些旧字段后续不要继续扩展成复杂观战系统；若保留，只应收敛为低噪音桌面高光，例如当前最高 streak 座位轻微发光
 
+### 7.3a `DecorationSystem`
+
+文件：
+
+- `src/ReplicatedStorage/Systems/DecorationSystem/init.lua`
+- `src/ReplicatedStorage/Systems/DecorationSystem/Assets/TableDecoration`
+
+当前职责：
+
+- 服务端按玩家当前 `equippedDeskSetup` 克隆座位桌搭模型到 `Workspace.CoinFlipTable.Assets.DecorationsRuntime`
+- 每个座位运行时模型命名为 `{rawSeatId}Decoration`
+- 桌搭模型按座位显示，不是全桌共享装饰
+- `EcoSystem` 在 Desk Setup 购买 / 装备成功后刷新该玩家桌搭
+- `TableSeatSystem` 在入座、离座、离服时刷新或清理该玩家桌搭
+- 系统名保持通用，因为后续玩家凳子等可视装饰也应由该系统承接
+
+资产约定：
+
+- 桌搭资产长期应放在 `ReplicatedStorage.Systems.DecorationSystem.Assets.TableDecoration`
+- 如果运行时仍存在 `Workspace.TableDecoration`，服务端启动时会迁移到 `DecorationSystem.Assets.TableDecoration`
+- 资产子模型名称与 Desk Setup 商品 id 完全一致：`Folding Table`、`Green Felt`、`Arcade Desk`、`Velvet Casino`
+- 如果 `Workspace.TableDecoration` 只有一整套模型而不是同名商品子模型，会作为 `Default` 资产供所有 Desk Setup 临时复用
+- 摆放优先读取 `Workspace.CoinFlipTable.Attachments/<SeatId>Decoration`、`<SeatId>DecorationAnchor`、`<SeatId>DeskSetup`，再回退到 `<SeatId>Marker` 或桌面位置
+- 缺少精确商品模型但有 `Default` 时不报错；精确外观后续通过补同名子模型覆盖
+
 ### 7.4 `CoinFlipSystem`
 
 文件：
@@ -376,7 +407,7 @@ FlipACoin
 - 检查玩家是否已入座
 - 处理 `RequestFlip`
 - 按 `GameConfig.FlipACoin` 计算正面概率、奖励、速度
-- 按当前装配的 Coin / Desk Setup 加成修正正面概率和 Cash 倍率
+- 从 `EcoSystem` 读取当前 Coin / Desk Setup 加成，用于修正正面概率和 Cash 倍率
 - 写入 `runData`
 - 维护首局 `coinFlipOnboarding` 引导状态
 - 累积 `wins / bestStreak / lifetimeFlips / lifetimeHeads / lifetimeCashEarned`
@@ -384,7 +415,7 @@ FlipACoin
 - 广播本次 flip 给同桌玩家，用于低噪音桌面反馈
 - 驱动 streak 播报
 - 处理升级购买
-- 处理首发 Shop 购买、Inventory 装备、Rebirth 确认和永久 `rebirthTree` 升级
+- 编排 `SyncPlayerState()`，把 HUD 状态同步给自己，同时把 loadout / rebirth 状态推给对应系统 UI
 
 客户端当前负责：
 
@@ -393,9 +424,8 @@ FlipACoin
 - 响应式布局
 - 让玩家面前的 `FLIP` 主按钮足够明确
 - 展示 Cash、streak、chance、speed、四项升级
-- 绑定 Rebirth / Shop / Inventory 面板入口并渲染服务端同步的成长状态
 - 展示同桌玩家的轻量状态 / streak / flip 结果
-- 播放 coin flip 可视表现
+- 请求 `EffectSystem` 播放 coin flip 可视表现，并在落地回调里更新结果文案
 
 关键玩法数据：
 
@@ -414,13 +444,15 @@ FlipACoin
 
 - `GameConfig.FlipACoin`
 - `CoinFlipSystem/Presets.lua`
+- `EcoSystem/Presets.lua`
+- `RebirthSystem/Presets.lua`
+- `EffectSystem/Presets.lua`
 
-当前首发成长配置在 `CoinFlipSystem/Presets.lua`：
+当前首发成长配置按职责拆分：
 
-- `Growth.ShopItems.coin`：首发 Coin 商品、价格、稀有度 / 角色、Cash 倍率和 luck 加成
-- `Growth.ShopItems.desk`：首发 Desk Setup 商品、价格、稀有度 / 角色、Cash 倍率和 luck 加成
-- `Growth.Rebirth`：重生最低 Cash、Cash 到点数换算、单次点数上限、重生后 Cash
-- `Growth.RebirthUpgrades`：`polishedStart / chainStart / quickStart / luckyStart` 四个永久起步升级
+- `EcoSystem/Presets.lua`：首发 Coin / Desk Setup 商品、价格、稀有度 / 角色、Cash 倍率和 luck 加成
+- `RebirthSystem/Presets.lua`：重生最低 Cash、Cash 到点数换算、单次点数上限、重生后 Cash，以及 `polishedStart / chainStart / quickStart / luckyStart` 四个永久起步升级
+- `EffectSystem/Presets.lua`：桌面硬币飞行、落地、脉冲和清理时序
 
 当前额外要记住：
 
@@ -433,7 +465,7 @@ FlipACoin
   - 平时是头部第一人称：镜头贴到 `Head.Position`，保留默认相机输入，所以玩家可自由转头
   - 镜头相对 `HumanoidRootPart` 的左右转向被限制在 `-90° ~ 90°`，避免玩家坐在桌边时回头穿帮
   - `Head` 和配件本地透明，身体可见，玩家低头能看到自己身体
-  - 自己 Flip 时由 `CoinFlipSystem/ui.lua` 调 `FirstPersonCamera.FollowCoin()`，相机临时切到 `Scriptable` 并从头部视角看向硬币
+  - 自己 Flip 时由 `EffectSystem:PlayCoinFlipVisual()` 调 `FirstPersonCamera.FollowCoin()`，相机临时切到 `Scriptable` 并从头部视角看向硬币
   - 硬币落下或视觉被清理后调 `ReturnToFirstPerson()`，回到可自由转向的第一人称
   - `FirstPersonCamera` 会采样本地相机 pitch / yaw，经 `CharacterSystem:HeadPoseChanged()` 走 unreliable 桥上报给服务端
   - 服务端只信任发送者本人，校验 / clamp / 限频后在 Heartbeat 平滑改该角色的 `Neck` 与可选 `Waist.C0`，利用 Character 复制让其他客户端和服务端都看到轻微摇头 / 点头
@@ -446,6 +478,47 @@ FlipACoin
 - 引导细状态写在 `guideData.coinFlipOnboarding`
 - 漏斗埋点仍继续沿用 `onboardingFunnelStep`
 - 这两个字段现在是“引导状态”和“分析节点”两条线，不要再混写
+
+### 7.4a `EcoSystem`
+
+当前在 Flip A Coin 主线里负责：
+
+- `wins` / Cash 的统一加减入口仍走 `EcoSystem:AddResource()`
+- `RequestShopPurchase()` 处理 Coin / Desk Setup 购买，并购买后立即装备
+- `RequestEquipItem()` 处理 Inventory 装备切换，不重复扣 Cash
+- `GetLoadoutState()` 同步 owned / equipped 数据给 Shop / Inventory UI
+- `GetLoadoutBonuses()` 给 `CoinFlipSystem` 计算正面概率和 Cash 倍率
+- Desk Setup 装备成功后通知 `DecorationSystem` 刷新座位可视化
+
+当前 Coin / Desk 商品配置在 `EcoSystem/Presets.lua` 的 `GrowthShopItems`。
+
+### 7.4b `RebirthSystem`
+
+当前在 Flip A Coin 主线里负责：
+
+- `RequestRebirth()`：按当前 Cash 计算 Rebirth Points，重置 Cash 与 `runData`，保留永久树
+- `RequestRebirthUpgrade()`：消耗 `fateShards` 升级永久 `rebirthTree`
+- `GetRebirthState()`：同步 Rebirth 面板需要的点数、预览和升级卡状态
+- `BuildRunBaseline()` / `ApplyRunBaseline()`：把永久起步升级应用到本局 `runData`
+
+旧 legacy rebirth tier 表仍保留在同一个 presets 文件里，但当前 Flip A Coin 主线使用 `RebirthPresets.FlipACoin` 配置。
+
+### 7.4c `EffectSystem`
+
+当前在 Flip A Coin 主线里负责：
+
+- `PlayCoinFlipVisual()` 播放本地桌面硬币飞行、落地、阴影和 streak pulse
+- 自己 flip 时接管并释放 `FirstPersonCamera`
+- 其他玩家 flip 时只播放桌面表现，不接管相机
+- `PlayInsideEffects()` 使用 `SettingSystem:GetParticleRateFactor()` 决定粒子倍率
+
+### 7.4d `SettingSystem`
+
+当前在 Flip A Coin 主线里负责：
+
+- 进服补齐 `settingsData` 默认值，且只在字段为 `nil` 时补齐，不覆盖合法的 `false / 0`
+- `ChangeSetting()` 仍同步 BGM / SFX 设置
+- `GetSettingValue()` / `GetParticleRateFactor()` 给其他系统读取本地设置
 
 ### 7.5 `AnnouncementSystem`
 
@@ -683,14 +756,20 @@ FlipACoin
 这些由：
 
 - `CoinFlipSystem/ui.lua`
+- `EcoSystem/ui.lua`
+- `RebirthSystem/ui.lua`
+- `EffectSystem/init.lua`
 
 直接管理。
 
 当前约定：
 
 - 主 HUD 绑定读取 Studio 预制节点，不再为统计卡、升级按钮或离座按钮运行时创建兜底资源。
-- `CoinFlipSystem/ui.lua` 现在也绑定 `Buttons.CoinFlipMenu` 和 `Frames.Rebirth / Shop / Inventory`，这些面板读取服务端同步的 `growthState`。
-- `CoinFlipMenu` 资源仍从 `Main.Buttons` 读取，但运行时会 reparent 到 `Main`，避免 `Folder -> Frame -> TextButton` 层级在移动端 hit test 中丢失点击。
+- `CoinFlipSystem/ui.lua` 绑定 Flip HUD、run upgrade 和结果文案；不再直接渲染 Shop / Inventory / Rebirth 面板。
+- `EcoSystem/ui.lua` 绑定 `Buttons.CoinFlipMenu.ShopButton / InventoryButton` 和 `Frames.Shop / Inventory`。
+- `RebirthSystem/ui.lua` 绑定 `Buttons.CoinFlipMenu.RebirthButton` 和 `Frames.Rebirth`。
+- `EffectSystem` 负责桌面 coin flip 表现，`CoinFlipSystem/ui.lua` 只调用它并等待落地回调。
+- 当前游戏不支持移动端；`CoinFlipMenu` 和 `Frames.Rebirth / Shop / Inventory` 保持 Studio 预制的位置与尺寸，运行时不再为了移动端 TouchGui 重排。
 - 旧 `Stats` / `Actions` 容器如果仍存在，只是隐藏兼容遗留，不是当前主 HUD 数据源。
 
 ### 10.3 UI 延迟初始化模式
@@ -811,8 +890,6 @@ FlipACoin
 - `DailySystem`
 - `DoorSystem`
 - `DropSystem`
-- `EcoSystem`
-- `EffectSystem`
 - `EventSystem`
 - `FreeRewardSystem`
 - `GiftSystem`
@@ -820,9 +897,7 @@ FlipACoin
 - `PetSystem`
 - `PotionSystem`
 - `QuestSystem`
-- `RebirthSystem`
 - `SeasonSystem`
-- `SettingSystem`
 - `SiteSystem`
 - `SpinSystem`
 - `TradeSystem`
@@ -870,6 +945,6 @@ FlipACoin
 
 如果只用一句工程化的话概括当前仓库：
 
-这是一个已经用旧框架成功跑通“8 人同桌翻硬币”主链路的 Flip A Coin 项目，当前最该相信的是 `SystemMgr + PlayerSystem + TableSeatSystem + CoinFlipSystem + ClientData` 这条线，其余大量目录都应先视为遗留或候选，而不是默认活跃。
+这是一个已经用旧框架成功跑通“8 人同桌翻硬币”主链路的 Flip A Coin 项目，当前最该相信的是 `SystemMgr + PlayerSystem + TableSeatSystem + DecorationSystem + CoinFlipSystem + EcoSystem + RebirthSystem + EffectSystem + SettingSystem + ClientData` 这条线，其余大量目录都应先视为遗留或候选，而不是默认活跃。
 
 产品方向上，它应被理解为“单桌 8 人弱社交桌面运气游戏”：不要再往多桌大厅、自由走动、复杂观战面板方向扩展；首发重点是进服即坐下、面前一个强 `FLIP` 按钮、短循环升级、streak 情绪曲线、以及轻量同桌存在感。

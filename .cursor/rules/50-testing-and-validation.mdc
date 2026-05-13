@@ -12,6 +12,7 @@ alwaysApply: false
 - Test behavior in Roblox Studio first.
 - When a feature crosses the server-client boundary, validate both sides.
 - When possible, use multi-client or Team Test for features involving replication, combat, UI sync, matchmaking, or persistence.
+- When MCP or automation tools cannot reliably exercise a behavior or logic path, do not force a weak automated pass. Record source review plus any feasible single-client sanity checks, then leave final manual verification to the user and write back their result when provided.
 
 ## What to verify
 

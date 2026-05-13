@@ -26,90 +26,142 @@ local PlayerServerClass
 ---- client variables ----
 local LocalPlayer, ClientData, SettingUi
 
-
-local SettingSystem:Types.System = {
-    whiteList = {},
-    players = {},
-    tasks = {},
-    IsLoaded = false
+local SettingSystem: Types.System = {
+	whiteList = {
+		"GetSettingValue",
+		"GetParticleRateFactor",
+	},
+	players = {},
+	tasks = {},
+	IsLoaded = false,
 }
 SettingSystem.__index = SettingSystem
 
 if IsServer then
-    SettingSystem.Client = setmetatable({}, SettingSystem)
-    -- Template.AllClients = setmetatable({}, Template)
-    local ServerStorage = game:GetService("ServerStorage")
-    PlayerServerClass = require(ServerStorage.classes.PlayerServerClass)
+	SettingSystem.Client = setmetatable({}, SettingSystem)
+	-- Template.AllClients = setmetatable({}, Template)
+	local ServerStorage = game:GetService("ServerStorage")
+	PlayerServerClass = require(ServerStorage.classes.PlayerServerClass)
 else
-    SettingSystem.Server = setmetatable({}, SettingSystem)
-    LocalPlayer = Players.LocalPlayer
-    ClientData = require(Replicated.Systems.ClientData)
+	SettingSystem.Server = setmetatable({}, SettingSystem)
+	LocalPlayer = Players.LocalPlayer
+	ClientData = require(Replicated.Systems.ClientData)
 end
 
 function GetSystemMgr()
-    if not SystemMgr then
-        SystemMgr = require(Replicated.Systems.SystemMgr)
-        SENDER = SystemMgr.SENDER
-    end
-    return SystemMgr
+	if not SystemMgr then
+		SystemMgr = require(Replicated.Systems.SystemMgr)
+		SENDER = SystemMgr.SENDER
+	end
+	return SystemMgr
 end
 
 function SettingSystem:Init()
-    GetSystemMgr()
+	GetSystemMgr()
 end
 
 function SettingSystem:PlayerAdded(sender, player, args)
-    if IsServer then
-        if sender ~= SENDER then
-            return
-        end
+	if IsServer then
+		if sender ~= SENDER then
+			return
+		end
 
-        local playerIns = PlayerServerClass.GetIns(player)
-        local settingsData = playerIns:GetOneData(Keys.DataKey.settingsData)
-        for key, value in SettingPresets.Default do
-            if not settingsData[key] then
-                settingsData[key] = value
-            end
-        end
+		local playerIns = PlayerServerClass.GetIns(player)
+		local settingsData = playerIns:GetOneData(Keys.DataKey.settingsData)
+		for key, value in SettingPresets.Default do
+			if settingsData[key] == nil then
+				settingsData[key] = value
+			end
+		end
 
-        if settingsData.trade ~= nil then
-            player:SetAttribute("trade", settingsData.trade)
-        end
+		if settingsData.trade ~= nil then
+			player:SetAttribute("trade", settingsData.trade)
+		end
 
-        self.Client:PlayerAdded(player, {settingsData = settingsData})
-    else
-        ClientData:SetOneData(Keys.DataKey.settingsData, args.settingsData)
-        SettingUi = require(script.ui)
-        SettingUi.Init()
-    end
+		self.Client:PlayerAdded(player, { settingsData = settingsData })
+	else
+		ClientData:SetOneData(Keys.DataKey.settingsData, args.settingsData)
+		SettingUi = require(script.ui)
+		SettingUi.Init()
+	end
 end
 
 function SettingSystem:ChangeSetting(sender, player, args)
-    if IsServer then
-        player = player or sender
+	if IsServer then
+		player = player or sender
 
-        local settingName = args.settingName
-        local value = args.value
+		local settingName = args.settingName
+		local value = args.value
 
-        if settingName == "trade" then
-            player:SetAttribute("trade", value)
-        end
+		if settingName == "trade" then
+			player:SetAttribute("trade", value)
+		end
 
-        local playerIns = PlayerServerClass.GetIns(player)
-        local settingsData = playerIns:GetOneData(Keys.DataKey.settingsData)
+		local playerIns = PlayerServerClass.GetIns(player)
+		local settingsData = playerIns:GetOneData(Keys.DataKey.settingsData)
 
-        settingsData[settingName] = value
+		settingsData[settingName] = value
 
-        args = {
-            settingsData = settingsData,
-            settingName = settingName,
-            value = value
-        }
-        self.Client:ChangeSetting(player, args)
-    else
-        ClientData:SetOneData(Keys.DataKey.settingsData, args.settingsData)
-        SettingUi.ChangeSetting(args)
-    end
+		args = {
+			settingsData = settingsData,
+			settingName = settingName,
+			value = value,
+		}
+		self.Client:ChangeSetting(player, args)
+	else
+		ClientData:SetOneData(Keys.DataKey.settingsData, args.settingsData)
+		SettingUi.ChangeSetting(args)
+	end
+end
+
+function SettingSystem:GetSettingValue(sender, player, args)
+	if IsServer then
+		if sender ~= SENDER then
+			return nil
+		end
+
+		local playerIns = PlayerServerClass.GetIns(player)
+		if not playerIns then
+			return nil
+		end
+
+		local settingsData = playerIns:GetOneData(Keys.DataKey.settingsData)
+		local settingName = args and args.settingName
+		local defaultValue = args and args.defaultValue
+		if settingsData[settingName] == nil then
+			return defaultValue
+		end
+
+		return settingsData[settingName]
+	else
+		local settingsData = ClientData:GetOneData(Keys.DataKey.settingsData) or {}
+		local settingName = args and args.settingName
+		local defaultValue = args and args.defaultValue
+		if settingsData[settingName] == nil then
+			return defaultValue
+		end
+
+		return settingsData[settingName]
+	end
+end
+
+function SettingSystem:GetParticleRateFactor(sender, player, args)
+	if IsServer then
+		return 1
+	else
+		local effectsValue = self:GetSettingValue(nil, nil, {
+			settingName = "effects",
+			defaultValue = 1,
+		})
+		if effectsValue == false then
+			return 0
+		end
+		if typeof(effectsValue) == "number" then
+			return effectsValue
+		end
+
+		return 1
+	end
 end
 
 return SettingSystem

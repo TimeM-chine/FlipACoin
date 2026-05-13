@@ -1,435 +1,390 @@
----- services ----
 local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
-local MarketplaceService = game:GetService("MarketplaceService")
-local GuiService = game:GetService("GuiService")
-local ProximityPromptService = game:GetService("ProximityPromptService")
-local SocialService = game:GetService("SocialService")
 
----- requires ----
 local SystemMgr = require(Replicated.Systems.SystemMgr)
-local Util = require(Replicated.modules.Util)
 local ClientData = require(Replicated.Systems.ClientData)
 local Keys = require(Replicated.configs.Keys)
-local dataKey = Keys.DataKey
-local ItemType = Keys.ItemType
-local Textures = require(Replicated.configs.Textures)
 local EcoPresets = require(script.Parent.Presets)
-local TableModule = require(Replicated.modules.TableModule)
-local GameConfig = require(Replicated.configs.GameConfig)
-local Icon = require(Replicated.Packages.topbarplus)
+local Util = require(Replicated.modules.Util)
 
----- ui variables ----
+local dataKey = Keys.DataKey
+
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local Main = PlayerGui:WaitForChild("Main")
-local Frames = Main:WaitForChild("Frames")
 local Buttons = Main:WaitForChild("Buttons")
-local Elements = Main:WaitForChild("Elements")
-local StoreFrame = Frames:WaitForChild("Store")
-local storeScroll = StoreFrame:WaitForChild("ScrollingFrame")
-local cardPack1Frame = storeScroll:WaitForChild("5cardPack1")
-local cardPack2Frame = storeScroll:WaitForChild("4cardPack2")
+local Frames = Main:WaitForChild("Frames")
 local uiController = require(Main:WaitForChild("uiController"))
-local cashText = Elements:WaitForChild("cash")
 
----- logic variables ----
-local Gradients = PlayerGui:WaitForChild("Gradients")
+local CoinFlipMenu = Buttons:WaitForChild("CoinFlipMenu")
+local ShopFrame = Frames:WaitForChild("Shop")
+local InventoryFrame = Frames:WaitForChild("Inventory")
+
+local ShopBody = ShopFrame:WaitForChild("Body")
+local ShopTabs = ShopBody:WaitForChild("Tabs")
+local ShopItems = ShopBody:WaitForChild("Items")
+local ShopPreview = ShopBody:WaitForChild("Preview")
+local ShopItemCards = {
+	ShopItems:WaitForChild("Item1"),
+	ShopItems:WaitForChild("Item2"),
+	ShopItems:WaitForChild("Item3"),
+	ShopItems:WaitForChild("Item4"),
+}
+
+local InventoryBody = InventoryFrame:WaitForChild("Body")
+local InventoryTabs = InventoryBody:WaitForChild("Tabs")
+local InventoryItems = InventoryBody:WaitForChild("Items")
+local InventoryLoadout = InventoryBody:WaitForChild("Loadout")
+local InventoryItemCards = {
+	InventoryItems:WaitForChild("Item1"),
+	InventoryItems:WaitForChild("Item2"),
+	InventoryItems:WaitForChild("Item3"),
+	InventoryItems:WaitForChild("Item4"),
+	InventoryItems:WaitForChild("Item5"),
+	InventoryItems:WaitForChild("Item6"),
+}
 
 local EcoUi = {}
+local initialized = false
+local currentCash = 0
+local currentLoadoutState = {}
+local selectedShopCategory = "coin"
+local selectedInventoryCategory = "coin"
+local selectedTabBackgroundColor = Color3.fromRGB(198, 158, 68)
+local idleTabBackgroundColor = Color3.fromRGB(34, 39, 48)
+local selectedTabTextColor = Color3.fromRGB(36, 32, 26)
+local idleTabTextColor = Color3.fromRGB(246, 240, 226)
 
-function EcoUi.Init()
-	local storeIcon: any = Icon.new()
-		:setName("Store")
-		:setImageScale(0.8)
-		:setImage(117630742937824, "Selected")
-		:setImage(117630742937824, "Deselected")
-		:autoDeselect(false)
-	storeIcon.toggled:Connect(function(): ()
-		if not GuiService.MenuIsOpen then
-			if StoreFrame.Visible then
-				uiController.CloseFrame("Store")
+local function getOwnedItems(category)
+	if category == "coin" then
+		return currentLoadoutState.ownedCoins or {}
+	end
+	if category == "desk" then
+		return currentLoadoutState.ownedDeskSetups or {}
+	end
+
+	return {}
+end
+
+local function getEquippedItem(category)
+	if category == "coin" then
+		return currentLoadoutState.equippedCoin or EcoPresets.LoadoutDefaults.equippedCoin
+	end
+	if category == "desk" then
+		return currentLoadoutState.equippedDeskSetup or EcoPresets.LoadoutDefaults.equippedDeskSetup
+	end
+
+	return ""
+end
+
+local function formatMultiplier(multiplier)
+	return `x{math.round((multiplier or 1) * 100) / 100}`
+end
+
+local function formatLuck(luckBonus)
+	return `+{math.round((luckBonus or 0) * 1000) / 10}% Luck`
+end
+
+local function describeItemStats(stats)
+	return `{formatMultiplier(stats and stats.coinMultiplier or 1)} Cash | {formatLuck(stats and stats.luckBonus or 0)}`
+end
+
+local function setTextIfPresent(parent, childName, text)
+	local label = parent:FindFirstChild(childName)
+	if label and label:IsA("TextLabel") then
+		label.Text = text
+	end
+end
+
+local function setButtonText(button, text, isEnabled)
+	button.Text = text
+	button.AutoButtonColor = isEnabled
+	button.Active = isEnabled
+end
+
+local function styleSmallButtonText(button, textSize)
+	button.TextScaled = false
+	button.TextSize = textSize
+	button.TextWrapped = false
+	button.TextTruncate = Enum.TextTruncate.AtEnd
+	button.TextXAlignment = Enum.TextXAlignment.Center
+	button.TextYAlignment = Enum.TextYAlignment.Center
+	button.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+	button.TextStrokeTransparency = 1
+	button.LineHeight = 1
+
+	local constraint = button:FindFirstChild("GrowthTextSizeConstraint")
+		or button:FindFirstChild("CodexTextSizeConstraint")
+	if not constraint then
+		constraint = Instance.new("UITextSizeConstraint")
+		constraint.Parent = button
+	end
+	constraint.Name = "GrowthTextSizeConstraint"
+	constraint.MinTextSize = math.max(11, textSize - 5)
+	constraint.MaxTextSize = textSize
+end
+
+local function styleCategoryTab(button)
+	button.Size = UDim2.fromScale(0.92, 0.2)
+	styleSmallButtonText(button, 16)
+end
+
+local function applyTextPolish()
+	styleSmallButtonText(ShopFrame.X, 22)
+	styleSmallButtonText(InventoryFrame.X, 22)
+	styleCategoryTab(ShopTabs.CoinTab)
+	styleCategoryTab(ShopTabs.DeskTab)
+	styleCategoryTab(InventoryTabs.CoinTab)
+	styleCategoryTab(InventoryTabs.DeskTab)
+	styleCategoryTab(InventoryTabs.OtherTab)
+
+	InventoryLoadout.ApplyButton.Visible = false
+	InventoryLoadout.ApplyButton.Active = false
+	InventoryLoadout.ApplyButton.Selectable = false
+
+	for _, card in ipairs(ShopItemCards) do
+		styleSmallButtonText(card.BuyButton, 14)
+	end
+
+	for _, card in ipairs(InventoryItemCards) do
+		styleSmallButtonText(card.EquipButton, 13)
+	end
+end
+
+local function updateTabButton(button, isSelected)
+	button.AutoButtonColor = not isSelected
+	button.BackgroundTransparency = isSelected and 0.08 or 0.26
+	button.BackgroundColor3 = isSelected and selectedTabBackgroundColor or idleTabBackgroundColor
+	button.TextColor3 = isSelected and selectedTabTextColor or idleTabTextColor
+end
+
+local function updateLoadoutSummary()
+	local equippedCoin = getEquippedItem("coin")
+	local equippedDesk = getEquippedItem("desk")
+	local bonuses = EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDesk)
+	InventoryLoadout.CoinSlot.Value.Text = equippedCoin
+	InventoryLoadout.DeskSlot.Value.Text = equippedDesk
+	InventoryLoadout.TotalBonus.Text = describeItemStats(bonuses)
+	ShopPreview.Equipped.Text = `{equippedCoin} / {equippedDesk}`
+	ShopPreview.TotalBonus.Text = describeItemStats(bonuses)
+end
+
+local function updateShopPanel()
+	updateTabButton(ShopTabs.CoinTab, selectedShopCategory == "coin")
+	updateTabButton(ShopTabs.DeskTab, selectedShopCategory == "desk")
+	ShopPreview.Title.Text = selectedShopCategory == "coin" and "Coin Loadout" or "Desk Setup"
+
+	local ownedItems = getOwnedItems(selectedShopCategory)
+	local equippedItem = getEquippedItem(selectedShopCategory)
+	local items = EcoPresets.GrowthShopItems[selectedShopCategory] or {}
+
+	for index, card in ipairs(ShopItemCards) do
+		local item = items[index]
+		card.Visible = item ~= nil
+		if item then
+			local isOwned = ownedItems[item.id] == true
+			local isEquipped = equippedItem == item.id
+			setTextIfPresent(card, "Name", item.displayName)
+			card.Bonus.Text = `{item.rarity} | {item.role} | {describeItemStats(item.stats)}`
+			card.Price.Text = item.cost == 0 and "Starter" or `$ {Util.FormatNumber(item.cost, true)}`
+			if isEquipped then
+				setButtonText(card.BuyButton, "On", false)
+			elseif isOwned then
+				setButtonText(card.BuyButton, "Equip", true)
 			else
-				uiController.OpenFrame("Store")
+				setButtonText(card.BuyButton, currentCash >= item.cost and "Buy" or "Need", currentCash >= item.cost)
 			end
 		end
+	end
+
+	updateLoadoutSummary()
+end
+
+local function updateInventoryPanel()
+	updateTabButton(InventoryTabs.CoinTab, selectedInventoryCategory == "coin")
+	updateTabButton(InventoryTabs.DeskTab, selectedInventoryCategory == "desk")
+	updateTabButton(InventoryTabs.OtherTab, selectedInventoryCategory == "other")
+
+	local ownedItems = getOwnedItems(selectedInventoryCategory)
+	local equippedItem = getEquippedItem(selectedInventoryCategory)
+	local visibleIndex = 0
+
+	for _, card in ipairs(InventoryItemCards) do
+		card.Visible = false
+	end
+
+	if selectedInventoryCategory == "other" then
+		local card = InventoryItemCards[1]
+		card.Visible = true
+		setTextIfPresent(card, "Name", "Coming Soon")
+		card.Bonus.Text = "Future item types"
+		setButtonText(card.EquipButton, "Locked", false)
+		updateLoadoutSummary()
+		return
+	end
+
+	for _, item in ipairs(EcoPresets.GrowthShopItems[selectedInventoryCategory] or {}) do
+		if ownedItems[item.id] then
+			visibleIndex += 1
+			local card = InventoryItemCards[visibleIndex]
+			if not card then
+				break
+			end
+			card.Visible = true
+			setTextIfPresent(card, "Name", item.displayName)
+			card.Bonus.Text = describeItemStats(item.stats)
+			if equippedItem == item.id then
+				setButtonText(card.EquipButton, "On", false)
+			else
+				setButtonText(card.EquipButton, "Equip", true)
+			end
+		end
+	end
+
+	updateLoadoutSummary()
+end
+
+local function updatePanels()
+	updateShopPanel()
+	updateInventoryPanel()
+end
+
+local function bindButtons()
+	uiController.SetButtonHoverAndClick(CoinFlipMenu.ShopButton, function()
+		updatePanels()
+		uiController.OpenFrame("Shop")
+	end)
+	uiController.SetButtonHoverAndClick(CoinFlipMenu.InventoryButton, function()
+		updatePanels()
+		uiController.OpenFrame("Inventory")
 	end)
 
-	cashText.Text = `{Util.FormatNumber(ClientData:GetOneData(dataKey.wins))}`
-	InitStoreFrame()
+	uiController.SetButtonHoverAndClick(ShopFrame.X, function()
+		uiController.CloseFrame("Shop")
+	end)
+	uiController.SetButtonHoverAndClick(InventoryFrame.X, function()
+		uiController.CloseFrame("Inventory")
+	end)
+
+	uiController.SetButtonHoverAndClick(ShopTabs.CoinTab, function()
+		selectedShopCategory = "coin"
+		updateShopPanel()
+	end)
+	uiController.SetButtonHoverAndClick(ShopTabs.DeskTab, function()
+		selectedShopCategory = "desk"
+		updateShopPanel()
+	end)
+	for index, card in ipairs(ShopItemCards) do
+		local boundIndex = index
+		uiController.SetButtonHoverAndClick(card.BuyButton, function()
+			local item = (EcoPresets.GrowthShopItems[selectedShopCategory] or {})[boundIndex]
+			if not item then
+				return
+			end
+			if getOwnedItems(selectedShopCategory)[item.id] then
+				SystemMgr.systems.EcoSystem.Server:RequestEquipItem({
+					category = selectedShopCategory,
+					itemId = item.id,
+				})
+			else
+				SystemMgr.systems.EcoSystem.Server:RequestShopPurchase({
+					category = selectedShopCategory,
+					itemId = item.id,
+				})
+			end
+		end)
+	end
+
+	uiController.SetButtonHoverAndClick(InventoryTabs.CoinTab, function()
+		selectedInventoryCategory = "coin"
+		updateInventoryPanel()
+	end)
+	uiController.SetButtonHoverAndClick(InventoryTabs.DeskTab, function()
+		selectedInventoryCategory = "desk"
+		updateInventoryPanel()
+	end)
+	uiController.SetButtonHoverAndClick(InventoryTabs.OtherTab, function()
+		selectedInventoryCategory = "other"
+		updateInventoryPanel()
+	end)
+	for index, card in ipairs(InventoryItemCards) do
+		local boundIndex = index
+		uiController.SetButtonHoverAndClick(card.EquipButton, function()
+			if selectedInventoryCategory == "other" then
+				return
+			end
+
+			local visibleIndex = 0
+			for _, item in ipairs(EcoPresets.GrowthShopItems[selectedInventoryCategory] or {}) do
+				if getOwnedItems(selectedInventoryCategory)[item.id] then
+					visibleIndex += 1
+					if visibleIndex == boundIndex then
+						SystemMgr.systems.EcoSystem.Server:RequestEquipItem({
+							category = selectedInventoryCategory,
+							itemId = item.id,
+						})
+						return
+					end
+				end
+			end
+		end)
+	end
+end
+
+function EcoUi.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+
+	ShopFrame.Visible = false
+	InventoryFrame.Visible = false
+	currentCash = ClientData:GetOneData(dataKey.wins) or 0
+	currentLoadoutState = ClientData:GetOneData("loadoutState") or currentLoadoutState
+	applyTextPolish()
+	bindButtons()
+	updatePanels()
+end
+
+function EcoUi.SyncLoadoutState(args)
+	if args and args.cash then
+		currentCash = args.cash
+	else
+		currentCash = ClientData:GetOneData(dataKey.wins) or currentCash
+	end
+
+	if args and args.loadoutState then
+		currentLoadoutState = args.loadoutState
+	end
+
+	if initialized then
+		updatePanels()
+	end
 end
 
 function EcoUi.UpdateWins(args)
-	cashText.Text = `{Util.FormatNumber(ClientData:GetOneData(dataKey.wins))}`
-	uiController.SetUnitJump(cashText)
-
-	if args.count > 0 then
-		local WinsIcon = cashText
-		local flyWins = PlayerGui:WaitForChild("Templates"):WaitForChild("flyWins")
-
-		local cloneCount = math.min(args.count, 20)
-		local camera = game.Workspace.CurrentCamera
-		local character = Players.LocalPlayer.Character
-		if not character then
-			return
-		end
-
-		local HumanoidRootPart = character:WaitForChild("HumanoidRootPart")
-		if not HumanoidRootPart then
-			return
-		end
-
-		local tipPosition, onScreen = camera:WorldToViewportPoint(HumanoidRootPart.Position)
-		local targetPosition = WinsIcon.AbsolutePosition
-		local targetSize = WinsIcon.AbsoluteSize
-
-		-- fly from tipPosition to WinsIcon
-		for i = 1, cloneCount do
-			task.wait(0.1)
-			local clone = flyWins:Clone()
-			clone.Visible = true
-			clone.AnchorPoint = Vector2.new(0.5, 0)
-			clone.Position = UDim2.fromOffset(tipPosition.X, tipPosition.Y)
-			clone.Size = UDim2.fromOffset(targetSize.X * 1.5, targetSize.Y * 1.5)
-			clone.Parent = Main
-
-			clone:TweenPosition(
-				UDim2.fromOffset(tipPosition.X + math.random(-300, 300), tipPosition.Y - 80),
-				Enum.EasingDirection.Out,
-				Enum.EasingStyle.Quad,
-				0.05,
-				true,
-				function()
-					clone:TweenPosition(
-						UDim2.fromOffset(targetPosition.X + targetSize.X / 2, targetPosition.Y + 28),
-						Enum.EasingDirection.Out,
-						Enum.EasingStyle.Quad,
-						0.5,
-						true,
-						function()
-							clone:Destroy()
-						end
-					)
-				end
-			)
-		end
+	if args and args.total then
+		currentCash = args.total
+	end
+	if initialized then
+		updatePanels()
 	end
 end
 
-function EcoUi.GiveItem(args)
-	local itemType = args.itemType
-	local count = args.count
-	local name = args.name
+function EcoUi.GiveItem() end
 
-	local icon = Textures.GetIcon(args)
+function EcoUi.UpdateWinsStore() end
 
-	uiController.AddReward({
-		icon = icon,
-		count = count,
-	})
+function EcoUi.BuyLimitedPet() end
 
-	SystemMgr.systems.MusicSystem:Play2dMusic(nil, nil, {
-		musicName = "reward",
-	})
-end
+function EcoUi.BuyGamePass() end
 
-function EcoUi.UpdateWinsStore()
-	local wins = storeScroll:WaitForChild("Wins")
-	local rebirth = ClientData:GetOneData(dataKey.rebirth) + 1
-	for i = 1, 4 do
-		local card = wins.List:WaitForChild(i)
-		card.cost.TextLabel.Text = Util.GetRobuxText(EcoPresets.Products.wins[i].price)
-		card.count.Text = Util.FormatNumber(EcoPresets.Products.wins[i].count * rebirth * rebirth) .. " Wins"
-	end
-end
+function EcoUi.BuyStarterPack() end
 
-function EcoUi.BuyLimitedPet(args)
-	local petsStock = ClientData:GetOneData("limitedPets")
-	local petName = args.petName
-	local petInfo = EcoPresets.Products.limitedPets[petName]
-	local LimitedPets = storeScroll:WaitForChild("LimitedPets")
-	local Holder = LimitedPets:WaitForChild("Holder")
-
-	if petInfo.InStore then
-		local card = Holder:FindFirstChild(petName)
-		if not card then
-			return
-		end
-		local left = EcoPresets.Products.limitedPets[petName].limit - petsStock[petName]
-		card:WaitForChild("Top"):WaitForChild("TextLabel").Text =
-			`{left}/{EcoPresets.Products.limitedPets[petName].limit} LEFT!`
-	end
-
-	if petInfo.InWorkspace then
-		local petModel = workspace:WaitForChild("LimitedPets"):FindFirstChild(petName)
-		if not petModel then
-			return
-		end
-
-		local UI = petModel:FindFirstChild("UI")
-		if not UI then
-			return
-		end
-
-		local Billboard = UI:FindFirstChild("Billboard")
-		local limit = EcoPresets.Products.limitedPets[petName].limit
-		local left = limit - petsStock[petName]
-		Billboard:WaitForChild("Price").Text = `{left}/{limit} LEFT!`
-	end
-end
-
-function EcoUi.BuyGamePass(args)
-	local gamePassName = args.gamePassName
-	local gamePassFrame = storeScroll:WaitForChild("3GamePasses")
-	local card = gamePassFrame:WaitForChild(gamePassName, 10)
-	if not card then
-		return
-	end
-	card.buy.price.Text = "Owned"
-	-- card.GpCost.TextColor3 = Textures.ButtonColors.green
-	uiController.SetButtonHoverAndClick(card.buy, function() end)
-
-	local boxModel = workspace:WaitForChild("Boxes"):WaitForChild(gamePassName, 3)
-	if not boxModel then
-		return
-	end
-	local prompt = boxModel:WaitForChild("Prompt")
-	prompt:WaitForChild("price"):WaitForChild("TextLabel").Text = "Owned"
-end
-
-function EcoUi.BuyStarterPack(args)
-	-- StarterPackButton.Visible = false
-	uiController.CloseFrame("StarterPack")
-end
-
-function EcoUi.UpdatePotion(args)
-	local potionName = args.potionName
-	local count = args.count
-	local potionsFrame = storeScroll:WaitForChild("Potions")
-	local card = potionsFrame.List:FindFirstChild(potionName)
-	if not card then
-		return
-	end
-	card.UseBoost.TextLabel.Text = `Use({count})`
-end
+function EcoUi.UpdatePotion() end
 
 function EcoUi.UpdateGamePassesBar() end
 
-local function InitGamePasses()
-	local gamePassFrame = storeScroll:WaitForChild("3GamePasses")
-	local gpTpl = gamePassFrame:WaitForChild("Template")
-	gpTpl.Visible = false
-	local gamePasses = ClientData:GetOneData(dataKey.gamePasses)
-	for gamePassName, config in EcoPresets.GamePasses do
-		if config.hideInShop then
-			continue
-		end
-		Util.Clone(gpTpl, gamePassFrame, function(card)
-			card.LayoutOrder = config.order
-			card.UIGradient.Color = Gradients[config.gradient].Color
-			card.Visible = true
-			card.Name = gamePassName
-			card.title.Text = config.title
-			-- card.description.Text = config.description
-			card.buy.price.Text = Util.GetRobuxText(config.price)
-			card.icon.Image = Textures.GamePasses[gamePassName].icon
-
-			if gamePassName == "vip" then
-				uiController.AddRotateGradient(card.UIGradient)
-			end
-
-			if gamePasses[gamePassName] then
-				card.buy.price.Text = "Owned"
-				uiController.SetButtonHoverAndClick(card.buy, function() end)
-			else
-				uiController.SetButtonHoverAndClick(card.buy, function()
-					MarketplaceService:PromptGamePassPurchase(LocalPlayer, config.gamePassId)
-				end)
-			end
-
-			uiController.SetOneLineTip(card.icon, {
-				text = config.description,
-			})
-		end)
-	end
-end
-
-local function InitWins()
-	local wins = storeScroll:WaitForChild("Wins")
-	for i = 1, 4 do
-		local card = wins.List:WaitForChild(i)
-		uiController.SetButtonHoverAndClick(card.cost, function()
-			MarketplaceService:PromptProductPurchase(LocalPlayer, EcoPresets.Products.wins[i].productId)
-		end)
-	end
-	EcoUi.UpdateWinsStore()
-end
-
-local function InitCodes()
-	local codes = storeScroll:WaitForChild("Codes")
-	uiController.SetButtonHoverAndClick(codes.Holder.Redeem, function()
-		SystemMgr.systems.EcoSystem.Server:RedeemCode({ code = codes.Holder.Enter.Text })
-	end)
-end
-
-local function InitPotions()
-	local potionsFrame = storeScroll:WaitForChild("Potions")
-	local potionTpl = potionsFrame:WaitForChild("Template")
-	potionTpl.Visible = false
-	local potions = ClientData:GetOneData(dataKey.potions)
-	for potionName, config in EcoPresets.Products.potions do
-		Util.Clone(potionTpl, potionsFrame, function(card)
-			card.Visible = true
-			card.Name = potionName
-			local own = potions[potionName] or 0
-			card.title.Text = config.title
-			card.description.Text = config.description
-			card.use.TextLabel.Text = `Use({own})`
-			card.robux.price.Text = Util.GetRobuxText(config.price)
-			card.Content.UIGradient.Color = Gradients[config.gradientColor].Color
-			card.LayoutOrder = config.order
-			card.icon.Image = Textures.Potions[potionName].icon
-
-			uiController.SetButtonHoverAndClick(card.robux, function()
-				MarketplaceService:PromptProductPurchase(LocalPlayer, config.productId)
-			end)
-
-			card.wins.price.Text = `{Util.FormatNumber(config.winsPrice)}`
-			uiController.SetButtonHoverAndClick(card.wins, function()
-				SystemMgr.systems.EcoSystem.Server:BuyPotionByWins({ potionName = potionName, count = 1 })
-			end)
-
-			uiController.SetButtonHoverAndClick(card.use, function()
-				SystemMgr.systems.PotionSystem.Server:UsePotion({ potionId = potionName })
-			end)
-		end)
-	end
-end
-
-function InitStoreFrame()
-	---- [[ side bar ]] ----
-	-- local sideBar = StoreFrame:WaitForChild("SideBar")
-
-	-- for _, button in ipairs(sideBar:GetChildren()) do
-	-- 	if button:IsA("TextButton") then
-	-- 		uiController.SetButtonHoverAndClick(button, function()
-	-- 			local frame = storeScroll:FindFirstChild(button.Name)
-	-- 			if frame then
-	-- 				storeScroll.CanvasPosition = Vector2.new(
-	-- 					storeScroll.CanvasPosition.X + frame.AbsolutePosition.X - storeScroll.AbsolutePosition.X,
-	-- 					0
-	-- 				)
-	-- 			end
-	-- 		end)
-	-- 	end
-	-- end
-
-	-- InitFeatured()
-	InitGamePasses()
-	-- InitWins()
-	-- InitCodes()
-	-- InitLimitedPets()
-	-- InitSidePassButtons()
-	-- InitSingleGamePass()
-	-- InitCardPacks()
-	-- InitPotions()
-	-- InitStarterPack()
-end
-
-function InitAds()
-	task.spawn(function()
-		local Ads = workspace:WaitForChild("Ads")
-
-		for _, model in Ads:GetChildren() do
-			model:WaitForChild("surface"):WaitForChild("SurfaceGui"):WaitForChild("icon")
-		end
-		while true do
-			local passes = EcoPresets.GamePasses
-			local gamePasses = ClientData:GetOneData(dataKey.gamePasses)
-			for _, model in Ads:GetChildren() do
-				local randomPass
-				if gamePasses[model.Name] then
-					randomPass = model.Name
-				else
-					randomPass = TableModule.Keys(passes)[math.random(1, TableModule.Length(passes))]
-				end
-				local pass = passes[randomPass]
-				local surface = model:WaitForChild("surface", 5)
-				if not surface then
-					continue
-				end
-				local surfaceGui = surface:WaitForChild("SurfaceGui")
-				surfaceGui.Container.Purchase.Price.Text = Util.GetRobuxText(pass.price)
-				surfaceGui.icon.ImageLabel.Image = Textures.GamePasses[randomPass].icon
-				surfaceGui.Container.Info.Text = pass.description
-				surfaceGui.Container:FindFirstChild("Name").Text = pass.title
-				if gamePasses[randomPass] then
-					surfaceGui.Container.Purchase.Price.Text = "Owned"
-					uiController.SetButtonHoverAndClick(surfaceGui.Container.Purchase, function() end)
-				else
-					uiController.SetButtonHoverAndClick(surfaceGui.Container.Purchase, function()
-						MarketplaceService:PromptGamePassPurchase(LocalPlayer, pass.gamePassId)
-					end)
-				end
-			end
-			task.wait(60)
-		end
-	end)
-end
-
-function InitCardPacks()
-	local CardPresets = require(Replicated.Systems.CardSystem.Presets)
-	local pack1Preset = EcoPresets.Products.cardPacks.cardPack1
-	local cards1Preset = CardPresets.CardPacks[pack1Preset.name]
-	cardPack1Frame.packName.Text = pack1Preset.name
-	cardPack1Frame.packIcon.Image = Textures.CardPacks[pack1Preset.name].icon
-	for i = 1, 3 do
-		local buyBtn = cardPack1Frame:WaitForChild("buy" .. i)
-		uiController.SetButtonHoverAndClick(buyBtn, function()
-			MarketplaceService:PromptProductPurchase(LocalPlayer, pack1Preset["buy" .. i].productId)
-		end)
-		buyBtn.price.Text = Util.GetRobuxText(pack1Preset["buy" .. i].price)
-	end
-
-	local pack1Scroll = cardPack1Frame:WaitForChild("ScrollingFrame")
-	local pack1Tpl = pack1Scroll:WaitForChild("Template")
-	pack1Tpl.Visible = false
-	for _, card in cards1Preset.cards do
-		Util.Clone(pack1Tpl, pack1Scroll, function(clone: ImageLabel)
-			local cardPreset = CardPresets.CardsList[card.name]
-			clone.Visible = true
-			clone.Image = Textures.Cards[card.name].icon
-			clone.Name = card.name
-			clone.LayoutOrder = cardPreset.cashPerSec
-			clone.cashPerSec.Text = `{Util.FormatNumber(cardPreset.cashPerSec)}/s`
-		end)
-	end
-
-	local pack2Preset = EcoPresets.Products.cardPacks.cardPack2
-	local cards2Preset = CardPresets.CardPacks[pack2Preset.name]
-	cardPack2Frame.packName.Text = pack2Preset.name
-	cardPack2Frame.packIcon.Image = Textures.CardPacks[pack2Preset.name].icon
-	for i = 1, 4 do
-		local buyBtn = cardPack2Frame:WaitForChild("buy" .. i)
-		uiController.SetButtonHoverAndClick(buyBtn, function()
-			MarketplaceService:PromptProductPurchase(LocalPlayer, pack2Preset["buy" .. i].productId)
-		end)
-		buyBtn.price.Text = Util.GetRobuxText(pack2Preset["buy" .. i].price)
-	end
-
-	local pack2Scroll = cardPack2Frame:WaitForChild("ScrollingFrame")
-	local pack2Tpl = pack2Scroll:WaitForChild("Template")
-	pack2Tpl.Visible = false
-	for _, card in cards2Preset.cards do
-		Util.Clone(pack2Tpl, pack2Scroll, function(clone: ImageLabel)
-			clone.Visible = true
-			local cardPreset = CardPresets.CardsList[card.name]
-			clone.Image = Textures.Cards[card.name].icon
-			clone.Name = card.name
-			clone.LayoutOrder = cardPreset.cashPerSec
-			clone.cashPerSec.Text = `{Util.FormatNumber(cardPreset.cashPerSec)}/s`
-		end)
-	end
-end
+function EcoUi.UpdateStrengthBoost() end
 
 return EcoUi
