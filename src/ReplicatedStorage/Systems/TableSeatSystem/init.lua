@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 ---- requires ----
+local EcoPresets = require(Replicated.Systems.EcoSystem.Presets)
 local Keys = require(Replicated.configs.Keys)
 local ScheduleModule = require(Replicated.modules.ScheduleModule)
 local Presets = require(script.Presets)
@@ -659,19 +660,23 @@ function TableSeatSystem:_BuildSeatDisplayEntry(seatKey, occupant)
 	local playerIns = PlayerServerClass.GetIns(occupant, false)
 	local runData = playerIns and playerIns:GetOneData(dataKey.runData) or {}
 	local streak = runData.currentStreak or 0
-	local equippedCoin = playerIns and (playerIns:GetOneData(dataKey.equippedCoin) or "Rusty Penny") or "Rusty Penny"
+	local equippedCoin = EcoPresets.LoadoutDefaults.equippedCoin
+	if playerIns then
+		equippedCoin = playerIns:GetOneData(dataKey.equippedCoin) or equippedCoin
+	end
+	local equippedCoinName = EcoPresets.GetShopItemDisplayName("coin", equippedCoin)
 	local cash = playerIns and (playerIns:GetOneData(dataKey.wins) or 0) or 0
 	local statusText, statusColor = getSeatBillboardTone(streak)
 
 	entry.userId = occupant.UserId
 	entry.displayName = occupant.DisplayName
-	entry.coinName = equippedCoin
+	entry.coinName = equippedCoinName
 	entry.streak = streak
 	entry.cash = cash
 	entry.cashText = `$ {Util.FormatNumber(cash, true)}`
 	entry.statusText = statusText
 	entry.statusColor = statusColor
-	entry.detailText = `Streak {streak} | {equippedCoin}`
+	entry.detailText = `Streak {streak} | {equippedCoinName}`
 	entry.isOccupied = true
 
 	return entry

@@ -503,10 +503,6 @@ local function updateResultText(text, tone)
 end
 
 local function requestFlip()
-	if not currentSeatId then
-		return
-	end
-
 	local now = os.clock()
 	if awaitingFlipResponse or now < localFlipCooldownEndsAt then
 		return
@@ -515,9 +511,10 @@ local function requestFlip()
 	awaitingFlipResponse = true
 	activeFlipRequestToken += 1
 	local requestToken = activeFlipRequestToken
+	local hadSeatWhenRequested = currentSeatId ~= nil
 	localFlipCooldownEndsAt = now + math.max(0.15, currentFlipInterval + 0.05)
 	CoinFlipSystem.Server:RequestFlip()
-	updateResultText("Flipping...", "Neutral")
+	updateResultText(hadSeatWhenRequested and "Flipping..." or "Checking your seat...", "Neutral")
 
 	task.delay(0.45, function()
 		if activeFlipRequestToken ~= requestToken or not awaitingFlipResponse then
@@ -526,7 +523,11 @@ local function requestFlip()
 
 		awaitingFlipResponse = false
 		localFlipCooldownEndsAt = os.clock() + 0.05
-		updateResultText("Flip not ready yet. Click FLIP again.", "Neutral")
+		if hadSeatWhenRequested then
+			updateResultText("Flip not ready yet. Click FLIP again.", "Neutral")
+		else
+			updateResultText("Still waiting for seat assignment...", "Neutral")
+		end
 	end)
 end
 
@@ -571,7 +572,10 @@ local function updateTableOverview(seatState)
 end
 
 local function setVisible(isVisible)
-	Hud.Visible = isVisible == true
+	Hud.Visible = true
+	CoinFlipMenu.Visible = true
+	FlipButton.Active = true
+	FlipButton.AutoButtonColor = true
 	if not isVisible then
 		updateResultText("Waiting for seat assignment...", "Neutral")
 	end
@@ -644,8 +648,6 @@ function CoinFlipUi.Init()
 
 	setVisible(false)
 	hideOnboardingPanel()
-	uiController.HideUnitWhenPush(Hud)
-	uiController.HideUnitWhenPush(CoinFlipMenu)
 	ensureLeaveButton()
 	bindViewportLayout()
 	bindFlipInput()
@@ -664,7 +666,16 @@ function CoinFlipUi.Init()
 end
 
 function CoinFlipUi.SyncRunState(args)
-	currentSeatId = args.seatState and args.seatState.seatId or nil
+	local seatState = args.seatState or {}
+	local payloadIsSeated = seatState.isSeated == true or seatState.seatId ~= nil
+	if payloadIsSeated then
+		currentSeatId = seatState.seatId
+	elseif currentSeatId then
+		seatState = table.clone(seatState)
+		seatState.seatId = currentSeatId
+		seatState.isSeated = true
+	end
+	local isSeated = currentSeatId ~= nil
 	currentFlipInterval = (args.derivedStats and args.derivedStats.flipInterval) or currentFlipInterval
 	local cash = args.cash or args.wins or 0
 	currentRunSnapshot = {
@@ -690,7 +701,7 @@ function CoinFlipUi.SyncRunState(args)
 	ChanceValue.Text = `{math.round((args.derivedStats.headsChance or 0) * 1000) / 10}%`
 	StreakValue.Text = tostring(args.runData.currentStreak or 0)
 	SpeedValue.Text = `{math.round((args.derivedStats.flipInterval or 0) * 100) / 100}s`
-	SeatLabel.Text = args.seatState.seatId and `Seat {args.seatState.seatId}` or "Seat --"
+	SeatLabel.Text = seatState.seatId and `Seat {seatState.seatId}` or "Seat --"
 
 	for upgradeKey, button in pairs(UpgradeMap) do
 		local level = args.runData[upgradeKey] or 0
@@ -698,8 +709,12 @@ function CoinFlipUi.SyncRunState(args)
 		updateUpgradeButton(button, UpgradeTitles[upgradeKey], level, cost, cost == nil)
 	end
 
-	updateTableOverview(args.seatState)
+	setVisible(isSeated)
+	updateTableOverview(seatState)
 	CoinFlipUi.UpdateOnboarding(args.onboarding)
+	if isSeated and ResultLabel.Text == "Waiting for seat assignment..." then
+		updateResultText("Click FLIP, press Space, or press RT to flip.", "Neutral")
+	end
 end
 
 function CoinFlipUi.FlipResolved(args)
@@ -707,6 +722,7 @@ function CoinFlipUi.FlipResolved(args)
 	EffectSystem:PlayCoinFlipVisual(nil, nil, {
 		seatId = args.seatState and args.seatState.seatId,
 		result = args.result,
+		coinId = args.equippedCoin or (args.loadoutState and args.loadoutState.equippedCoin),
 		shouldFollowCamera = true,
 		landedCallback = function()
 			CoinFlipUi.SyncRunState(args)
@@ -765,6 +781,7 @@ function CoinFlipUi.ObservedFlip(args)
 	EffectSystem:PlayCoinFlipVisual(nil, nil, {
 		seatId = args.seatId,
 		result = args.result,
+		coinId = args.equippedCoin,
 		shouldFollowCamera = false,
 		visualOptions = {
 			isObserved = true,

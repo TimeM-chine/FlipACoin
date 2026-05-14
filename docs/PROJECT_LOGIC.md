@@ -389,6 +389,7 @@ FlipACoin
 - 资产子模型名称与 Desk Setup 商品 id 完全一致：`Folding Table`、`Green Felt`、`Arcade Desk`、`Velvet Casino`
 - 如果 `Workspace.TableDecoration` 只有一整套模型而不是同名商品子模型，会作为 `Default` 资产供所有 Desk Setup 临时复用
 - 摆放优先读取 `Workspace.CoinFlipTable.Attachments/<SeatId>Decoration`、`<SeatId>DecorationAnchor`、`<SeatId>DeskSetup`，再回退到 `<SeatId>Marker` 或桌面位置
+- 摆放后会按模型实际包围角点沿桌面法线抬升，让桌搭最低点落在 `TableTop` 表面上方一点，避免沉入桌面
 - 缺少精确商品模型但有 `Default` 时不报错；精确外观后续通过补同名子模型覆盖
 
 ### 7.4 `CoinFlipSystem`
@@ -434,6 +435,7 @@ FlipACoin
 - Coin 装配写入 `equippedCoin / ownedCoins`
 - Desk Setup 装配写入 `equippedDeskSetup / ownedDeskSetups`
 - 永久重生升级写入 `rebirthTree`
+- 装备 Coin 的外观只用于 flip 中的硬币模型，不新增 idle 常驻桌面硬币
 - 四项升级：
   - `valueLevel`
   - `comboLevel`
@@ -453,6 +455,15 @@ FlipACoin
 - `EcoSystem/Presets.lua`：首发 Coin / Desk Setup 商品、价格、稀有度 / 角色、Cash 倍率和 luck 加成
 - `RebirthSystem/Presets.lua`：重生最低 Cash、Cash 到点数换算、单次点数上限、重生后 Cash，以及 `polishedStart / chainStart / quickStart / luckyStart` 四个永久起步升级
 - `EffectSystem/Presets.lua`：桌面硬币飞行、落地、脉冲和清理时序
+
+硬币资产约定：
+
+- 硬币外观资产放在 `ReplicatedStorage.Systems.CoinFlipSystem.Assets.Coins`
+- 资产子模型 / Part 名称与 Coin 商品 id 完全一致：`coin1` 到 `coin9`
+- 玩家默认装备 `coin1`，界面展示名为 `Coin1`
+- 当前看到的 `coin10` 资产未接入首发 Coin 配置，暂时不出现在购买 / 装备流里
+- `EffectSystem` 支持 `Model` 或 `BasePart` 硬币资产；缺少精确资产时回退 `CoinVisual.Coin` 并警告
+- Flip 落点按硬币最终姿态的真实包围角点和 `TableTop` 表面法线计算，不能再用固定 `coin.Size.X * 0.5`
 
 当前额外要记住：
 

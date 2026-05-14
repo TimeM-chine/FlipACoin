@@ -250,9 +250,6 @@ function CoinFlipSystem:PlayerAdded(sender, player, args)
 
 		if args and args.state then
 			CoinFlipUi.SyncRunState(args.state)
-			CoinFlipUi.SeatStateChanged({
-				seatState = args.state.seatState,
-			})
 		end
 	end
 end
@@ -358,6 +355,7 @@ function CoinFlipSystem:RequestFlip(sender, player)
 	refreshCashDisplays(player)
 	seatSystem:RefreshAudienceState(SENDER)
 
+	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin)
 	local observedPayload = {
 		userId = player.UserId,
 		seatId = seatId,
@@ -365,6 +363,7 @@ function CoinFlipSystem:RequestFlip(sender, player)
 		reward = reward,
 		streak = runData.currentStreak,
 		bestStreakThisRun = runData.bestStreakThisRun,
+		equippedCoin = equippedCoin,
 	}
 
 	emitObservedFlip(self, player, observedPayload)
@@ -374,6 +373,7 @@ function CoinFlipSystem:RequestFlip(sender, player)
 		result = observedPayload.result,
 		reward = reward,
 		streak = runData.currentStreak,
+		equippedCoin = equippedCoin,
 	}, true)
 end
 

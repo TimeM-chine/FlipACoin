@@ -161,11 +161,13 @@ end
 local function updateLoadoutSummary()
 	local equippedCoin = getEquippedItem("coin")
 	local equippedDesk = getEquippedItem("desk")
+	local equippedCoinName = EcoPresets.GetShopItemDisplayName("coin", equippedCoin)
+	local equippedDeskName = EcoPresets.GetShopItemDisplayName("desk", equippedDesk)
 	local bonuses = EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDesk)
-	InventoryLoadout.CoinSlot.Value.Text = equippedCoin
-	InventoryLoadout.DeskSlot.Value.Text = equippedDesk
+	InventoryLoadout.CoinSlot.Value.Text = equippedCoinName
+	InventoryLoadout.DeskSlot.Value.Text = equippedDeskName
 	InventoryLoadout.TotalBonus.Text = describeItemStats(bonuses)
-	ShopPreview.Equipped.Text = `{equippedCoin} / {equippedDesk}`
+	ShopPreview.Equipped.Text = `{equippedCoinName} / {equippedDeskName}`
 	ShopPreview.TotalBonus.Text = describeItemStats(bonuses)
 end
 

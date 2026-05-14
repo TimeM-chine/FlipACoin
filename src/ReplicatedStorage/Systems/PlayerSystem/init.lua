@@ -14,6 +14,7 @@ local TweenService = game:GetService("TweenService")
 local TeleportService = game:GetService("TeleportService")
 
 ---- requires ----
+local EcoPresets = require(Replicated.Systems.EcoSystem.Presets)
 local Onboarding = require(Replicated.Systems.CoinFlipSystem.Modules.Onboarding)
 local PlayerPresets = require(script.Presets)
 local Types = require(Replicated.configs.Types)
@@ -268,7 +269,8 @@ function PlayerSystem:UpdatePlayerHeadGui(player: Player)
 	local onboarding = Onboarding.BuildState(playerIns)
 	local seatId = SystemMgr.systems.TableSeatSystem:GetPlayerSeatId(player)
 	local streak = runData.currentStreak or 0
-	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin) or "Rusty Penny"
+	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin) or EcoPresets.LoadoutDefaults.equippedCoin
+	local equippedCoinName = EcoPresets.GetShopItemDisplayName("coin", equippedCoin)
 	local isSeated = seatId ~= nil
 	local cash = playerIns:GetOneData(dataKey.wins) or 0
 
@@ -276,7 +278,8 @@ function PlayerSystem:UpdatePlayerHeadGui(player: Player)
 	onPlayerHead.vip.Text = seatId or "Spectating"
 	onPlayerHead.cardPackOpened.Visible = true
 	if onboarding.isComplete then
-		onPlayerHead.cardPackOpened.Text = isSeated and (streak > 0 and `Streak {streak}` or equippedCoin) or equippedCoin
+		onPlayerHead.cardPackOpened.Text = isSeated and (streak > 0 and `Streak {streak}` or equippedCoinName)
+			or equippedCoinName
 		onPlayerHead.cash.Visible = not isSeated
 		onPlayerHead.cash.Text = `$ {Util.FormatNumber(cash, true)}`
 	else

@@ -23,6 +23,7 @@ local RuntimeFolderName = "DecorationsRuntime"
 local TableDecorationAssetFolderName = "TableDecoration"
 local DefaultTableDecorationAssetName = "Default"
 local WorkspaceTableDecorationName = "TableDecoration"
+local TableDecorationSurfaceGap = 0.03
 
 local DecorationSystem: Types.System = {
 	whiteList = {
@@ -131,6 +132,7 @@ function DecorationSystem:RefreshPlayerDecoration(sender, player)
 	decorationModel.Name = decorationName
 	prepareDecorationModel(decorationModel)
 	decorationModel:PivotTo(getDecorationCFrame(assignment))
+	settleDecorationOnTable(decorationModel, assignment.tableModel)
 	decorationModel.Parent = runtimeFolder
 
 	self._playerDecorations[player.UserId] = {
@@ -313,6 +315,51 @@ function prepareDecorationModel(decorationModel)
 			descendant.CanCollide = false
 		end
 	end
+end
+
+function settleDecorationOnTable(decorationModel, tableModel)
+	local tableTop = tableModel:FindFirstChild("TableTop")
+	if not tableTop then
+		return
+	end
+
+	local tableNormal, halfThickness = getTableSurfaceData(tableTop)
+	local surfaceCenter = tableTop.Position + tableNormal * halfThickness
+	local pivot = decorationModel:GetPivot()
+	local surfaceAtPivot = pivot.Position - tableNormal * (pivot.Position - surfaceCenter):Dot(tableNormal)
+	local lift = getDecorationSurfaceLift(decorationModel, pivot, tableNormal) + TableDecorationSurfaceGap
+	local correctedPosition = surfaceAtPivot + tableNormal * lift
+	decorationModel:PivotTo(pivot + (correctedPosition - pivot.Position))
+end
+
+function getDecorationSurfaceLift(decorationModel, modelCFrame, normal)
+	local modelPivot = decorationModel:GetPivot()
+	local minProjection = math.huge
+
+	for _, descendant in ipairs(decorationModel:GetDescendants()) do
+		if not descendant:IsA("BasePart") then
+			continue
+		end
+
+		local relativeCFrame = modelPivot:ToObjectSpace(descendant.CFrame)
+		local partCFrame = modelCFrame * relativeCFrame
+		local halfSize = descendant.Size * 0.5
+		for x = -1, 1, 2 do
+			for y = -1, 1, 2 do
+				for z = -1, 1, 2 do
+					local corner =
+						partCFrame:PointToWorldSpace(Vector3.new(halfSize.X * x, halfSize.Y * y, halfSize.Z * z))
+					minProjection = math.min(minProjection, corner:Dot(normal))
+				end
+			end
+		end
+	end
+
+	if minProjection == math.huge then
+		return 0
+	end
+
+	return modelCFrame.Position:Dot(normal) - minProjection
 end
 
 function getTableDecorationAssetFolder()

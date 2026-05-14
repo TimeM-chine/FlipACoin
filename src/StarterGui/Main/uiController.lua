@@ -276,7 +276,7 @@ function controller.SetGuideButton(btn, frame)
 			controller.SetGuideButton(nil)
 		end
 
-		Main.ScreenInsets = Enum.ScreenInsets.None
+		-- Main.ScreenInsets = Enum.ScreenInsets.None
 		MaskFrame.BackgroundTransparency = 0.5
 		MaskFrame.Visible = true
 		ripple.Visible = true
@@ -292,7 +292,7 @@ function controller.SetGuideButton(btn, frame)
 		end
 	else
 		if guideButton then
-			Main.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
+			-- Main.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 			MaskFrame.Visible = false
 			ripple.Visible = false
 			ripple.Parent = Elements

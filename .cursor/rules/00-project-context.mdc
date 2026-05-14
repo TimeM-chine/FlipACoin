@@ -28,6 +28,7 @@ Use those files as the first orientation layer if they exist.
 - If docs and code disagree, trust the current code and update docs if appropriate.
 - Keep changes aligned with the repository's existing architecture instead of inventing a parallel one.
 - Reuse established project conventions before introducing new patterns.
+- Do not use Rojo/source edits just to create asset folders or placeholder resource hierarchies. Assume art, models, UI prefabs, VFX/SFX, and other complex Roblox assets are prepared and managed directly in Studio unless the user explicitly asks to source-control a specific simple asset structure.
 
 ## Validation mindset
 

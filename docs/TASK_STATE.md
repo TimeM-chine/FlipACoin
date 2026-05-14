@@ -1,6 +1,6 @@
 # TASK_STATE
 
-最后更新：2026-05-14
+最后更新：2026-05-15
 
 > 目的：记录当前正在做什么、下一步是什么、已做验证、关键决策与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`。
 
@@ -155,6 +155,47 @@
 - 可评估极简决策点：高 streak 后出现 `Cash Out` / `Double` / bonus choice，但不要破坏“一键 Flip”的主循环。
 
 ## Done
+
+### 2026-05-15 Coin config rename
+
+- Outcome: Coin shop config now uses item ids `coin1` through `coin9`, default equipped / owned Coin is `coin1`, and UI / head / seat summaries render display names `Coin1` through `Coin9`. `coin10` remains unused by the launch purchase / equip config.
+- Validation: `git diff --check` passed; `rojo build default.project.json --output /private/tmp/flip_coin_config_rename_check.rbxl` passed; source scan found no old Coin item ids in active code or `PROJECT_LOGIC.md`. `stylua --check` could not run because the Aftman-managed tool is not listed in `aftman.toml`.
+- Remaining validation: Studio Play should confirm new players start with `Coin1`, old saves with previous Coin ids reconcile to `coin1`, and equipped flip visuals resolve `coin1` through `coin9` assets.
+- Decisions: Runtime item ids match Studio asset names exactly using lowercase `coin1` through `coin9`; player-facing labels use `Coin1` through `Coin9`.
+
+### 2026-05-15 Startup seat state race
+
+- Outcome: Found and fixed a startup ordering race: `SystemMgr` spawns each system's `PlayerAdded` concurrently, so a stale initial `CoinFlipSystem:PlayerAdded` run-state snapshot could arrive after `TableSeatSystem` had already sent a seated update, clearing the HUD back to `Seat --`. `CoinFlipSystem:PlayerAdded` no longer replays its initial seat state through `SeatStateChanged`, and `SyncRunState` now preserves a newer known local seat when it receives an older unseated snapshot.
+- Validation: `git diff --check` passed; `rojo build default.project.json --output /private/tmp/flip_startup_seat_race_check.rbxl` passed.
+- Remaining validation: Studio Play should confirm the HUD moves from `Seat --` to the assigned seat and stays there after spawn, including when clicking `FLIP` immediately.
+- Decisions: `TableSeatSystem` seat events own client seat transitions; `CoinFlipSystem` run-state snapshots should update run stats without undoing newer seat state.
+
+### 2026-05-15 Asset workflow rule
+
+- Outcome: Confirmed no explicit rule existed for avoiding Rojo-created asset placeholder folders, then added the workflow rule to `AGENTS.md` and `.cursor/rules/00-project-context.mdc`.
+- Validation: Rule scan confirmed the new entries.
+- Decisions: Treat Studio-managed art, models, UI prefabs, VFX/SFX, and other complex Roblox assets as prepared unless the user explicitly asks to source-control a specific simple asset structure.
+
+### 2026-05-15 Startup flip readiness
+
+- Outcome: Fixed the visible Flip button doing nothing while the HUD still shows `Seat --`. The Flip button now stays interactive during startup seat sync, and the client sends the request to the server even when local `currentSeatId` has not arrived yet; the server remains authoritative for whether the player is actually seated.
+- Validation: `git diff --check` passed; `rojo build default.project.json --output /private/tmp/flip_startup_click_check.rbxl` passed.
+- Remaining validation: Studio Play should confirm clicking `FLIP` immediately after spawn either flips once the server has seated the player or shows the waiting text while auto-seat is still catching up.
+- Decisions: Client seat state is treated as display / cooldown context, not as the hard gate for sending the first Flip request.
+
+### 2026-05-14 Coin and desk equip visuals
+
+- Outcome: Equipped Coin now travels through own-player and observed flip payloads, and `EffectSystem` uses `CoinFlipSystem.Assets.Coins/<item id>` `Model` / `BasePart` assets during flip visuals with fallback to the original visual coin. Coin landing and Desk Setup placement now compute surface lift from real model bounds and the `TableTop` normal so visuals sit above the tabletop instead of sinking into it.
+- Validation: `git diff --check` passed; `rojo build default.project.json --output /private/tmp/flip_coin_decoration_check.rbxl` passed. `stylua` could not run because the Aftman-managed tool is not listed in `aftman.toml`; `selene`, `luau`, and `luau-lsp` are not installed locally.
+- Remaining validation: Studio Play should confirm different equipped Coin assets appear on self / observed flips, flip landings sit on the tabletop, Desk Setup models sit on the tabletop after purchase / equip, and seat cleanup still removes per-seat decorations.
+- Decisions: Coin equip visuals are flip-only; Coin and Desk Setup asset names must exactly match shop item ids, with fallback only for missing assets.
+
+### 2026-05-14 Flip action panel visibility
+
+- Outcome: `CoinFlipSystem/ui.lua` now keeps `CoinFlipHUD` and `CoinFlipMenu` visible during gameplay startup, removes them from `uiController.HideUnitWhenPush`, and uses seat state only to enable / disable the actual Flip button. `SyncRunState` also restores the playable HUD state from its `seatState` payload so startup event ordering cannot leave the screen empty.
+- Validation: `git diff --check` passed; source scan confirmed no remaining `HideUnitWhenPush(Hud)` / `HideUnitWhenPush(CoinFlipMenu)` registrations. `stylua --check` could not run because the Aftman-managed tool is not listed in `aftman.toml`; `selene` and `luau` are not installed in the local shell.
+- Remaining validation: Studio Play should confirm the bottom Flip action UI is visible immediately after entering gameplay, becomes clickable once seated, and stays visible while opening / closing Rebirth, Shop, and Inventory.
+- Decisions: The Flip action UI should not disappear while waiting for seat synchronization; only the Flip button's active state should depend on confirmed seating.
 
 ### 2026-05-13 Inventory tab selected-state fix
 

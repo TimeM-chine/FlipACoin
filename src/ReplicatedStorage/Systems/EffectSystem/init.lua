@@ -30,6 +30,8 @@ local LocalPlayer
 local FirstPersonCamera
 local activeCoinFlipVisuals = {}
 local VisualConfig = Presets.CoinFlipVisuals
+local CoinAssetFolderName = "Coins"
+local missingCoinAssetWarnings = {}
 
 ---- [[ UI ]] ----
 local PlayerGui, Main, uiController
@@ -222,24 +224,37 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 		end
 		return
 	end
-	local baseCoinSize = coin.Size
+
+	clearCoinVisual(seatId)
+	local coinObject, clonedCoinObject = createCoinObject(visualModel, coin, args and args.coinId)
+	local baseCoinSize = getCoinObjectSize(coinObject)
 	local baseShadowSize = shadow.Size
-	local startPos, endPos, tableNormal = getFlipPositions(seatId, baseCoinSize)
-	if not startPos or not endPos or not tableNormal then
+	local result = args.result
+	local finalRotation = math.rad(VisualConfig.SpinTurns * 360) + (result == "Tails" and math.pi or 0)
+	local airborneRotation = math.rad((VisualConfig.SpinTurns + 0.35) * 360) + (result == "Tails" and math.pi or 0)
+	local finalObjectRotation = CFrame.Angles(finalRotation, 0, math.rad(90))
+	local startPos, endPos, tableNormal, surfaceEndPos = getFlipPositions(seatId, coinObject, finalObjectRotation)
+	if not startPos or not endPos or not tableNormal or not surfaceEndPos then
+		if clonedCoinObject then
+			coinObject:Destroy()
+		else
+			setCoinObjectEnabled(coin, nil, false)
+		end
 		if landedCallback then
 			landedCallback()
 		end
 		return
 	end
 
-	local result = args.result
-	clearCoinVisual(seatId)
-	setCoinVisualEnabled(coin, shadow, true)
 	shadow.Size = baseShadowSize
+	shadow.Transparency = VisualConfig.ShadowBaseTransparency
 
 	local visual = {
 		model = visualModel,
-		coin = coin,
+		coin = coinObject,
+		focusPart = coin,
+		fallbackCoin = coin,
+		clonedCoinObject = clonedCoinObject,
 		shadow = shadow,
 		landingPulse = landingPulse,
 		streakPulse = streakPulse,
@@ -253,11 +268,7 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 		math.max(VisualConfig.ArcHeight, (startPos - endPos).Magnitude * VisualConfig.ArcHeightTravelFactor)
 	local travel = endPos - startPos
 	local airborneDuration = VisualConfig.TravelDuration
-	local finalRotation = math.rad(VisualConfig.SpinTurns * 360) + (result == "Tails" and math.pi or 0)
-	local airborneRotation = math.rad((VisualConfig.SpinTurns + 0.35) * 360) + (result == "Tails" and math.pi or 0)
-	local shadowPos = endPos
-		- (tableNormal * ((baseCoinSize.X * 0.5) + VisualConfig.CoinSurfaceGap))
-		+ (tableNormal * ((baseShadowSize.X * 0.5) + VisualConfig.ShadowSurfaceGap))
+	local shadowPos = surfaceEndPos + (tableNormal * ((baseShadowSize.X * 0.5) + VisualConfig.ShadowSurfaceGap))
 	local visualOptions = args.visualOptions
 	local observedStreak = visualOptions and (visualOptions.streak or 0) or 0
 	local shouldShowObservedStreakPulse = visualOptions
@@ -265,10 +276,10 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 		and result == "Heads"
 		and observedStreak >= VisualConfig.StreakPulseMinimum
 
-	coin.CFrame = CFrame.new(startPos) * CFrame.Angles(0, 0, math.rad(90))
+	pivotCoinVisual(visual, CFrame.new(startPos) * CFrame.Angles(0, 0, math.rad(90)))
 	shadow.CFrame = CFrame.new(startPos.X, shadowPos.Y, startPos.Z) * CFrame.Angles(0, 0, math.rad(90))
 	if visual.shouldFollowCamera then
-		FirstPersonCamera.FollowCoin(coin, {
+		FirstPersonCamera.FollowCoin(visual.focusPart, {
 			duration = airborneDuration + VisualConfig.LandingDuration + (VisualConfig.ResultRevealDelay or 0) + 0.08,
 		})
 	end
@@ -293,7 +304,10 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 		local shadowTransparency = VisualConfig.ShadowBaseTransparency
 			+ ((VisualConfig.ShadowMaxTransparency - VisualConfig.ShadowBaseTransparency) * shadowAlpha)
 
-		coin.CFrame = CFrame.new(position) * CFrame.Angles(flipAngle, 0, math.rad(90)) * CFrame.Angles(0, bankAngle, 0)
+		local coinCFrame = CFrame.new(position)
+			* CFrame.Angles(flipAngle, 0, math.rad(90))
+			* CFrame.Angles(0, bankAngle, 0)
+		pivotCoinVisual(visual, coinCFrame)
 		shadow.CFrame = CFrame.new(position.X, shadowPos.Y, position.Z) * CFrame.Angles(0, 0, math.rad(90))
 		shadow.Size = Vector3.new(baseShadowSize.X, baseCoinSize.Y * shadowScale, baseCoinSize.Z * shadowScale)
 		shadow.Transparency = shadowTransparency
@@ -317,13 +331,21 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 			})
 		end
 
+		local settleCFrame = Instance.new("CFrameValue")
+		settleCFrame.Value = getCoinObjectPivot(visual.coin)
+		visual.settleCFrame = settleCFrame
+		visual.settleConnection = settleCFrame:GetPropertyChangedSignal("Value"):Connect(function()
+			pivotCoinVisual(visual, settleCFrame.Value)
+		end)
+
 		local settleTween = TweenService:Create(
-			coin,
+			settleCFrame,
 			TweenInfo.new(VisualConfig.LandingDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{
-				CFrame = CFrame.new(endPos) * CFrame.Angles(finalRotation, 0, math.rad(90)),
+				Value = CFrame.new(endPos) * finalObjectRotation,
 			}
 		)
+		visual.settleTween = settleTween
 		settleTween:Play()
 
 		local shadowTween = TweenService:Create(
@@ -337,9 +359,21 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 		)
 		shadowTween:Play()
 
-		settleTween.Completed:Once(function()
+		settleTween.Completed:Once(function(playbackState)
+			if playbackState ~= Enum.PlaybackState.Completed then
+				return
+			end
+			if visual.settleConnection then
+				visual.settleConnection:Disconnect()
+				visual.settleConnection = nil
+			end
+			if visual.settleCFrame then
+				visual.settleCFrame:Destroy()
+				visual.settleCFrame = nil
+			end
+			visual.settleTween = nil
 			if visual.shouldFollowCamera then
-				FirstPersonCamera.ReturnToFirstPerson(coin)
+				FirstPersonCamera.ReturnToFirstPerson(visual.focusPart)
 			end
 			if landedCallback then
 				task.delay(VisualConfig.ResultRevealDelay or 0, landedCallback)
@@ -421,12 +455,12 @@ function getTableSurfaceData(tableTop)
 	return normal, axisRecords[1].size * 0.5
 end
 
-function getFlipPositions(seatId, coinSize)
+function getFlipPositions(seatId, coinObject, finalObjectRotation)
 	local seatRecord = getSeatRecord(seatId)
 	local tableModel = seatRecord and seatRecord.tableModel or getTableModel()
 	local tableTop = tableModel and tableModel:FindFirstChild("TableTop")
 	if not tableTop then
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	end
 
 	local centerAttachment = tableTop.TableCenterAttachment
@@ -438,7 +472,7 @@ function getFlipPositions(seatId, coinSize)
 	elseif seatPart then
 		startPos = seatPart.Position + Vector3.new(0, 1.25 + VisualConfig.CoinStartHeight, 0)
 	else
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	end
 
 	local tableNormal, halfThickness = getTableSurfaceData(tableTop)
@@ -452,11 +486,11 @@ function getFlipPositions(seatId, coinSize)
 		outward = outward.Unit
 	end
 
-	local endPos = centerPos
-		+ (outward * VisualConfig.LandingRadius)
-		+ (tableNormal * ((coinSize.X * 0.5) + VisualConfig.CoinSurfaceGap))
+	local surfaceEndPos = centerPos + (outward * VisualConfig.LandingRadius)
+	local surfaceLift = getObjectSurfaceLift(coinObject, CFrame.new() * finalObjectRotation, tableNormal)
+	local endPos = surfaceEndPos + (tableNormal * (surfaceLift + VisualConfig.CoinSurfaceGap))
 
-	return startPos, endPos, tableNormal
+	return startPos, endPos, tableNormal, surfaceEndPos
 end
 
 function getCoinVisual(seatId)
@@ -475,11 +509,170 @@ function getCoinVisual(seatId)
 		visualModel:WaitForChild("StreakPulse")
 end
 
-function setCoinVisualEnabled(coin, shadow, enabled)
-	coin.Transparency = enabled and 0 or 1
-	shadow.Transparency = enabled and VisualConfig.ShadowBaseTransparency or 1
-	coin.TopFace.Enabled = enabled
-	coin.BottomFace.Enabled = enabled
+function getCoinAssetFolder()
+	local assets = Replicated.Systems.CoinFlipSystem.Assets
+	return assets:FindFirstChild(CoinAssetFolderName)
+end
+
+function warnMissingCoinAsset(coinId, reason)
+	local warningKey = coinId or "__missing_coin_id"
+	if missingCoinAssetWarnings[warningKey] then
+		return
+	end
+
+	missingCoinAssetWarnings[warningKey] = true
+	warn(`[EffectSystem] {reason}`)
+end
+
+function getCoinObjectParts(coinObject)
+	local parts = {}
+	if coinObject:IsA("BasePart") then
+		table.insert(parts, coinObject)
+	elseif coinObject:IsA("Model") then
+		for _, descendant in ipairs(coinObject:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				table.insert(parts, descendant)
+			end
+		end
+	end
+
+	return parts
+end
+
+function getEquippedCoinAsset(coinId)
+	if typeof(coinId) ~= "string" then
+		return nil
+	end
+
+	local assetFolder = getCoinAssetFolder()
+	if not assetFolder then
+		warnMissingCoinAsset(
+			coinId,
+			`Missing CoinFlipSystem.Assets.{CoinAssetFolderName}; using default coin visual.`
+		)
+		return nil
+	end
+
+	local asset = assetFolder:FindFirstChild(coinId)
+	if not asset then
+		warnMissingCoinAsset(coinId, `Missing coin model asset for equipped coin: {coinId}`)
+		return nil
+	end
+	if not asset:IsA("Model") and not asset:IsA("BasePart") then
+		warnMissingCoinAsset(coinId, `Coin asset must be a Model or BasePart: {coinId}`)
+		return nil
+	end
+	if #getCoinObjectParts(asset) == 0 then
+		warnMissingCoinAsset(coinId, `Coin asset has no renderable BasePart descendants: {coinId}`)
+		return nil
+	end
+
+	return asset
+end
+
+function prepareCoinObject(coinObject)
+	for _, part in ipairs(getCoinObjectParts(coinObject)) do
+		part.Anchored = true
+		part.CanCollide = false
+		part.Massless = true
+	end
+end
+
+function createCoinObject(visualModel, fallbackCoin, coinId)
+	local asset = getEquippedCoinAsset(coinId)
+	if asset then
+		local coinObject = asset:Clone()
+		coinObject.Name = "EquippedCoinVisual"
+		prepareCoinObject(coinObject)
+		coinObject.Parent = visualModel
+		setCoinObjectEnabled(fallbackCoin, nil, false)
+		return coinObject, true
+	end
+
+	setCoinObjectEnabled(fallbackCoin, nil, true)
+	return fallbackCoin, false
+end
+
+function getCoinObjectSize(coinObject)
+	if coinObject:IsA("BasePart") then
+		return coinObject.Size
+	end
+
+	return coinObject:GetExtentsSize()
+end
+
+function getCoinObjectPivot(coinObject)
+	if coinObject:IsA("BasePart") then
+		return coinObject.CFrame
+	end
+
+	return coinObject:GetPivot()
+end
+
+function pivotCoinObject(coinObject, targetCFrame)
+	if coinObject:IsA("BasePart") then
+		coinObject.CFrame = targetCFrame
+	else
+		coinObject:PivotTo(targetCFrame)
+	end
+end
+
+function pivotCoinVisual(visual, targetCFrame)
+	pivotCoinObject(visual.coin, targetCFrame)
+	if visual.focusPart ~= visual.coin then
+		visual.focusPart.CFrame = targetCFrame
+	end
+end
+
+function getObjectSurfaceLift(coinObject, objectCFrame, normal)
+	local objectPivot = getCoinObjectPivot(coinObject)
+	local minProjection = math.huge
+
+	for _, part in ipairs(getCoinObjectParts(coinObject)) do
+		local relativeCFrame = objectPivot:ToObjectSpace(part.CFrame)
+		local partCFrame = objectCFrame * relativeCFrame
+		local halfSize = part.Size * 0.5
+		for x = -1, 1, 2 do
+			for y = -1, 1, 2 do
+				for z = -1, 1, 2 do
+					local corner =
+						partCFrame:PointToWorldSpace(Vector3.new(halfSize.X * x, halfSize.Y * y, halfSize.Z * z))
+					minProjection = math.min(minProjection, corner:Dot(normal))
+				end
+			end
+		end
+	end
+
+	if minProjection == math.huge then
+		return 0
+	end
+
+	return objectCFrame.Position:Dot(normal) - minProjection
+end
+
+function setFaceVisualEnabled(faceVisual, enabled)
+	if not faceVisual then
+		return
+	end
+	if faceVisual:IsA("Decal") or faceVisual:IsA("Texture") then
+		faceVisual.Transparency = enabled and 0 or 1
+	elseif faceVisual:IsA("SurfaceGui") or faceVisual:IsA("BillboardGui") then
+		faceVisual.Enabled = enabled
+	end
+end
+
+function setCoinObjectEnabled(coinObject, shadow, enabled)
+	for _, part in ipairs(getCoinObjectParts(coinObject)) do
+		part.Transparency = enabled and 0 or 1
+	end
+
+	if shadow then
+		shadow.Transparency = enabled and VisualConfig.ShadowBaseTransparency or 1
+	end
+	if coinObject:IsA("BasePart") then
+		setFaceVisualEnabled(coinObject:FindFirstChild("TopFace"), enabled)
+		setFaceVisualEnabled(coinObject:FindFirstChild("BottomFace"), enabled)
+	end
 end
 
 function hidePulseVisual(pulse)
@@ -517,13 +710,27 @@ function clearCoinVisual(seatId)
 	if visual.connection then
 		visual.connection:Disconnect()
 	end
+	if visual.settleTween then
+		visual.settleTween:Cancel()
+	end
+	if visual.settleConnection then
+		visual.settleConnection:Disconnect()
+	end
+	if visual.settleCFrame then
+		visual.settleCFrame:Destroy()
+	end
 	if visual.shouldFollowCamera then
-		FirstPersonCamera.ReturnToFirstPerson(visual.coin)
+		FirstPersonCamera.ReturnToFirstPerson(visual.focusPart)
 	end
 	visual.shadow.Size = visual.baseShadowSize
 	hidePulseVisual(visual.landingPulse)
 	hidePulseVisual(visual.streakPulse)
-	setCoinVisualEnabled(visual.coin, visual.shadow, false)
+	if visual.clonedCoinObject then
+		visual.coin:Destroy()
+		setCoinObjectEnabled(visual.fallbackCoin, visual.shadow, false)
+	else
+		setCoinObjectEnabled(visual.coin, visual.shadow, false)
+	end
 end
 
 return EffectSystem

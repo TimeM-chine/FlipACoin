@@ -21,6 +21,7 @@ Rule of thumb:
 - If the document and current code disagree, trust the current code and update the document when appropriate.
 - Do not assume every directory under `src/ReplicatedStorage/Systems` is active; check `SystemMgr.lua`.
 - For code-only Luau changes, do not run `rojo build` as validation; the Rojo structure is already known-good. Reserve Rojo build checks for project mapping, instance tree, asset structure, or Rojo config changes.
+- Do not use Rojo/source edits just to create asset folders or placeholder resource hierarchies. Treat art, models, UI prefabs, VFX/SFX, and other complex Roblox assets as already prepared or managed directly in Studio unless the user explicitly asks to source-control a specific simple asset structure.
 - If an operation can be completed with an MCP tool, prefer MCP over Codex `computer use`; use `computer use` only when MCP cannot do the job.
 - For complex client-side visual, multi-client, mobile-device, or Studio-only validation that MCP / automation tools cannot verify reliably, do not force a weak automated conclusion. Record source review and feasible single-client sanity checks, then leave final visual / feel validation to the user and write back the user's result when provided.
 

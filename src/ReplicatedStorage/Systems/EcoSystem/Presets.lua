@@ -17,15 +17,15 @@ EcoPresets.ShopCategoryAliases = table.freeze({
 })
 
 EcoPresets.LoadoutDefaults = table.freeze({
-	equippedCoin = "Rusty Penny",
+	equippedCoin = "coin1",
 	equippedDeskSetup = "Folding Table",
 })
 
 EcoPresets.GrowthShopItems = {
 	coin = table.freeze({
 		{
-			id = "Rusty Penny",
-			displayName = "Rusty Penny",
+			id = "coin1",
+			displayName = "Coin1",
 			rarity = "Common",
 			role = "Starter",
 			cost = 0,
@@ -35,8 +35,8 @@ EcoPresets.GrowthShopItems = {
 			},
 		},
 		{
-			id = "Lucky Nickel",
-			displayName = "Lucky Nickel",
+			id = "coin2",
+			displayName = "Coin2",
 			rarity = "Uncommon",
 			role = "Luck",
 			cost = 180,
@@ -46,8 +46,8 @@ EcoPresets.GrowthShopItems = {
 			},
 		},
 		{
-			id = "Combo Quarter",
-			displayName = "Combo Quarter",
+			id = "coin3",
+			displayName = "Coin3",
 			rarity = "Rare",
 			role = "Streak",
 			cost = 520,
@@ -57,14 +57,69 @@ EcoPresets.GrowthShopItems = {
 			},
 		},
 		{
-			id = "Royal Doubloon",
-			displayName = "Royal Doubloon",
+			id = "coin4",
+			displayName = "Coin4",
 			rarity = "Epic",
 			role = "Cash",
 			cost = 1400,
 			stats = {
 				coinMultiplier = 1.35,
 				luckBonus = 0.018,
+			},
+		},
+		{
+			id = "coin5",
+			displayName = "Coin5",
+			rarity = "Epic",
+			role = "Value",
+			cost = 3200,
+			stats = {
+				coinMultiplier = 1.55,
+				luckBonus = 0.025,
+			},
+		},
+		{
+			id = "coin6",
+			displayName = "Coin6",
+			rarity = "Legendary",
+			role = "Premium",
+			cost = 6800,
+			stats = {
+				coinMultiplier = 1.82,
+				luckBonus = 0.035,
+			},
+		},
+		{
+			id = "coin7",
+			displayName = "Coin7",
+			rarity = "Legendary",
+			role = "Jackpot",
+			cost = 12800,
+			stats = {
+				coinMultiplier = 2.15,
+				luckBonus = 0.05,
+			},
+		},
+		{
+			id = "coin8",
+			displayName = "Coin8",
+			rarity = "Mythic",
+			role = "Fortune",
+			cost = 24000,
+			stats = {
+				coinMultiplier = 2.6,
+				luckBonus = 0.07,
+			},
+		},
+		{
+			id = "coin9",
+			displayName = "Coin9",
+			rarity = "Mythic",
+			role = "Apex",
+			cost = 50000,
+			stats = {
+				coinMultiplier = 3.2,
+				luckBonus = 0.09,
 			},
 		},
 	}),
@@ -668,6 +723,11 @@ function EcoPresets.GetShopItem(category, itemId)
 	end
 
 	return nil
+end
+
+function EcoPresets.GetShopItemDisplayName(category, itemId)
+	local item = EcoPresets.GetShopItem(category, itemId)
+	return (item and item.displayName) or itemId
 end
 
 function EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDeskSetup)

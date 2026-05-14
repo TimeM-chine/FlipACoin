@@ -86,9 +86,9 @@ local DefaultData = {
 		quests = {},
 	},
 	quests = {},
-	equippedCoin = "Rusty Penny",
+	equippedCoin = "coin1",
 	ownedCoins = {
-		["Rusty Penny"] = true,
+		coin1 = true,
 	},
 	equippedDeskSetup = "Folding Table",
 	ownedDeskSetups = {
