@@ -18,7 +18,7 @@ EcoPresets.ShopCategoryAliases = table.freeze({
 
 EcoPresets.LoadoutDefaults = table.freeze({
 	equippedCoin = "coin1",
-	equippedDeskSetup = "Folding Table",
+	equippedDeskSetup = "1",
 })
 
 EcoPresets.GrowthShopItems = {
@@ -125,7 +125,7 @@ EcoPresets.GrowthShopItems = {
 	}),
 	desk = table.freeze({
 		{
-			id = "Folding Table",
+			id = "1",
 			displayName = "Folding Table",
 			rarity = "Common",
 			role = "Starter",
@@ -136,7 +136,7 @@ EcoPresets.GrowthShopItems = {
 			},
 		},
 		{
-			id = "Green Felt",
+			id = "2",
 			displayName = "Green Felt",
 			rarity = "Uncommon",
 			role = "Steady",
@@ -147,7 +147,7 @@ EcoPresets.GrowthShopItems = {
 			},
 		},
 		{
-			id = "Arcade Desk",
+			id = "3",
 			displayName = "Arcade Desk",
 			rarity = "Rare",
 			role = "Fast Cash",
@@ -158,7 +158,7 @@ EcoPresets.GrowthShopItems = {
 			},
 		},
 		{
-			id = "Velvet Casino",
+			id = "4",
 			displayName = "Velvet Casino",
 			rarity = "Epic",
 			role = "Premium",

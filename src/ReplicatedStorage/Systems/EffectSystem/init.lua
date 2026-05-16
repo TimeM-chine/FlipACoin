@@ -33,6 +33,9 @@ local VisualConfig = Presets.CoinFlipVisuals
 local CoinAssetFolderName = "Coins"
 local missingCoinAssetWarnings = {}
 
+-- 硬币相对世界的“立起”基准；空中翻转绕世界水平轴 `outward×tableNormal`（见 getFlipPositions），再乘基准
+local CoinVisualBaseRot = CFrame.Angles(0, 0, math.rad(90))
+
 ---- [[ UI ]] ----
 local PlayerGui, Main, uiController
 
@@ -232,8 +235,8 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 	local result = args.result
 	local finalRotation = math.rad(VisualConfig.SpinTurns * 360) + (result == "Tails" and math.pi or 0)
 	local airborneRotation = math.rad((VisualConfig.SpinTurns + 0.35) * 360) + (result == "Tails" and math.pi or 0)
-	local finalObjectRotation = CFrame.Angles(finalRotation, 0, math.rad(90))
-	local startPos, endPos, tableNormal, surfaceEndPos = getFlipPositions(seatId, coinObject, finalObjectRotation)
+	local startPos, endPos, tableNormal, surfaceEndPos, flipAxisWorld =
+		getFlipPositions(seatId, coinObject, finalRotation)
 	if not startPos or not endPos or not tableNormal or not surfaceEndPos then
 		if clonedCoinObject then
 			coinObject:Destroy()
@@ -267,6 +270,8 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 	local arcHeight =
 		math.max(VisualConfig.ArcHeight, (startPos - endPos).Magnitude * VisualConfig.ArcHeightTravelFactor)
 	local travel = endPos - startPos
+	local travelFlat = travel - tableNormal * travel:Dot(tableNormal)
+	local bankReference = travelFlat.Magnitude > 1e-4 and travelFlat.Unit or flipAxisWorld:Cross(tableNormal).Unit
 	local airborneDuration = VisualConfig.TravelDuration
 	local shadowPos = surfaceEndPos + (tableNormal * ((baseShadowSize.X * 0.5) + VisualConfig.ShadowSurfaceGap))
 	local visualOptions = args.visualOptions
@@ -276,8 +281,8 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 		and result == "Heads"
 		and observedStreak >= VisualConfig.StreakPulseMinimum
 
-	pivotCoinVisual(visual, CFrame.new(startPos) * CFrame.Angles(0, 0, math.rad(90)))
-	shadow.CFrame = CFrame.new(startPos.X, shadowPos.Y, startPos.Z) * CFrame.Angles(0, 0, math.rad(90))
+	pivotCoinVisual(visual, CFrame.new(startPos) * CoinVisualBaseRot)
+	shadow.CFrame = CFrame.new(startPos.X, shadowPos.Y, startPos.Z) * CoinVisualBaseRot
 	if visual.shouldFollowCamera then
 		FirstPersonCamera.FollowCoin(visual.focusPart, {
 			duration = airborneDuration + VisualConfig.LandingDuration + (VisualConfig.ResultRevealDelay or 0) + 0.08,
@@ -305,10 +310,11 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 			+ ((VisualConfig.ShadowMaxTransparency - VisualConfig.ShadowBaseTransparency) * shadowAlpha)
 
 		local coinCFrame = CFrame.new(position)
-			* CFrame.Angles(flipAngle, 0, math.rad(90))
-			* CFrame.Angles(0, bankAngle, 0)
+			* CFrame.fromAxisAngle(flipAxisWorld, flipAngle)
+			* CoinVisualBaseRot
+			* CFrame.fromAxisAngle(bankReference, bankAngle)
 		pivotCoinVisual(visual, coinCFrame)
-		shadow.CFrame = CFrame.new(position.X, shadowPos.Y, position.Z) * CFrame.Angles(0, 0, math.rad(90))
+		shadow.CFrame = CFrame.new(position.X, shadowPos.Y, position.Z) * CoinVisualBaseRot
 		shadow.Size = Vector3.new(baseShadowSize.X, baseCoinSize.Y * shadowScale, baseCoinSize.Z * shadowScale)
 		shadow.Transparency = shadowTransparency
 
@@ -338,21 +344,25 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 			pivotCoinVisual(visual, settleCFrame.Value)
 		end)
 
+		local flatWorldRot = buildFlatCoinWorldRotation(tableNormal, flipAxisWorld, result)
+		local endPosFlat = resolveFlatLandWorldPosition(surfaceEndPos, tableNormal, flatWorldRot, visual.coin)
+
 		local settleTween = TweenService:Create(
 			settleCFrame,
 			TweenInfo.new(VisualConfig.LandingDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{
-				Value = CFrame.new(endPos) * finalObjectRotation,
+				Value = CFrame.new(endPosFlat) * flatWorldRot,
 			}
 		)
 		visual.settleTween = settleTween
 		settleTween:Play()
 
+		local shadowEndFlat = Vector3.new(endPosFlat.X, shadowPos.Y, endPosFlat.Z)
 		local shadowTween = TweenService:Create(
 			shadow,
 			TweenInfo.new(VisualConfig.LandingDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{
-				CFrame = CFrame.new(shadowPos) * CFrame.Angles(0, 0, math.rad(90)),
+				CFrame = CFrame.new(shadowEndFlat) * CoinVisualBaseRot,
 				Size = baseShadowSize,
 				Transparency = VisualConfig.ShadowBaseTransparency,
 			}
@@ -403,8 +413,17 @@ end
 function getCoinVisualsFolder(seatId)
 	local seatRecord = getSeatRecord(seatId)
 	local tableModel = seatRecord and seatRecord.tableModel or getTableModel()
-	local assets = tableModel and tableModel:FindFirstChild("Assets")
-	return assets and assets:FindFirstChild("CoinVisuals") or nil
+	if not tableModel then
+		return nil
+	end
+
+	local assets = tableModel:FindFirstChild("Assets")
+	local underAssets = assets and assets:FindFirstChild("CoinVisuals")
+	if underAssets then
+		return underAssets
+	end
+
+	return tableModel:FindFirstChild("CoinVisuals")
 end
 
 function getSeatAttachment(seatId)
@@ -455,12 +474,51 @@ function getTableSurfaceData(tableTop)
 	return normal, axisRecords[1].size * 0.5
 end
 
-function getFlipPositions(seatId, coinObject, finalObjectRotation)
+-- 用射线命中 TableTop 得到真实落点，再沿桌面法线迭代抬升，避免 pivot/几何与 surfaceEndPos 不一致时穿进桌面
+function resolveFlatLandWorldPosition(surfaceEndPos, tableNormal, flatWorldRot, coinObject)
+	local n = tableNormal.Unit
+	local tableModel = getTableModel()
+	local tableTop = tableModel and tableModel:FindFirstChild("TableTop")
+	if not tableTop or not tableTop:IsA("BasePart") then
+		local lift0 = math.max(getObjectSurfaceLift(coinObject, CFrame.new(surfaceEndPos) * flatWorldRot, n), 0.05)
+		return surfaceEndPos + n * (lift0 + VisualConfig.CoinSurfaceGap)
+	end
+
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Include
+	rayParams.FilterDescendantsInstances = { tableTop }
+
+	local origin = surfaceEndPos + n * 35
+	local hit = Workspace:Raycast(origin, -n * 120, rayParams)
+	if not hit and tableModel then
+		rayParams.FilterDescendantsInstances = { tableModel }
+		hit = Workspace:Raycast(origin, -n * 120, rayParams)
+	end
+	local anchor
+	if hit then
+		anchor = hit.Position + n * 0.12
+	else
+		anchor = surfaceEndPos + n * 2.5
+	end
+
+	local pos = anchor
+	for _ = 1, 8 do
+		local lift = getObjectSurfaceLift(coinObject, CFrame.new(pos) * flatWorldRot, n)
+		if lift <= 0.001 then
+			break
+		end
+		pos = pos + n * math.max(lift, 0)
+	end
+
+	return pos + n * VisualConfig.CoinSurfaceGap
+end
+
+function getFlipPositions(seatId, coinObject, landingSpinRadians)
 	local seatRecord = getSeatRecord(seatId)
 	local tableModel = seatRecord and seatRecord.tableModel or getTableModel()
 	local tableTop = tableModel and tableModel:FindFirstChild("TableTop")
 	if not tableTop then
-		return nil, nil, nil, nil
+		return nil, nil, nil, nil, nil
 	end
 
 	local centerAttachment = tableTop.TableCenterAttachment
@@ -472,7 +530,7 @@ function getFlipPositions(seatId, coinObject, finalObjectRotation)
 	elseif seatPart then
 		startPos = seatPart.Position + Vector3.new(0, 1.25 + VisualConfig.CoinStartHeight, 0)
 	else
-		return nil, nil, nil, nil
+		return nil, nil, nil, nil, nil
 	end
 
 	local tableNormal, halfThickness = getTableSurfaceData(tableTop)
@@ -486,11 +544,19 @@ function getFlipPositions(seatId, coinObject, finalObjectRotation)
 		outward = outward.Unit
 	end
 
+	local flipAxisWorld = outward:Cross(tableNormal)
+	if flipAxisWorld.Magnitude < 1e-4 then
+		flipAxisWorld = Vector3.new(0, 0, 1)
+	else
+		flipAxisWorld = flipAxisWorld.Unit
+	end
+
 	local surfaceEndPos = centerPos + (outward * VisualConfig.LandingRadius)
-	local surfaceLift = getObjectSurfaceLift(coinObject, CFrame.new() * finalObjectRotation, tableNormal)
+	local landedRotation = CFrame.fromAxisAngle(flipAxisWorld, landingSpinRadians) * CoinVisualBaseRot
+	local surfaceLift = getObjectSurfaceLift(coinObject, CFrame.new() * landedRotation, tableNormal)
 	local endPos = surfaceEndPos + (tableNormal * (surfaceLift + VisualConfig.CoinSurfaceGap))
 
-	return startPos, endPos, tableNormal, surfaceEndPos
+	return startPos, endPos, tableNormal, surfaceEndPos, flipAxisWorld
 end
 
 function getCoinVisual(seatId)
@@ -622,6 +688,19 @@ function pivotCoinVisual(visual, targetCFrame)
 	if visual.focusPart ~= visual.coin then
 		visual.focusPart.CFrame = targetCFrame
 	end
+end
+
+-- 硬币平铺在桌面：局部Y沿厚度方向对齐 `FlatThicknessLocalSign * tableNormal`；局部X沿 flip 轴
+function buildFlatCoinWorldRotation(tableNormal, flipAxisWorld, flipResult)
+	local n = tableNormal.Unit
+	local u = flipAxisWorld.Unit
+	local yThickness = n * VisualConfig.FlatThicknessLocalSign
+	local z = u:Cross(yThickness).Unit
+	local basis = CFrame.fromMatrix(Vector3.zero, u, yThickness, z)
+	if flipResult == "Tails" then
+		return basis * CFrame.fromAxisAngle(u, math.pi)
+	end
+	return basis
 end
 
 function getObjectSurfaceLift(coinObject, objectCFrame, normal)

@@ -5,7 +5,13 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 ---- requires ----
+local DecorationPresets = require(script.Presets)
 local EcoPresets = require(Replicated.Systems.EcoSystem.Presets)
+local RuntimeFolderName = DecorationPresets.RuntimeFolderName
+local TableDecorationAssetFolderName = DecorationPresets.TableDecorationAssetFolderName
+local DefaultTableDecorationAssetName = DecorationPresets.DefaultTableDecorationAssetName
+local WorkspaceTableDecorationName = DecorationPresets.WorkspaceTableDecorationName
+local TableDecorationSurfaceGap = DecorationPresets.TableDecorationSurfaceGap
 local Keys = require(Replicated.configs.Keys)
 local Types = require(Replicated.configs.Types)
 
@@ -18,12 +24,6 @@ local dataKey = Keys.DataKey
 local PlayerServerClass
 
 ---- client variables ----
-
-local RuntimeFolderName = "DecorationsRuntime"
-local TableDecorationAssetFolderName = "TableDecoration"
-local DefaultTableDecorationAssetName = "Default"
-local WorkspaceTableDecorationName = "TableDecoration"
-local TableDecorationSurfaceGap = 0.03
 
 local DecorationSystem: Types.System = {
 	whiteList = {
@@ -258,7 +258,8 @@ function findDecorationAnchor(tableModel, rawSeatId)
 	for _, candidateName in ipairs(candidateNames) do
 		local candidate = attachmentsFolder:FindFirstChild(candidateName)
 		if candidate then
-			local attachment = candidate:IsA("Attachment") and candidate or candidate:FindFirstChildWhichIsA("Attachment")
+			local attachment = candidate:IsA("Attachment") and candidate
+				or candidate:FindFirstChildWhichIsA("Attachment")
 			return attachment or candidate
 		end
 	end

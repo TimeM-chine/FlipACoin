@@ -371,6 +371,7 @@ FlipACoin
 文件：
 
 - `src/ReplicatedStorage/Systems/DecorationSystem/init.lua`
+- `src/ReplicatedStorage/Systems/DecorationSystem/Presets.lua`
 - `src/ReplicatedStorage/Systems/DecorationSystem/Assets/TableDecoration`
 
 当前职责：
@@ -386,7 +387,7 @@ FlipACoin
 
 - 桌搭资产长期应放在 `ReplicatedStorage.Systems.DecorationSystem.Assets.TableDecoration`
 - 如果运行时仍存在 `Workspace.TableDecoration`，服务端启动时会迁移到 `DecorationSystem.Assets.TableDecoration`
-- 资产子模型名称与 Desk Setup 商品 id 完全一致：`Folding Table`、`Green Felt`、`Arcade Desk`、`Velvet Casino`
+- Desk Setup 商品 id 为字符串 `"1"`–`"4"`（见 `EcoSystem/Presets.lua` 的 `GrowthShopItems.desk`），`TableDecoration` 下子 Model 名与之相同
 - 如果 `Workspace.TableDecoration` 只有一整套模型而不是同名商品子模型，会作为 `Default` 资产供所有 Desk Setup 临时复用
 - 摆放优先读取 `Workspace.CoinFlipTable.Attachments/<SeatId>Decoration`、`<SeatId>DecorationAnchor`、`<SeatId>DeskSetup`，再回退到 `<SeatId>Marker` 或桌面位置
 - 摆放后会按模型实际包围角点沿桌面法线抬升，让桌搭最低点落在 `TableTop` 表面上方一点，避免沉入桌面
@@ -828,8 +829,8 @@ FlipACoin
 建议假设它至少包含：
 
 - `Seats`
-- `Assets`
-- `Assets.CoinVisuals`
+- `Assets`（可选；`DecorationSystem` 等会在运行时创建 `Assets` 用于桌搭等）
+- `CoinVisuals`：`EffectSystem` 先找 `Assets.CoinVisuals`，没有则找 **`CoinFlipTable` 下的 `CoinVisuals`**（与 `Assets` 同级亦可）
 - `Attachments`
 
 其中：

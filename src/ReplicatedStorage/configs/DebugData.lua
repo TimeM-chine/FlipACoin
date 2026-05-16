@@ -106,6 +106,6 @@ DebugData.wins = DEFAULT_DATA.wins
 -- 	multiplierIndex = 1,
 -- }
 
--- -- DebugData.wins = 99999
+DebugData.wins = 99999
 
 return DebugData

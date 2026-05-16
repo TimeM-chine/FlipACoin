@@ -1,0 +1,11 @@
+---
+description: Studio-owned game assets; do not expect Rojo to author complex Models
+alwaysApply: true
+---
+
+# Assets, Studio, and Rojo
+
+- **Authoring**: Art and gameplay resources such as **Models**, **MeshParts**, unions, rigs, layered **UI prefabs**, **VFX/SFX**, and other complex instance hierarchies are **owned by Roblox Studio**, not by constructing them through the Git-side tree. **Rojo is not used to build or maintain those assets**; it cannot replace Studio for complex model work.
+- **Trust Studio**: When Luau or docs reference a path (for example under `Workspace`, `StarterGui`, or `ReplicatedStorage` after sync), **assume the open place in Studio already contains the declared instances** unless the user says otherwise. Do not invent full asset hierarchies in source control to “fix” missing references.
+- **Source edits**: Do not add Rojo/source-only **placeholder Models** or deep asset trees to satisfy runtime `FindFirstChild` paths unless the **user explicitly** asks for a minimal stub or a trivial folder layout.
+- **Debugging**: If something is missing at runtime, treat it as a **Studio place / sync / naming** issue first; align code or docs with what Studio actually contains rather than pushing complex assets into the repo via Rojo.

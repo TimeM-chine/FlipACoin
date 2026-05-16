@@ -28,6 +28,8 @@ EffectPresets.CoinFlipVisuals = table.freeze({
 	StreakPulseStartSize = 0.72,
 	StreakPulseEndSize = 3.8,
 	StreakPulseDuration = 0.38,
+	-- 平铺落地：局部厚度轴与世界桌面法线。1 为 +Y 对 +法线；-1 为 +Y 对 -法线（常见导入硬币）
+	FlatThicknessLocalSign = -1,
 })
 
 return EffectPresets
