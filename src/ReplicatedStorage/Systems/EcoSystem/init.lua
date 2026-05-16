@@ -665,6 +665,7 @@ function EcoSystem:RequestShopPurchase(sender, player, args)
 			SystemMgr.systems.GuiSystem:SetNotification(SENDER, player, {
 				text = "Not enough Cash",
 				lastTime = 2,
+				soundName = "notification",
 			})
 			SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player)
 			return

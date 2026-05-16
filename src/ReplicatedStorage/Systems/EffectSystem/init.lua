@@ -11,6 +11,7 @@ local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
+local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
@@ -283,6 +284,8 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 
 	pivotCoinVisual(visual, CFrame.new(startPos) * CoinVisualBaseRot)
 	shadow.CFrame = CFrame.new(startPos.X, shadowPos.Y, startPos.Z) * CoinVisualBaseRot
+	playSfx("coinToss")
+	playTimedSfx("coinSpin", airborneDuration + VisualConfig.LandingDuration)
 	if visual.shouldFollowCamera then
 		FirstPersonCamera.FollowCoin(visual.focusPart, {
 			duration = airborneDuration + VisualConfig.LandingDuration + (VisualConfig.ResultRevealDelay or 0) + 0.08,
@@ -326,6 +329,7 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 		visual.connection = nil
 
 		local pulseColor = result == "Heads" and VisualConfig.HeadsPulseColor or VisualConfig.TailsPulseColor
+		playSfx("coinLand")
 		playLandingPulse(landingPulse, shadowPos, pulseColor)
 		if shouldShowObservedStreakPulse then
 			local streakPulseBonus = math.clamp(observedStreak - VisualConfig.StreakPulseMinimum, 0, 6) * 0.16
@@ -385,15 +389,10 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 			if visual.shouldFollowCamera then
 				FirstPersonCamera.ReturnToFirstPerson(visual.focusPart)
 			end
+			playSfx(result == "Heads" and "headsWin" or "tailsLose")
 			if landedCallback then
 				task.delay(VisualConfig.ResultRevealDelay or 0, landedCallback)
 			end
-			task.delay(VisualConfig.CleanupDelay, function()
-				local latestVisual = activeCoinFlipVisuals[seatId]
-				if latestVisual == visual then
-					clearCoinVisual(seatId)
-				end
-			end)
 		end)
 	end)
 end
@@ -444,6 +443,44 @@ function getSeatPart(seatId)
 	local tableModel = getTableModel()
 	local seatsFolder = tableModel and tableModel:FindFirstChild("Seats")
 	return seatsFolder and seatsFolder:FindFirstChild(seatId)
+end
+
+function getCoinLandingAnchor(tableModel, rawSeatId)
+	local attachmentsFolder = tableModel and tableModel:FindFirstChild("Attachments")
+	if not attachmentsFolder then
+		return nil
+	end
+
+	local candidateNames = {
+		`{rawSeatId}CoinLandingAnchor`,
+		`{rawSeatId}CoinLanding`,
+		`{rawSeatId}LandingAnchor`,
+	}
+
+	for _, candidateName in ipairs(candidateNames) do
+		local candidate = attachmentsFolder:FindFirstChild(candidateName)
+		if candidate then
+			local attachment = candidate:IsA("Attachment") and candidate
+				or candidate:FindFirstChildWhichIsA("Attachment")
+			return attachment or candidate
+		end
+	end
+
+	return nil
+end
+
+function getAnchorPosition(anchor)
+	if anchor:IsA("Attachment") then
+		return anchor.WorldPosition
+	end
+	if anchor:IsA("BasePart") then
+		return anchor.Position
+	end
+	if anchor:IsA("Model") then
+		return anchor:GetPivot().Position
+	end
+
+	return nil
 end
 
 function getTableSurfaceData(tableTop)
@@ -551,7 +588,13 @@ function getFlipPositions(seatId, coinObject, landingSpinRadians)
 		flipAxisWorld = flipAxisWorld.Unit
 	end
 
+	local rawSeatId = seatRecord and seatRecord.rawSeatId or seatId
+	local landingAnchor = getCoinLandingAnchor(tableModel, rawSeatId)
+	local landingAnchorPosition = landingAnchor and getAnchorPosition(landingAnchor)
 	local surfaceEndPos = centerPos + (outward * VisualConfig.LandingRadius)
+	if landingAnchorPosition then
+		surfaceEndPos = landingAnchorPosition - tableNormal * (landingAnchorPosition - surfaceCenter):Dot(tableNormal)
+	end
 	local landedRotation = CFrame.fromAxisAngle(flipAxisWorld, landingSpinRadians) * CoinVisualBaseRot
 	local surfaceLift = getObjectSurfaceLift(coinObject, CFrame.new() * landedRotation, tableNormal)
 	local endPos = surfaceEndPos + (tableNormal * (surfaceLift + VisualConfig.CoinSurfaceGap))
@@ -776,6 +819,53 @@ function playLandingPulse(pulse, position, color, options)
 	tween:Play()
 	tween.Completed:Once(function()
 		hidePulseVisual(pulse)
+	end)
+end
+
+function getSfxSound(soundName)
+	if typeof(soundName) ~= "string" or soundName == "" then
+		return nil
+	end
+
+	local sfxGroup = SoundService:FindFirstChild("SFX")
+	local sound = sfxGroup and sfxGroup:FindFirstChild(soundName)
+	if not sound or not sound:IsA("Sound") or sound.SoundId == "" then
+		return nil
+	end
+
+	return sound
+end
+
+function playSfx(soundName)
+	local sound = getSfxSound(soundName)
+	if not sound then
+		return nil
+	end
+
+	local clone = sound:Clone()
+	clone.Looped = false
+	clone.Parent = sound.Parent
+	clone:Play()
+	Debris:AddItem(clone, math.max(clone.TimeLength, 3) + 0.2)
+	return clone
+end
+
+function playTimedSfx(soundName, duration)
+	local sound = getSfxSound(soundName)
+	if not sound then
+		return
+	end
+
+	local clone = sound:Clone()
+	clone.Looped = true
+	clone.Parent = sound.Parent
+	clone:Play()
+	Debris:AddItem(clone, duration + 0.3)
+
+	task.delay(duration, function()
+		if clone.Parent then
+			clone:Stop()
+		end
 	end)
 end
 

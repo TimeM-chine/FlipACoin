@@ -156,12 +156,18 @@ local function syncPlayerState(self, player, extraArgs, useFlipResolved)
 		loadoutState = payload.loadoutState,
 		derivedStats = payload.derivedStats,
 		runData = payload.runData,
+		purchasedItem = payload.purchasedItem,
+		equippedItem = payload.equippedItem,
+		equippedCategory = payload.equippedCategory,
 	})
 	SystemMgr.systems.RebirthSystem.Client:SyncRebirthState(player, {
 		cash = payload.cash,
 		rebirthState = payload.rebirthState,
 		derivedStats = payload.derivedStats,
 		runData = payload.runData,
+		rebirthed = payload.rebirthed,
+		rebirthPointGain = payload.rebirthPointGain,
+		rebirthUpgradePurchased = payload.rebirthUpgradePurchased,
 	})
 end
 

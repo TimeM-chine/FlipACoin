@@ -1,0 +1,42 @@
+---
+description: Generic repository conventions for Roblox Luau projects
+globs:
+  - "src/**/*.lua"
+alwaysApply: true
+---
+
+# Repository Conventions
+
+## First read
+
+- Read the repository's own startup and task-state docs before making structural decisions.
+- Trust current code over stale docs, then update docs when appropriate.
+- Find the real runtime entry points and registries before deciding what is active.
+
+## File layout
+
+- Keep entry modules easy to scan.
+- Follow the layout already used by the surrounding codebase.
+- Keep lifecycle / entry methods easy to find near the top when the repository uses them.
+- Keep helper functions near the end of the file instead of scattering them above the main flow.
+- If helpers are numerous, group them only when that improves scanability.
+
+## Function style
+
+- Do not predeclare local function variables unless there is a real technical need.
+- Prefer direct Luau function definitions.
+- Only extract helpers when logic is reused, reasonably complex, or materially clearer after extraction.
+- Do not create tiny one-off helpers for simple inline logic.
+
+## Resource access
+
+- Treat deterministic project-owned resource paths as required.
+- Do not add defensive `FindFirstChild` or nil-guard code for required assets, configs, folders, or UI objects when the path is known by design.
+- Fail loudly during development when required resources are missing.
+- Use defensive checks only for optional state, player-driven absence, or legitimate runtime timing issues.
+
+## Readability
+
+- Prefer explicit names, straightforward branches, and local reasoning over clever abstractions.
+- Keep related logic physically close unless reuse or complexity justifies extraction.
+- Match the surrounding file's style before introducing a different pattern.

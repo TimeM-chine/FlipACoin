@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
 local Replicated = game:GetService("ReplicatedStorage")
+local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
@@ -17,12 +18,12 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local Main = PlayerGui:WaitForChild("Main")
 local Elements = Main:WaitForChild("Elements")
 local Buttons = Main:WaitForChild("Buttons")
+local Frames = Main:WaitForChild("Frames")
 local uiController = require(Main:WaitForChild("uiController"))
 
 local CoinFlipSystem = SystemMgr.systems.CoinFlipSystem
 local TableSeatSystem = SystemMgr.systems.TableSeatSystem
 local EffectSystem = SystemMgr.systems.EffectSystem
-local LayoutConfig = Presets.UiLayout
 
 local function findFirstByNames(parent, names)
 	for _, name in ipairs(names) do
@@ -37,18 +38,22 @@ end
 
 local Hud = Elements:WaitForChild("CoinFlipHUD")
 local CoinFlipMenu = Buttons:WaitForChild("CoinFlipMenu")
+local LegacyCashText = Elements:WaitForChild("cash")
+local LegacyRebirthText = Elements:WaitForChild("candy")
+local TopBar = Buttons:FindFirstChild("TopBar")
+local RightBottom = Buttons:FindFirstChild("RightBottom")
+local LegacyInventoryButton = Buttons:FindFirstChild("InventoryButton")
+local GrowthFrames = {
+	Frames:WaitForChild("Shop"),
+	Frames:WaitForChild("Inventory"),
+	Frames:WaitForChild("Rebirth"),
+}
 local Content = Hud:WaitForChild("Content")
-local ContentListLayout = Content:WaitForChild("PanelListLayout")
 local LeftPanel = Content:WaitForChild("LeftPanel")
 local CenterPanel = Content:WaitForChild("CenterPanel")
 local RightPanel = Content:WaitForChild("RightPanel")
-local LeftPanelListLayout = LeftPanel:WaitForChild("LeftPanelListLayout")
-local CenterPanelListLayout = CenterPanel:WaitForChild("CenterPanelListLayout")
-local RightPanelListLayout = RightPanel:WaitForChild("RightPanelListLayout")
 local RightStatsFrame = RightPanel:WaitForChild("Stats")
-local RightStatsGridLayout = RightStatsFrame:WaitForChild("RightStatsGridLayout")
 local UpgradeButtons = RightPanel:WaitForChild("UpgradeButtons")
-local UpgradeGridLayout = UpgradeButtons:WaitForChild("UpgradeGridLayout")
 local SeatLabel = CenterPanel:WaitForChild("SeatLabel")
 local InputHints = CenterPanel:WaitForChild("InputHints")
 
@@ -73,6 +78,10 @@ local ResultLabel = CenterPanel:WaitForChild("ResultLabel")
 local FlipButton = CenterPanel:WaitForChild("FlipButton")
 if not FlipButton or not FlipButton:IsA("GuiButton") then
 	error("CoinFlipHUD is missing FlipButton")
+end
+local AutoButton = CenterPanel:WaitForChild("AutoButton")
+if not AutoButton or not AutoButton:IsA("GuiButton") then
+	error("CoinFlipHUD is missing AutoButton")
 end
 
 local SpectatorFeed = Elements:FindFirstChild("CoinFlipSpectatorFeed")
@@ -111,9 +120,9 @@ local resultFlashToken = 0
 local defaultResultTextTransparency = ResultLabel.TextTransparency
 local defaultResultStrokeTransparency = ResultLabel.TextStrokeTransparency
 local currentSeatState
-local currentLayoutProfile
-local viewportChangedConnection
-local cameraChangedConnection
+local currentFlipInProgress = false
+local autoFlipEnabled = false
+local autoFlipToken = 0
 local currentRunSnapshot = {
 	cash = 0,
 	runData = {},
@@ -121,104 +130,6 @@ local currentRunSnapshot = {
 	derivedStats = {},
 }
 local FlipInputActionName = "COIN_FLIP_REQUEST"
-
-local StatsCards = {
-	{
-		key = "cash",
-		card = CashCard,
-		label = resolveStatLabel(CashCard),
-		value = CashValue,
-	},
-	{
-		key = "streak",
-		card = StreakCard,
-		label = resolveStatLabel(StreakCard),
-		value = StreakValue,
-	},
-	{
-		key = "chance",
-		card = ChanceCard,
-		label = resolveStatLabel(ChanceCard),
-		value = ChanceValue,
-	},
-	{
-		key = "speed",
-		card = SpeedCard,
-		label = resolveStatLabel(SpeedCard),
-		value = SpeedValue,
-	},
-}
-
-for layoutOrder, entry in ipairs(StatsCards) do
-	entry.card.LayoutOrder = layoutOrder
-end
-
-local function getViewportSize()
-	local camera = Workspace.CurrentCamera
-	if camera then
-		return camera.ViewportSize
-	end
-
-	return Vector2.new(1920, 1080)
-end
-
-local function ensureSizeConstraint(guiObject, name)
-	local constraint = guiObject:FindFirstChild(name)
-	if constraint then
-		return constraint
-	end
-
-	constraint = Instance.new("UISizeConstraint")
-	constraint.Name = name
-	constraint.Parent = guiObject
-	return constraint
-end
-
-local function applyClampConstraint(guiObject, name, minSize, maxSize)
-	local constraint = ensureSizeConstraint(guiObject, name)
-	constraint.MinSize = Vector2.new(minSize.X, minSize.Y)
-	constraint.MaxSize = Vector2.new(maxSize.X, maxSize.Y)
-	return constraint
-end
-
-local function getLayoutProfile()
-	local viewport = getViewportSize()
-	local aspect = viewport.X / math.max(viewport.Y, 1)
-	local isPortrait = aspect < 1
-	local isTouchDevice = UserInputService.TouchEnabled
-	local isMobile = isTouchDevice
-		or viewport.X <= LayoutConfig.MobileMaxWidth
-		or aspect <= LayoutConfig.MobileMaxAspect
-	local isNarrow = viewport.X <= LayoutConfig.NarrowWidth
-
-	local hudSize = LayoutConfig.Hud.DesktopSize
-	local hudY = LayoutConfig.Hud.DesktopY
-	if isMobile then
-		hudSize = isPortrait and LayoutConfig.Hud.MobilePortraitSize or LayoutConfig.Hud.MobileLandscapeSize
-		hudY = isPortrait and LayoutConfig.Hud.MobilePortraitY or LayoutConfig.Hud.MobileLandscapeY
-	elseif isNarrow then
-		hudSize = LayoutConfig.Hud.NarrowSize
-	end
-
-	return {
-		viewport = viewport,
-		aspect = aspect,
-		isPortrait = isPortrait,
-		isTouchDevice = isTouchDevice,
-		isMobile = isMobile,
-		isNarrow = isNarrow,
-		hudSize = hudSize,
-		hudY = hudY,
-		hudMinSize = isMobile and LayoutConfig.Hud.MobileMinSize or LayoutConfig.Hud.MinSize,
-		hudMaxSize = isMobile and LayoutConfig.Hud.MobileMaxSize or LayoutConfig.Hud.MaxSize,
-		statsColumns = isMobile and 2 or 5,
-		statsCellSize = isMobile and UDim2.fromScale(0.48, 0.44) or UDim2.fromScale(0.192, 1),
-		statsCellPadding = isMobile and UDim2.fromScale(0.03, 0.06) or UDim2.fromScale(0.01, 0),
-		upgradeColumns = isMobile and 2 or 4,
-		upgradeCellSize = isMobile and UDim2.fromScale(0.48, 0.42) or UDim2.fromScale(0.235, 1),
-		upgradeCellPadding = isMobile and UDim2.fromScale(0.03, 0.08) or UDim2.fromScale(0.02, 0),
-	}
-end
 
 local function getRecommendedUpgradeKey()
 	local runData = currentRunSnapshot.runData or {}
@@ -233,6 +144,16 @@ local function getRecommendedUpgradeKey()
 	end
 
 	return nil
+end
+
+local function isGrowthFrameOpen()
+	for _, frame in ipairs(GrowthFrames) do
+		if frame.Visible then
+			return true
+		end
+	end
+
+	return false
 end
 
 local function buildFailureFollowUpText()
@@ -258,8 +179,23 @@ local function maybeShowFailureFollowUpNotification(text)
 	uiController.SetNotification({
 		text = text,
 		lastTime = 2.4,
+		soundName = "notification",
 		textColor = Color3.fromRGB(255, 223, 153),
 	})
+end
+
+local function playSfx(soundName)
+	if typeof(soundName) ~= "string" or soundName == "" then
+		return
+	end
+
+	local sfxGroup = SoundService:FindFirstChild("SFX")
+	local sound = sfxGroup and sfxGroup:FindFirstChild(soundName)
+	if not sound or not sound:IsA("Sound") or sound.SoundId == "" then
+		return
+	end
+
+	sound:Play()
 end
 
 local function hideOnboardingPanel()
@@ -307,169 +243,55 @@ local function hideLegacySeatBillboards(seatState)
 	end
 end
 
-local function applyStatCardLayout(profile)
-	for _, entry in ipairs(StatsCards) do
-		local labelConstraint = entry.label:WaitForChild("ResponsiveConstraint")
-		local valueConstraint = entry.value:WaitForChild("ResponsiveConstraint")
-		local isPrimaryCard = entry.key == "cash" or entry.key == "streak"
+local function applyGameplayVisibility(isVisible)
+	local showHud = isVisible == true and not isGrowthFrameOpen()
+	local showInteractiveHud = showHud and not currentFlipInProgress
 
-		entry.card.Visible = true
-		entry.card.Size = UDim2.new(1, 0, isPrimaryCard and 0.5 or 1, isPrimaryCard and -5 or 0)
-		entry.card.BackgroundTransparency = profile.isMobile and 0.12 or 0.08
+	Hud.Visible = showHud
+	CoinFlipMenu.Visible = false
+	LeftPanel.Visible = showInteractiveHud
+	RightPanel.Visible = showInteractiveHud
+	CenterPanel.Visible = showHud
+	SeatLabel.Visible = showInteractiveHud
+	InputHints.Visible = showInteractiveHud
+	ResultLabel.Visible = showHud
+	FlipButton.Visible = showInteractiveHud
+	FlipButton.Active = showInteractiveHud
+	FlipButton.AutoButtonColor = showInteractiveHud
+	AutoButton.Visible = showHud
+	AutoButton.Active = showHud
+	AutoButton.AutoButtonColor = showHud
+	LegacyCashText.Visible = showHud
+	LegacyRebirthText.Visible = showHud
 
-		entry.label.TextSize = profile.isMobile and 10 or 14
-		entry.label.Position = UDim2.new(0, 8, 0, profile.isMobile and 5 or 7)
-		entry.label.Size = UDim2.new(1, -16, 0, profile.isMobile and 12 or 18)
-		labelConstraint.MinTextSize = profile.isMobile and 8 or 11
-		labelConstraint.MaxTextSize = profile.isMobile and 14 or 20
-
-		entry.value.TextScaled = true
-		entry.value.Position = UDim2.new(0, 8, 0, profile.isMobile and 17 or 28)
-		entry.value.Size = UDim2.new(1, -16, 0, profile.isMobile and 18 or 22)
-		valueConstraint.MinTextSize = profile.isMobile and 10 or 14
-		valueConstraint.MaxTextSize = profile.isMobile and 20 or 32
+	if TopBar and TopBar:IsA("GuiObject") then
+		TopBar.Visible = false
+	end
+	if RightBottom and RightBottom:IsA("GuiObject") then
+		RightBottom.Visible = false
+	end
+	if LegacyInventoryButton and LegacyInventoryButton:IsA("GuiObject") then
+		LegacyInventoryButton.Visible = false
+	end
+	if not showHud then
+		currentFlipInProgress = false
 	end
 end
 
-local function applyUpgradeButtonLayout(profile)
-	for _, button in pairs(UpgradeMap) do
-		local titleConstraint = button.Title:WaitForChild("ResponsiveConstraint")
-		local levelConstraint = button.Level:WaitForChild("ResponsiveConstraint")
-		local costConstraint = button.Cost:WaitForChild("ResponsiveConstraint")
-
-		button.Text = ""
-		button.TextScaled = false
-		button.ClipsDescendants = true
-		button.Title.TextScaled = true
-		button.Level.TextScaled = true
-		button.Cost.TextScaled = true
-
-		if profile.isMobile then
-			if profile.isPortrait then
-				button.Title.Position = UDim2.new(0, 6, 0, 4)
-				button.Title.Size = UDim2.new(1, -12, 0, 11)
-				button.Level.Position = UDim2.new(0, 6, 0, 16)
-				button.Level.Size = UDim2.new(1, -12, 0, 10)
-				button.Cost.Position = UDim2.new(0, 6, 0, 27)
-				button.Cost.Size = UDim2.new(1, -12, 0, 11)
-
-				titleConstraint.MinTextSize = 8
-				titleConstraint.MaxTextSize = 13
-				levelConstraint.MinTextSize = 8
-				levelConstraint.MaxTextSize = 11
-				costConstraint.MinTextSize = 8
-				costConstraint.MaxTextSize = 12
-			else
-				button.Title.Position = UDim2.new(0, 8, 0, 8)
-				button.Title.Size = UDim2.new(1, -16, 0, 14)
-				button.Level.Position = UDim2.new(0, 8, 0, 22)
-				button.Level.Size = UDim2.new(1, -16, 0, 12)
-				button.Cost.Position = UDim2.new(0, 8, 0, 36)
-				button.Cost.Size = UDim2.new(1, -16, 0, 14)
-
-				titleConstraint.MinTextSize = 9
-				titleConstraint.MaxTextSize = 16
-				levelConstraint.MinTextSize = 8
-				levelConstraint.MaxTextSize = 12
-				costConstraint.MinTextSize = 8
-				costConstraint.MaxTextSize = 13
-			end
-		else
-			button.Title.Position = UDim2.new(0, 8, 0, 8)
-			button.Title.Size = UDim2.new(1, -16, 0, 22)
-			button.Level.Position = UDim2.new(0, 8, 0, 34)
-			button.Level.Size = UDim2.new(1, -16, 0, 22)
-			button.Cost.Position = UDim2.new(0, 8, 0, 58)
-			button.Cost.Size = UDim2.new(1, -16, 0, 22)
-
-			titleConstraint.MinTextSize = 13
-			titleConstraint.MaxTextSize = 24
-			levelConstraint.MinTextSize = 11
-			levelConstraint.MaxTextSize = 19
-			costConstraint.MinTextSize = 11
-			costConstraint.MaxTextSize = 21
-		end
-	end
-
-	local flipConstraint = FlipButton:WaitForChild("ResponsiveConstraint")
-	FlipButton.TextScaled = true
-	flipConstraint.MinTextSize = profile.isMobile and (profile.isPortrait and 12 or 14) or 22
-	flipConstraint.MaxTextSize = profile.isMobile and (profile.isPortrait and 24 or 30) or 64
-
-	if ResultLabel then
-		local resultConstraint = ResultLabel:WaitForChild("ResponsiveConstraint")
-		ResultLabel.TextScaled = true
-		ResultLabel.TextWrapped = true
-		resultConstraint.MinTextSize = profile.isMobile and (profile.isPortrait and 9 or 10) or 16
-		resultConstraint.MaxTextSize = profile.isMobile and (profile.isPortrait and 16 or 18) or 34
-	end
+local function updateAutoButtonText()
+	AutoButton.Text = autoFlipEnabled and "Auto:On" or "Auto:Off"
 end
 
-local function applyHudLayout(profile)
-	Hud.AnchorPoint = Vector2.new(0.5, 1)
-	Hud.Position = UDim2.fromScale(0.5, profile.hudY)
-	Hud.Size = UDim2.fromScale(profile.hudSize.X, profile.hudSize.Y)
-	applyClampConstraint(Hud, "ResponsiveHudConstraint", profile.hudMinSize, profile.hudMaxSize)
-	SeatLabel.Visible = true
-
-	Content.Size = UDim2.fromScale(1, 1)
-
-	ContentListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-	ContentListLayout.VerticalAlignment = Enum.VerticalAlignment.Top
-	ContentListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	LeftPanelListLayout.Padding = UDim.new(0, profile.isMobile and 6 or 10)
-	CenterPanelListLayout.Padding = UDim.new(0, profile.isMobile and 5 or 8)
-	RightPanelListLayout.Padding = UDim.new(0, profile.isMobile and 6 or 10)
-
-	if profile.isPortrait then
-		ContentListLayout.FillDirection = Enum.FillDirection.Vertical
-		ContentListLayout.Padding = UDim.new(0, 6)
-		CenterPanel.LayoutOrder = 1
-		LeftPanel.LayoutOrder = 2
-		RightPanel.LayoutOrder = 3
-		CenterPanel.Size = UDim2.new(1, 0, 0.24, -6)
-		LeftPanel.Size = UDim2.new(1, 0, 0.21, -5)
-		RightPanel.Size = UDim2.new(1, 0, 0.55, -8)
-		LeftPanelListLayout.FillDirection = Enum.FillDirection.Vertical
-		LeftPanelListLayout.Padding = UDim.new(0, 4)
-		CenterPanelListLayout.Padding = UDim.new(0, 4)
-		RightStatsFrame.Size = UDim2.new(1, 0, 0, 44)
-		UpgradeButtons.Size = UDim2.new(1, 0, 1, -48)
-		ResultLabel.Size = UDim2.new(1, 0, 0, 18)
-		FlipButton.Size = UDim2.new(1, 0, 0, 40)
-		SeatLabel.Size = UDim2.new(1, 0, 0, 16)
-		SeatLabel.Visible = false
-	else
-		ContentListLayout.FillDirection = Enum.FillDirection.Horizontal
-		ContentListLayout.Padding = UDim.new(0, profile.isMobile and 8 or 12)
-		LeftPanel.LayoutOrder = 1
-		CenterPanel.LayoutOrder = 2
-		RightPanel.LayoutOrder = 3
-		LeftPanel.Size = UDim2.new(0.22, -8, 1, 0)
-		CenterPanel.Size = UDim2.new(0.36, -8, 1, 0)
-		RightPanel.Size = UDim2.new(0.42, -8, 1, 0)
-		LeftPanelListLayout.FillDirection = Enum.FillDirection.Vertical
-		RightStatsFrame.Size = UDim2.new(1, 0, 0, profile.isMobile and 54 or 72)
-		UpgradeButtons.Size = UDim2.new(1, 0, 1, profile.isMobile and -62 or -82)
-		ResultLabel.Size = UDim2.new(1, 0, 0, profile.isMobile and 28 or 42)
-		FlipButton.Size = UDim2.new(1, 0, 0, profile.isMobile and 58 or 92)
-		SeatLabel.Size = UDim2.new(1, 0, 0, profile.isMobile and 18 or 22)
+local function setAutoFlipEnabled(isEnabled)
+	local shouldEnable = isEnabled == true and currentSeatId ~= nil and not isGrowthFrameOpen()
+	if autoFlipEnabled == shouldEnable then
+		updateAutoButtonText()
+		return
 	end
 
-	RightStatsGridLayout.FillDirectionMaxCells = 2
-	RightStatsGridLayout.CellSize = UDim2.new(0.5, -5, 1, 0)
-	RightStatsGridLayout.CellPadding = UDim2.fromOffset(profile.isMobile and 6 or 10, 0)
-	UpgradeGridLayout.FillDirectionMaxCells = 2
-	UpgradeGridLayout.CellSize = UDim2.new(0.5, profile.isMobile and -4 or -5, 0.5, profile.isMobile and -4 or -5)
-	UpgradeGridLayout.CellPadding = UDim2.fromOffset(profile.isMobile and 6 or 10, profile.isMobile and 6 or 10)
-
-	InputHints.Visible = not profile.isTouchDevice
-	if profile.isTouchDevice and profile.isPortrait then
-		SeatLabel.Visible = false
-	end
-
-	applyStatCardLayout(profile)
-	applyUpgradeButtonLayout(profile)
+	autoFlipEnabled = shouldEnable
+	autoFlipToken += 1
+	updateAutoButtonText()
 end
 
 local function updateResultText(text, tone)
@@ -505,16 +327,23 @@ end
 local function requestFlip()
 	local now = os.clock()
 	if awaitingFlipResponse or now < localFlipCooldownEndsAt then
-		return
+		return false
 	end
 
 	awaitingFlipResponse = true
+	currentFlipInProgress = true
 	activeFlipRequestToken += 1
 	local requestToken = activeFlipRequestToken
 	local hadSeatWhenRequested = currentSeatId ~= nil
 	localFlipCooldownEndsAt = now + math.max(0.15, currentFlipInterval + 0.05)
+	if currentSeatId then
+		applyGameplayVisibility(true)
+	end
 	CoinFlipSystem.Server:RequestFlip()
 	updateResultText(hadSeatWhenRequested and "Flipping..." or "Checking your seat...", "Neutral")
+	if hadSeatWhenRequested then
+		playSfx("flipPress")
+	end
 
 	task.delay(0.45, function()
 		if activeFlipRequestToken ~= requestToken or not awaitingFlipResponse then
@@ -522,12 +351,42 @@ local function requestFlip()
 		end
 
 		awaitingFlipResponse = false
+		currentFlipInProgress = false
 		localFlipCooldownEndsAt = os.clock() + 0.05
+		applyGameplayVisibility(currentSeatId ~= nil)
 		if hadSeatWhenRequested then
-			updateResultText("Flip not ready yet. Click FLIP again.", "Neutral")
+			updateResultText("Flip not ready.", "Neutral")
 		else
-			updateResultText("Still waiting for seat assignment...", "Neutral")
+			updateResultText("Waiting for seat...", "Neutral")
 		end
+	end)
+
+	return true
+end
+
+local function scheduleAutoFlipRequest()
+	if not autoFlipEnabled then
+		return
+	end
+	if currentSeatId == nil or isGrowthFrameOpen() then
+		setAutoFlipEnabled(false)
+		return
+	end
+
+	autoFlipToken += 1
+	local token = autoFlipToken
+	local delaySeconds = math.max(localFlipCooldownEndsAt - os.clock(), 0.05)
+
+	task.delay(delaySeconds, function()
+		if token ~= autoFlipToken or not autoFlipEnabled then
+			return
+		end
+		if currentSeatId == nil or isGrowthFrameOpen() then
+			setAutoFlipEnabled(false)
+			return
+		end
+
+		requestFlip()
 	end)
 end
 
@@ -572,11 +431,10 @@ local function updateTableOverview(seatState)
 end
 
 local function setVisible(isVisible)
-	Hud.Visible = true
-	CoinFlipMenu.Visible = true
-	FlipButton.Active = true
-	FlipButton.AutoButtonColor = true
+	applyGameplayVisibility(isVisible)
 	if not isVisible then
+		setAutoFlipEnabled(false)
+		currentFlipInProgress = false
 		updateResultText("Waiting for seat assignment...", "Neutral")
 	end
 end
@@ -601,43 +459,23 @@ local function ensureLeaveButton()
 end
 
 local function applyResponsiveLayout()
-	currentLayoutProfile = getLayoutProfile()
-	applyHudLayout(currentLayoutProfile)
 	hideOnboardingPanel()
+	applyGameplayVisibility(currentSeatId ~= nil)
 
 	if currentSeatState then
 		updateTableOverview(currentSeatState)
 	end
 end
 
-local function bindViewportLayout()
-	if cameraChangedConnection then
-		cameraChangedConnection:Disconnect()
+local function bindGrowthFrameVisibility()
+	for _, frame in ipairs(GrowthFrames) do
+		frame:GetPropertyChangedSignal("Visible"):Connect(function()
+			if frame.Visible then
+				setAutoFlipEnabled(false)
+			end
+			applyGameplayVisibility(currentSeatId ~= nil)
+		end)
 	end
-	if viewportChangedConnection then
-		viewportChangedConnection:Disconnect()
-	end
-
-	local function connectViewport(camera)
-		if viewportChangedConnection then
-			viewportChangedConnection:Disconnect()
-			viewportChangedConnection = nil
-		end
-
-		if camera then
-			viewportChangedConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-				applyResponsiveLayout()
-			end)
-		end
-
-		applyResponsiveLayout()
-	end
-
-	cameraChangedConnection = Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-		connectViewport(Workspace.CurrentCamera)
-	end)
-
-	connectViewport(Workspace.CurrentCamera)
 end
 
 function CoinFlipUi.Init()
@@ -649,11 +487,18 @@ function CoinFlipUi.Init()
 	setVisible(false)
 	hideOnboardingPanel()
 	ensureLeaveButton()
-	bindViewportLayout()
+	applyResponsiveLayout()
+	bindGrowthFrameVisibility()
 	bindFlipInput()
 
 	uiController.SetButtonHoverAndClick(FlipButton, function()
 		requestFlip()
+	end)
+	uiController.SetButtonHoverAndClick(AutoButton, function()
+		setAutoFlipEnabled(not autoFlipEnabled)
+		if autoFlipEnabled then
+			requestFlip()
+		end
 	end)
 
 	for upgradeKey, button in pairs(UpgradeMap) do
@@ -698,10 +543,17 @@ function CoinFlipUi.SyncRunState(args)
 		ClientData:SetOneData(dataKey.rebirthTree, args.rebirthState.rebirthTree)
 	end
 	CashValue.Text = `$ {Util.FormatNumber(cash, true)}`
+	LegacyCashText.Text = Util.FormatNumber(cash, true)
+	LegacyRebirthText.Text = Util.FormatNumber(
+		(args.rebirthState and (args.rebirthState.rebirthPoints or args.rebirthState.fateShards))
+			or ClientData:GetOneData(dataKey.fateShards)
+			or 0,
+		true
+	)
 	ChanceValue.Text = `{math.round((args.derivedStats.headsChance or 0) * 1000) / 10}%`
 	StreakValue.Text = tostring(args.runData.currentStreak or 0)
 	SpeedValue.Text = `{math.round((args.derivedStats.flipInterval or 0) * 100) / 100}s`
-	SeatLabel.Text = seatState.seatId and `Seat {seatState.seatId}` or "Seat --"
+	SeatLabel.Text = seatState.seatId and tostring(seatState.seatId):gsub("^Seat", "Seat ") or "Seat --"
 
 	for upgradeKey, button in pairs(UpgradeMap) do
 		local level = args.runData[upgradeKey] or 0
@@ -713,33 +565,39 @@ function CoinFlipUi.SyncRunState(args)
 	updateTableOverview(seatState)
 	CoinFlipUi.UpdateOnboarding(args.onboarding)
 	if isSeated and ResultLabel.Text == "Waiting for seat assignment..." then
-		updateResultText("Click FLIP, press Space, or press RT to flip.", "Neutral")
+		updateResultText("Click FLIP", "Neutral")
 	end
 end
 
 function CoinFlipUi.FlipResolved(args)
 	awaitingFlipResponse = false
+	currentFlipInProgress = true
 	EffectSystem:PlayCoinFlipVisual(nil, nil, {
 		seatId = args.seatState and args.seatState.seatId,
 		result = args.result,
 		coinId = args.equippedCoin or (args.loadoutState and args.loadoutState.equippedCoin),
 		shouldFollowCamera = true,
 		landedCallback = function()
+			currentFlipInProgress = false
 			CoinFlipUi.SyncRunState(args)
+			applyGameplayVisibility(currentSeatId ~= nil)
 			local failureFollowUpText = buildFailureFollowUpText()
 
 			if args.result == "Heads" then
 				updateResultText(`Heads! +$ {Util.FormatNumber(args.reward or 0, true)}`, "Heads")
+				if (args.reward or 0) > 0 then
+					playSfx("cashReward")
+				end
 			elseif (args.reward or 0) > 0 then
-				updateResultText(
-					`Tails! +$ {Util.FormatNumber(args.reward, true)} | Streak reset. {failureFollowUpText}`,
-					"Tails"
-				)
+				updateResultText(`Tails! +$ {Util.FormatNumber(args.reward, true)}`, "Tails")
+				playSfx("cashReward")
 				maybeShowFailureFollowUpNotification(failureFollowUpText)
 			else
-				updateResultText(`Tails! Streak reset. {failureFollowUpText}`, "Tails")
+				updateResultText("Tails! Streak reset.", "Tails")
 				maybeShowFailureFollowUpNotification(failureFollowUpText)
 			end
+
+			scheduleAutoFlipRequest()
 		end,
 	})
 end
@@ -751,6 +609,8 @@ function CoinFlipUi.SeatStateChanged(args)
 	if not isSeated then
 		localFlipCooldownEndsAt = 0
 		awaitingFlipResponse = false
+		currentFlipInProgress = false
+		setAutoFlipEnabled(false)
 	end
 	setVisible(isSeated)
 	if leaveButton then
@@ -759,9 +619,9 @@ function CoinFlipUi.SeatStateChanged(args)
 	updateTableOverview(args and args.seatState)
 	hideOnboardingPanel()
 	if isSeated then
-		SeatLabel.Text = args.seatState.seatId and `Seat {args.seatState.seatId}` or "Seat --"
+		SeatLabel.Text = args.seatState.seatId and tostring(args.seatState.seatId):gsub("^Seat", "Seat ") or "Seat --"
 		if ResultLabel.Text == "Waiting for seat assignment..." then
-			updateResultText("Click FLIP, press Space, or press RT to flip.", "Neutral")
+			updateResultText("Click FLIP", "Neutral")
 		end
 	end
 end

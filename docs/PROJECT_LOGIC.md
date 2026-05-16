@@ -1,6 +1,6 @@
 # PROJECT_LOGIC
 
-更新时间：2026-05-14
+更新时间：2026-05-17
 
 ## 1. 这份文档的定位
 
@@ -28,7 +28,7 @@
 
 - 每个服务器只有一张主桌，最大 `8` 人同桌
 - 玩家进服后自动分配到 `CoinFlipTable` 的空座位并坐下
-- 玩家面前有一个非常明确的 `FLIP` 主按钮
+- 玩家面前有一个非常明确的 `FLIP` 主按钮，并可切换 `Auto:Off / Auto:On`
 - 正面给主要 `wins` 奖励，反面给少量保底 `Cash`，但会打断 streak
 - `wins` 在 UI 和 `leaderstats` 中对外展示为 `Cash`
 - 用 `Cash` 升级本局四项 run 属性
@@ -48,11 +48,9 @@
 先记住这些事实：
 
 - `default.project.json` 当前项目名是 `Flip A Coin`
-- `README.md` 仍是旧 Rojo 模板内容，不能用来判断项目现状
 - `src/ReplicatedStorage/Systems` 下很多系统目录目前没有启用
 - `src/ReplicatedStorage/Systems/SystemMgr Fail.lua` 是旧版本，不是当前入口
 - `BaseSystem.lua` 是新基类尝试，但当前活跃系统大多仍是手写风格
-- `TODO.md` 主要是旧武器/锻造方向遗留，不代表当前首发主线
 - `analytics.server.lua` 整个文件目前是注释状态
 - `Excels/` 和大部分 `ExcelConfig/` 更像数据工具或旧数据沉淀，不等于都在当前玩法链路里生效
 
@@ -390,6 +388,7 @@ FlipACoin
 - Desk Setup 商品 id 为字符串 `"1"`–`"4"`（见 `EcoSystem/Presets.lua` 的 `GrowthShopItems.desk`），`TableDecoration` 下子 Model 名与之相同
 - 如果 `Workspace.TableDecoration` 只有一整套模型而不是同名商品子模型，会作为 `Default` 资产供所有 Desk Setup 临时复用
 - 摆放优先读取 `Workspace.CoinFlipTable.Attachments/<SeatId>Decoration`、`<SeatId>DecorationAnchor`、`<SeatId>DeskSetup`，再回退到 `<SeatId>Marker` 或桌面位置
+- 当前 Studio 资源使用 `<SeatId>DecorationAnchor` 作为每个座位的桌搭定位块，位于玩家左前方桌面
 - 摆放后会按模型实际包围角点沿桌面法线抬升，让桌搭最低点落在 `TableTop` 表面上方一点，避免沉入桌面
 - 缺少精确商品模型但有 `Default` 时不报错；精确外观后续通过补同名子模型覆盖
 
@@ -426,6 +425,7 @@ FlipACoin
 - 响应式布局
 - 让玩家面前的 `FLIP` 主按钮足够明确
 - 展示 Cash、streak、chance、speed、四项升级
+- 提供 Auto Flip 切换：客户端按当前 flip 间隔复用同一 `RequestFlip` 入口循环请求，服务端仍负责座位和冷却校验
 - 展示同桌玩家的轻量状态 / streak / flip 结果
 - 请求 `EffectSystem` 播放 coin flip 可视表现，并在落地回调里更新结果文案
 
@@ -455,7 +455,7 @@ FlipACoin
 
 - `EcoSystem/Presets.lua`：首发 Coin / Desk Setup 商品、价格、稀有度 / 角色、Cash 倍率和 luck 加成
 - `RebirthSystem/Presets.lua`：重生最低 Cash、Cash 到点数换算、单次点数上限、重生后 Cash，以及 `polishedStart / chainStart / quickStart / luckyStart` 四个永久起步升级
-- `EffectSystem/Presets.lua`：桌面硬币飞行、落地、脉冲和清理时序
+- `EffectSystem/Presets.lua`：桌面硬币飞行、落地、脉冲和上次结果保留表现
 
 硬币资产约定：
 
@@ -464,6 +464,7 @@ FlipACoin
 - 玩家默认装备 `coin1`，界面展示名为 `Coin1`
 - 当前看到的 `coin10` 资产未接入首发 Coin 配置，暂时不出现在购买 / 装备流里
 - `EffectSystem` 支持 `Model` 或 `BasePart` 硬币资产；缺少精确资产时回退 `CoinVisual.Coin` 并警告
+- `EffectSystem` 优先读取 `Workspace.CoinFlipTable.Attachments/<SeatId>CoinLandingAnchor` 作为硬币落点；没有该锚点时才回退到 `EffectSystem/Presets.lua` 的 `LandingRadius`
 - Flip 落点按硬币最终姿态的真实包围角点和 `TableTop` 表面法线计算，不能再用固定 `coin.Size.X * 0.5`
 
 当前额外要记住：
@@ -484,6 +485,7 @@ FlipACoin
   - `StarterCharacterScripts/char.client.lua` 会拦截默认 `idle` 动画轨道，避免玩家长时间不动时自动播放默认 idle 摆动
   - 其他玩家的 `ObservedFlip()` 不触发相机接管，只播放桌面硬币表现
   - 文件名仍沿用旧名，当前暂不重命名，避免扩大启动链改动
+- Auto Flip 不使用持久化 `autoFlipUnlocked`，当前对所有玩家开放；离座、打开 Shop / Inventory / Rebirth 或手动切回 `Auto:Off` 会停止自动请求
 - `SeatInfoBillboard`、`CoinFlipTableOverview`、`CoinFlipSpectatorFeed`、旧 `CoinFlipOnboarding` 面板、复杂 featured seat 表现都不再是首发主路径，当前代码级退场首版已把它们保持隐藏
 - 但“弱社交”不等于完全无同桌反馈：保留或重做低噪音桌面信号，让玩家知道另外 7 个座位也在发生 Flip
 - `PlayerSystem:UpdatePlayerHeadGui()` 现在也会在引导期间把头顶文案切到当前下一步动作
@@ -520,6 +522,7 @@ FlipACoin
 当前在 Flip A Coin 主线里负责：
 
 - `PlayCoinFlipVisual()` 播放本地桌面硬币飞行、落地、阴影和 streak pulse
+- 每个座位上一次落地硬币会保留到该座位下一次 flip 开始时再清掉 / 替换
 - 自己 flip 时接管并释放 `FirstPersonCamera`
 - 其他玩家 flip 时只播放桌面表现，不接管相机
 - `PlayInsideEffects()` 使用 `SettingSystem:GetParticleRateFactor()` 决定粒子倍率
@@ -582,8 +585,10 @@ FlipACoin
 当前注意点：
 
 - 这个系统已经启用
-- 但首发主玩法里还没有大量深接
 - 它依赖 `SoundService` 下的分组和资源命名，以及 `workspace.BGSoundsFolder`
+- 当前主玩法音效占位在 `SoundService.SFX`：`flipPress`、`coinToss`、`coinSpin`、`coinLand`、`headsWin`、`tailsLose`、`cashReward`、`streak3`、`streak5`、`streak7`、`streak10`、`shopPurchase`、`equipItem`、`rebirth`、`notification`
+- UI 通用按钮仍使用 `SFX.hoverBtn` / `SFX.clickBtn`，BGM 使用 `SoundService.bgm`
+- 当前音效 `SoundId` 可为空；客户端播放逻辑会跳过空 `SoundId`，后续填入资源 id 后自动生效
 
 ### 7.8 `AnimateSystem`
 
@@ -762,7 +767,7 @@ FlipACoin
 - 桌面内的同桌轻量状态 / streak / flip 反馈节点
 - 当前预制 HUD 的三栏结构：
   - `Content.LeftPanel`：Cash / Streak
-  - `Content.CenterPanel`：SeatLabel / ResultLabel / `FLIP` 主按钮 / `SpaceHint` / `GamepadRTHint`
+  - `Content.CenterPanel`：SeatLabel / ResultLabel / `FLIP` 主按钮 / `Auto:Off / Auto:On` 按钮 / `SpaceHint` / `GamepadRTHint`
   - `Content.RightPanel`：Chance / Speed / 四个升级按钮
 
 这些由：
@@ -778,10 +783,13 @@ FlipACoin
 
 - 主 HUD 绑定读取 Studio 预制节点，不再为统计卡、升级按钮或离座按钮运行时创建兜底资源。
 - `CoinFlipSystem/ui.lua` 绑定 Flip HUD、run upgrade 和结果文案；不再直接渲染 Shop / Inventory / Rebirth 面板。
-- `EcoSystem/ui.lua` 绑定 `Buttons.CoinFlipMenu.ShopButton / InventoryButton` 和 `Frames.Shop / Inventory`。
-- `RebirthSystem/ui.lua` 绑定 `Buttons.CoinFlipMenu.RebirthButton` 和 `Frames.Rebirth`。
+- `EcoSystem/ui.lua` 绑定 TopbarPlus `Shop` / `Inventory` 图标、兼容旧 `Buttons.CoinFlipMenu.ShopButton / InventoryButton`，并管理 `Frames.Shop / Inventory`。
+- `RebirthSystem/ui.lua` 绑定 TopbarPlus `Rebirth` 图标、兼容旧 `Buttons.CoinFlipMenu.RebirthButton`，并管理 `Frames.Rebirth`。
 - `EffectSystem` 负责桌面 coin flip 表现，`CoinFlipSystem/ui.lua` 只调用它并等待落地回调。
-- 当前游戏不支持移动端；`CoinFlipMenu` 和 `Frames.Rebirth / Shop / Inventory` 保持 Studio 预制的位置与尺寸，运行时不再为了移动端 TouchGui 重排。
+- 当前 in-play minimal HUD 是 Studio-authored 资源：TopbarPlus 是顶部入口，`CoinFlipMenu` 只保留兼容且玩法态隐藏，`Elements.cash / candy` 是右上钱包，`CoinFlipHUD` 是全屏透明承载层，左下显示现金 / 连击，右下显示概率 / 速度 / Value / Bias，底部中心显示 `FLIP`、`Auto:Off / Auto:On` 和短结果提示；`Main.Elements` 只保留 `CoinFlipHUD`、`cash`、`candy`、`ripple`，旧 `Buffs / Rewards / Quests / auto / blockInfo` 和旧 CoinFlip onboarding / spectator / overview 节点已从 Studio 资源中删除。
+- `Frames.Shop / Inventory / Rebirth` 的主结构、布局、圆角、描边和文字约束均在 Studio 中维护；运行时代码只绑定按钮、更新文本 / selected 状态、打开关闭和播放音效。
+- `Frames.Shop / Inventory / Rebirth` 打开时会走 `uiController.OpenFrame()` 的轻遮罩，并由 `CoinFlipSystem/ui.lua` 隐藏 gameplay HUD，关闭后再恢复。
+- 当前游戏不支持移动端；TopbarPlus 入口、`CoinFlipHUD` 和 `Frames.Rebirth / Shop / Inventory` 的布局按桌面 in-play minimal Studio 资源维护，不再按 TouchGui / mobile profile 运行时改位。
 - 旧 `Stats` / `Actions` 容器如果仍存在，只是隐藏兼容遗留，不是当前主 HUD 数据源。
 
 ### 10.3 UI 延迟初始化模式
@@ -861,6 +869,8 @@ FlipACoin
 
 ### 12.1 哪些文档今天还值得看
 
+- `README.md`
+  - 项目入口与最短启动说明
 - `docs/FRAMEWORK.md`
   - SystemMgr 框架机制、生命周期、桥接约定和编码习惯
 - `docs/BOOTSTRAP.md`
@@ -873,6 +883,7 @@ FlipACoin
 ### 12.2 已删除的旧 Markdown
 
 2026-05-04 已把旧策划、旧路线图、旧执行进度、旧系统拆分和旧架构梳理文档从 `docs/` 删除。
+2026-05-16 已删除根目录旧 `TODO.md`，并把 `README.md` 收敛为当前项目入口说明。
 
 删除原因：
 

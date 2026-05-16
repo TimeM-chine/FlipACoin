@@ -6,6 +6,8 @@ alwaysApply: true
 # Assets, Studio, and Rojo
 
 - **Authoring**: Art and gameplay resources such as **Models**, **MeshParts**, unions, rigs, layered **UI prefabs**, **VFX/SFX**, and other complex instance hierarchies are **owned by Roblox Studio**, not by constructing them through the Git-side tree. **Rojo is not used to build or maintain those assets**; it cannot replace Studio for complex model work.
+- **UI prefabs**: Editable UI must be authored in Studio, not assembled at runtime. Frames, cards, layout objects, `UICorner`, `UIStroke`, `UISizeConstraint`, `UITextSizeConstraint`, and similar designer-adjustable nodes should exist under `StarterGui` / templates before play; Luau should bind and update them rather than create them.
 - **Trust Studio**: When Luau or docs reference a path (for example under `Workspace`, `StarterGui`, or `ReplicatedStorage` after sync), **assume the open place in Studio already contains the declared instances** unless the user says otherwise. Do not invent full asset hierarchies in source control to “fix” missing references.
 - **Source edits**: Do not add Rojo/source-only **placeholder Models** or deep asset trees to satisfy runtime `FindFirstChild` paths unless the **user explicitly** asks for a minimal stub or a trivial folder layout.
+- **Allowed runtime exceptions**: Topbar/icon packages, short-lived clones from Studio-authored templates, VFX/SFX playback instances, and non-UI runtime objects are acceptable when they are not intended to be manually adjusted as UI prefabs.
 - **Debugging**: If something is missing at runtime, treat it as a **Studio place / sync / naming** issue first; align code or docs with what Studio actually contains rather than pushing complex assets into the repo via Rojo.

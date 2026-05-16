@@ -64,7 +64,7 @@ local function playUiSound(groupName, soundName)
 	end
 
 	local sound = soundGroup:FindFirstChild(soundName)
-	if not sound or not sound:IsA("Sound") then
+	if not sound or not sound:IsA("Sound") or sound.SoundId == "" then
 		return
 	end
 
@@ -116,8 +116,9 @@ function controller.SetNotification(args: { text: string, soundName: string, las
 		end)
 		refreshNotificationLifetime(newEntry, duration)
 
-		if soundName and SoundService:FindFirstChild(soundName, true) then
-			SoundService:FindFirstChild(soundName, true):Play()
+		local notificationSound = soundName and SoundService:FindFirstChild(soundName, true)
+		if notificationSound and notificationSound:IsA("Sound") and notificationSound.SoundId ~= "" then
+			notificationSound:Play()
 		end
 	end)
 end
@@ -136,6 +137,9 @@ function controller.OpenFrame(name)
 		frameCache.Visible = false
 	end
 	frameCache = frame
+	MaskFrame.ZIndex = 0
+	MaskFrame.BackgroundTransparency = 0.48
+	MaskFrame.Visible = true
 	frame.Visible = true
 	controller.SetUnitJump(frame)
 
@@ -183,6 +187,10 @@ function controller.CloseFrame(name)
 
 	for _, unit in hideUnitWhenPush do
 		unit.Visible = true
+	end
+
+	if not guideButton then
+		MaskFrame.Visible = false
 	end
 
 	if GamepadEnabled then
@@ -277,6 +285,7 @@ function controller.SetGuideButton(btn, frame)
 		end
 
 		-- Main.ScreenInsets = Enum.ScreenInsets.None
+		MaskFrame.ZIndex = 100
 		MaskFrame.BackgroundTransparency = 0.5
 		MaskFrame.Visible = true
 		ripple.Visible = true
@@ -904,29 +913,33 @@ function controller.AddRotateGradient(gradient)
 end
 
 ----[[ Rewards ]]----
-local RewardsFrame = Elements:WaitForChild("Rewards")
-local rewardScroll = RewardsFrame:WaitForChild("ScrollingFrame")
-local rewardTemplate = rewardScroll:WaitForChild("Template")
-rewardTemplate.Visible = false
 local slideTi = TweenInfo.new(0.5)
 local closeTask = nil
 
-local function CloseReward()
-	TweenService:Create(RewardsFrame, slideTi, { Position = UDim2.fromScale(0.5, -0.5) }):Play()
+local function CloseReward(rewardsFrame)
+	TweenService:Create(rewardsFrame, slideTi, { Position = UDim2.fromScale(0.5, -0.5) }):Play()
 end
 
-local function OpenReward()
+local function OpenReward(rewardsFrame)
 	if closeTask then
 		task.cancel(closeTask)
 	end
-	TweenService:Create(RewardsFrame, slideTi, { Position = UDim2.fromScale(0.5, 0.2) }):Play()
+	TweenService:Create(rewardsFrame, slideTi, { Position = UDim2.fromScale(0.5, 0.2) }):Play()
 	closeTask = task.delay(3, function()
-		CloseReward()
+		CloseReward(rewardsFrame)
 	end)
 end
 
 function controller.AddReward(args: { icon: string, count: number })
-	OpenReward()
+	local rewardsFrame = Elements:FindFirstChild("Rewards")
+	if not rewardsFrame then
+		return
+	end
+
+	local rewardScroll = rewardsFrame:WaitForChild("ScrollingFrame")
+	local rewardTemplate = rewardScroll:WaitForChild("Template")
+	rewardTemplate.Visible = false
+	OpenReward(rewardsFrame)
 	local icon = args.icon
 	local count = args.count
 	local card = Util.Clone(rewardTemplate, rewardScroll, function(unit)

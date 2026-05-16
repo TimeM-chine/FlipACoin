@@ -17,7 +17,7 @@ local function playAnnouncementSound(soundName)
 
 	local sfxGroup = SoundService:FindFirstChild("SFX")
 	local sound = sfxGroup and sfxGroup:FindFirstChild(soundName)
-	if not sound or not sound:IsA("Sound") then
+	if not sound or not sound:IsA("Sound") or sound.SoundId == "" then
 		return
 	end
 

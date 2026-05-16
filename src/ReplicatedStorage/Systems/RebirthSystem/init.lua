@@ -253,6 +253,7 @@ function RebirthSystem:RequestRebirth(sender, player)
 			SystemMgr.systems.GuiSystem:SetNotification(SENDER, player, {
 				text = "Build more Cash before rebirth",
 				lastTime = 2,
+				soundName = "notification",
 			})
 			SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player)
 			return
@@ -311,6 +312,7 @@ function RebirthSystem:RequestRebirthUpgrade(sender, player, args)
 			SystemMgr.systems.GuiSystem:SetNotification(SENDER, player, {
 				text = "Not enough Rebirth Points",
 				lastTime = 2,
+				soundName = "notification",
 			})
 			SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player)
 			return

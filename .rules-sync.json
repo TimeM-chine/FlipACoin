@@ -1,0 +1,41 @@
+{
+  "centralRoot": "../_central-rules",
+  "files": [
+    {
+      "source": "AGENTS.md",
+      "target": "AGENTS.md"
+    },
+    {
+      "source": ".cursor/rules/00-project-context.mdc",
+      "target": ".cursor/rules/00-project-context.mdc"
+    },
+    {
+      "source": ".cursor/rules/05-assets-studio-rojo.mdc",
+      "target": ".cursor/rules/05-assets-studio-rojo.mdc"
+    },
+    {
+      "source": ".cursor/rules/10-luau-style.mdc",
+      "target": ".cursor/rules/10-luau-style.mdc"
+    },
+    {
+      "source": ".cursor/rules/15-repository-conventions.mdc",
+      "target": ".cursor/rules/15-repository-conventions.mdc"
+    },
+    {
+      "source": ".cursor/rules/20-system-architecture.mdc",
+      "target": ".cursor/rules/20-system-architecture.mdc"
+    },
+    {
+      "source": ".cursor/rules/30-data-and-configs.mdc",
+      "target": ".cursor/rules/30-data-and-configs.mdc"
+    },
+    {
+      "source": ".cursor/rules/40-ui-and-client-patterns.mdc",
+      "target": ".cursor/rules/40-ui-and-client-patterns.mdc"
+    },
+    {
+      "source": ".cursor/rules/50-testing-and-validation.mdc",
+      "target": ".cursor/rules/50-testing-and-validation.mdc"
+    }
+  ]
+}

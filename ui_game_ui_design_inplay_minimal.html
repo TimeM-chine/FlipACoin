@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flip A Coin In-Play Minimal HUD Proposal</title>
+  <style>
+    :root {
+      --safe: 5%;
+      --black: #050505;
+      --panel: rgba(5, 5, 6, .72);
+      --panel-solid: #080808;
+      --line: rgba(255, 255, 255, .22);
+      --line-strong: rgba(255, 255, 255, .72);
+      --cream: #fff4dc;
+      --muted: #c8bca8;
+      --gold: #f7c74d;
+      --gold-deep: #b67716;
+      --red: #8d1113;
+      --red-hot: #e53538;
+      --green: #49d76d;
+      --teal: #55d3c8;
+      --shadow: 0 18px 54px rgba(0, 0, 0, .55);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #0d0906;
+      color: var(--cream);
+      font-family: Arial, Helvetica, sans-serif;
+      letter-spacing: 0;
+    }
+
+    .page {
+      width: min(96vw, 120rem);
+      margin: 0 auto;
+      padding: 1.5rem;
+      display: grid;
+      gap: 1.6rem;
+    }
+
+    .brief {
+      border: .1rem solid var(--line);
+      border-radius: .5rem;
+      background: rgba(0, 0, 0, .78);
+      padding: 1rem 1.2rem;
+      box-shadow: var(--shadow);
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    h1 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(2rem, 3vw, 3.6rem);
+      line-height: 1;
+      color: var(--cream);
+      text-shadow:
+        -.06rem -.06rem 0 #000,
+        .06rem -.06rem 0 #000,
+        -.06rem .06rem 0 #000,
+        .06rem .06rem 0 #000,
+        0 .2rem .34rem #000;
+    }
+
+    .brief p {
+      margin-top: .6rem;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.48;
+      font-weight: 700;
+    }
+
+    .screen {
+      position: relative;
+      overflow: hidden;
+      aspect-ratio: 16 / 9;
+      min-height: 43rem;
+      border: .12rem solid rgba(255,255,255,.16);
+      border-radius: .6rem;
+      background:
+        radial-gradient(ellipse at 50% 56%, rgba(127, 89, 28, .18), transparent 38%),
+        linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,.66)),
+        #1b110b;
+      box-shadow: var(--shadow);
+    }
+
+    .room {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 50% 12%, rgba(255, 197, 87, .2), transparent 24%),
+        linear-gradient(90deg, rgba(155, 24, 18, .5), transparent 18%, transparent 82%, rgba(155, 24, 18, .48)),
+        linear-gradient(180deg, #311509 0 31%, #130b07 31% 100%);
+    }
+
+    .wall-props {
+      position: absolute;
+      inset: 0;
+      opacity: .75;
+      background:
+        radial-gradient(circle at 18% 24%, rgba(255,255,255,.12) 0 2rem, transparent 2.2rem),
+        radial-gradient(circle at 80% 26%, rgba(241,199,77,.16) 0 3.4rem, transparent 3.6rem),
+        linear-gradient(90deg, transparent 0 28%, rgba(255,255,255,.08) 28% 29%, transparent 29% 71%, rgba(255,255,255,.08) 71% 72%, transparent 72%);
+    }
+
+    .table {
+      position: absolute;
+      left: 4%;
+      right: 4%;
+      bottom: -17%;
+      height: 69%;
+      border-radius: 50%;
+      background:
+        radial-gradient(ellipse at 50% 45%, rgba(94, 108, 48, .95), rgba(55, 67, 31, .95) 49%, rgba(94, 42, 17, .98) 50%, rgba(59, 20, 8, .98) 62%, transparent 63%),
+        radial-gradient(ellipse at 50% 50%, rgba(0,0,0,.3), transparent 58%);
+      border: 1.4rem solid rgba(72, 28, 9, .9);
+      box-shadow: inset 0 0 4rem rgba(0,0,0,.52), 0 -1.5rem 5rem rgba(0,0,0,.48);
+    }
+
+    .seat-name {
+      position: absolute;
+      color: rgba(255,255,255,.78);
+      font-size: 1.45rem;
+      font-weight: 950;
+      text-shadow: 0 .16rem .25rem #000;
+    }
+
+    .seat-name.left { left: 5%; top: 16%; }
+    .seat-name.mid { left: 48%; top: 16%; }
+    .seat-name.right { right: 5%; top: 16%; }
+
+    .coin {
+      position: absolute;
+      left: 50%;
+      top: 55%;
+      width: 5.6rem;
+      height: 5.6rem;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 38% 30%, #fff0a0, #f1c64d 44%, #8e5413 75%);
+      border: .14rem solid #fff0ba;
+      box-shadow: 0 0 2.2rem rgba(247,199,77,.68);
+    }
+
+    .coin.flip-state {
+      top: 42%;
+      width: 6.6rem;
+      height: 6.6rem;
+      box-shadow: 0 0 3.6rem rgba(247,199,77,.9);
+    }
+
+    .top-icons {
+      position: absolute;
+      left: var(--safe);
+      top: 3.6%;
+      display: flex;
+      gap: .55rem;
+      z-index: 4;
+    }
+
+    .round-icon {
+      width: 3.15rem;
+      height: 3.15rem;
+      border-radius: 50%;
+      border: .12rem solid rgba(255,255,255,.2);
+      background: rgba(0,0,0,.78);
+      display: grid;
+      place-items: center;
+      color: var(--cream);
+      font-family: Impact, "Arial Black", sans-serif;
+      font-size: 1.25rem;
+      text-shadow: 0 .12rem .2rem #000;
+    }
+
+    .wallet {
+      position: absolute;
+      right: var(--safe);
+      top: 3.6%;
+      display: flex;
+      gap: .65rem;
+      z-index: 4;
+    }
+
+    .currency {
+      min-width: 8.8rem;
+      height: 3.25rem;
+      border: .12rem solid rgba(255,255,255,.25);
+      border-radius: .35rem;
+      background: rgba(0,0,0,.76);
+      display: grid;
+      grid-template-columns: 2.35rem 1fr;
+      align-items: center;
+      gap: .45rem;
+      padding: .35rem .7rem;
+      color: #fff760;
+      font-family: Impact, "Arial Black", sans-serif;
+      font-size: 1.55rem;
+      text-shadow: 0 .12rem .2rem #000;
+    }
+
+    .chip {
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--red-hot) 0 46%, var(--cream) 47% 58%, var(--red-hot) 59%);
+      border: .09rem solid var(--cream);
+    }
+
+    .gem {
+      width: 2rem;
+      height: 2rem;
+      clip-path: polygon(50% 0, 95% 32%, 78% 92%, 22% 92%, 5% 32%);
+      background: var(--green);
+    }
+
+    .edge-stats {
+      position: absolute;
+      left: var(--safe);
+      bottom: 8%;
+      display: grid;
+      gap: .5rem;
+      z-index: 3;
+    }
+
+    .stat-pill {
+      min-width: 11rem;
+      min-height: 3.55rem;
+      border-radius: .4rem;
+      border: .1rem solid rgba(255,255,255,.2);
+      background: var(--panel);
+      padding: .48rem .75rem;
+      box-shadow: 0 .45rem 1.2rem rgba(0,0,0,.34);
+    }
+
+    .stat-pill label,
+    .mini-upgrade label {
+      display: block;
+      color: var(--muted);
+      font-size: .82rem;
+      font-weight: 950;
+      text-transform: uppercase;
+      text-shadow: 0 .1rem .14rem #000;
+    }
+
+    .stat-pill strong {
+      display: block;
+      margin-top: .1rem;
+      color: var(--cream);
+      font-family: Impact, "Arial Black", sans-serif;
+      font-size: 1.85rem;
+      line-height: .9;
+      text-shadow: 0 .14rem .22rem #000;
+    }
+
+    .right-stats {
+      position: absolute;
+      right: var(--safe);
+      bottom: 8%;
+      display: grid;
+      grid-template-columns: repeat(2, 7rem);
+      gap: .5rem;
+      z-index: 3;
+    }
+
+    .mini-upgrade {
+      min-height: 3.55rem;
+      border-radius: .4rem;
+      border: .1rem solid rgba(255,255,255,.18);
+      background: var(--panel);
+      padding: .48rem .6rem;
+    }
+
+    .mini-upgrade strong {
+      display: block;
+      color: var(--cream);
+      font-family: Impact, "Arial Black", sans-serif;
+      font-size: 1.45rem;
+      text-shadow: 0 .14rem .22rem #000;
+    }
+
+    .flip-action {
+      position: absolute;
+      left: 50%;
+      bottom: 4.2%;
+      transform: translateX(-50%);
+      z-index: 5;
+      display: grid;
+      justify-items: center;
+      gap: .45rem;
+    }
+
+    .flip-button {
+      min-width: 13rem;
+      min-height: 4.4rem;
+      border-radius: .48rem;
+      border: .14rem solid var(--cream);
+      background: linear-gradient(180deg, #fff070, var(--gold) 56%, var(--gold-deep));
+      color: #1b0d04;
+      font-family: Impact, "Arial Black", sans-serif;
+      font-size: 3.15rem;
+      line-height: .9;
+      text-shadow: 0 .08rem 0 rgba(255,255,255,.62);
+      box-shadow: 0 .55rem 1.15rem rgba(0,0,0,.48), inset 0 -.25rem 0 rgba(87,49,10,.42);
+    }
+
+    .prompt-row {
+      display: flex;
+      gap: .45rem;
+    }
+
+    .prompt {
+      min-width: 4.9rem;
+      min-height: 2.15rem;
+      display: grid;
+      place-items: center;
+      border: .1rem solid rgba(255,255,255,.24);
+      border-radius: .32rem;
+      background: rgba(0,0,0,.82);
+      color: var(--cream);
+      font-size: .95rem;
+      font-weight: 950;
+      text-shadow: 0 .1rem .14rem #000;
+    }
+
+    .result-callout {
+      position: absolute;
+      left: 50%;
+      bottom: 16%;
+      transform: translateX(-50%);
+      z-index: 4;
+      min-width: 16rem;
+      min-height: 3.2rem;
+      display: grid;
+      place-items: center;
+      border-radius: 999rem;
+      border: .1rem solid rgba(255,255,255,.3);
+      background: rgba(0,0,0,.66);
+      color: var(--cream);
+      font-family: Impact, "Arial Black", sans-serif;
+      font-size: 1.85rem;
+      text-shadow: 0 .14rem .22rem #000;
+    }
+
+    .flip-mode .top-icons,
+    .flip-mode .wallet,
+    .flip-mode .edge-stats,
+    .flip-mode .right-stats,
+    .flip-mode .flip-action {
+      opacity: .12;
+    }
+
+    .flip-mode .focus-ring {
+      position: absolute;
+      left: 50%;
+      top: 42%;
+      width: 18rem;
+      height: 18rem;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: .16rem solid rgba(255,244,220,.58);
+      box-shadow: 0 0 4rem rgba(247,199,77,.25);
+      z-index: 2;
+    }
+
+    .state-label {
+      position: absolute;
+      left: var(--safe);
+      top: 12%;
+      z-index: 5;
+      color: rgba(255,244,220,.86);
+      font-size: 1rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      text-shadow: 0 .12rem .18rem #000;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: var(--safe);
+      z-index: 8;
+      display: grid;
+      grid-template-columns: 14rem minmax(0, 1fr) 15rem;
+      gap: 1rem;
+    }
+
+    .overlay-panel,
+    .tabs,
+    .loadout {
+      border: .1rem solid rgba(255,255,255,.18);
+      border-radius: .55rem;
+      background: rgba(0,0,0,.88);
+      box-shadow: var(--shadow);
+    }
+
+    .tabs {
+      padding: .9rem;
+      align-self: center;
+      display: grid;
+      gap: .7rem;
+    }
+
+    .tab {
+      min-height: 3.75rem;
+      border: .1rem solid var(--line-strong);
+      border-radius: .45rem;
+      display: grid;
+      place-items: center;
+      color: var(--cream);
+      font-family: Impact, "Arial Black", sans-serif;
+      font-size: 1.2rem;
+      text-shadow: 0 .12rem .18rem #000;
+    }
+
+    .tab.active {
+      border-color: var(--gold);
+      background: var(--red);
+      color: #ffe487;
+    }
+
+    .overlay-panel {
+      padding: 1.4rem 1.6rem;
+      overflow: hidden;
+    }
+
+    .menu-title {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(2.8rem, 4.2vw, 5.3rem);
+      line-height: .9;
+      color: var(--cream);
+      border-bottom: .16rem solid var(--cream);
+      padding-bottom: .45rem;
+      text-shadow:
+        -.06rem -.06rem 0 #000,
+        .06rem -.06rem 0 #000,
+        -.06rem .06rem 0 #000,
+        .06rem .06rem 0 #000;
+    }
+
+    .shop-grid {
+      margin-top: 1rem;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: .8rem;
+    }
+
+    .shop-card {
+      min-height: 14rem;
+      border: .14rem solid var(--cream);
+      border-radius: .45rem;
+      background:
+        radial-gradient(circle at 50% 34%, rgba(247,199,77,.28), transparent 24%),
+        rgba(14,14,16,.92);
+      padding: .8rem;
+      display: grid;
+      grid-template-rows: 1fr auto auto;
+      gap: .55rem;
+      text-align: center;
+    }
+
+    .coin-art {
+      width: 5.3rem;
+      height: 5.3rem;
+      justify-self: center;
+      align-self: center;
+      border-radius: 50%;
+      background: radial-gradient(circle at 38% 30%, #fff0a0, #f1c64d 44%, #8e5413 75%);
+      box-shadow: 0 0 1.4rem rgba(247,199,77,.45);
+    }
+
+    .shop-card h3 {
+      font-family: Impact, "Arial Black", sans-serif;
+      font-size: 1.2rem;
+      line-height: 1;
+      text-shadow: 0 .12rem .18rem #000;
+    }
+
+    .buy-row {
+      min-height: 2.2rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: .4rem;
+      color: #fff760;
+      font-size: 1.3rem;
+      font-weight: 950;
+      text-shadow: 0 .12rem .18rem #000;
+    }
+
+    .loadout {
+      padding: 1rem;
+      align-self: center;
+      display: grid;
+      gap: .8rem;
+      min-height: 20rem;
+    }
+
+    .loadout h3 {
+      color: var(--gold);
+      font-family: Impact, "Arial Black", sans-serif;
+      font-size: 1.35rem;
+      text-align: center;
+      text-shadow: 0 .12rem .18rem #000;
+    }
+
+    .loadout-box {
+      border: .1rem solid rgba(247,199,77,.36);
+      border-radius: .45rem;
+      background: rgba(255,255,255,.04);
+      min-height: 5rem;
+      padding: .75rem;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      font-weight: 950;
+      text-shadow: 0 .12rem .18rem #000;
+    }
+
+    .notes {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: .9rem;
+    }
+
+    .note {
+      border: .1rem solid var(--line);
+      border-radius: .5rem;
+      background: rgba(0,0,0,.78);
+      padding: .95rem;
+      box-shadow: var(--shadow);
+    }
+
+    .note b {
+      display: block;
+      color: var(--gold);
+      font-size: 1rem;
+      margin-bottom: .4rem;
+    }
+
+    .note span {
+      display: block;
+      color: var(--muted);
+      font-size: .96rem;
+      line-height: 1.46;
+      font-weight: 700;
+    }
+
+    @media (max-width: 980px) {
+      .page { padding: .8rem; }
+      .screen { min-height: 56rem; aspect-ratio: auto; }
+      .wallet { display: none; }
+      .right-stats {
+        grid-template-columns: 1fr;
+        right: var(--safe);
+        bottom: 18%;
+      }
+      .edge-stats { bottom: 18%; }
+      .overlay {
+        grid-template-columns: 1fr;
+        overflow: auto;
+      }
+      .shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .notes { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="brief">
+      <h1>In-Play Minimal HUD</h1>
+      <p>修正方向：参考图只取“黑底、高对比、粗标题、筹码奖励”的风格，不把商店/挑战菜单套到抛硬币进行中。玩家正在看桌面和硬币时，UI 只占边缘；抛硬币飞行时，非必要 UI 降到近乎隐藏。</p>
+    </section>
+
+    <section class="screen" aria-label="Idle gameplay HUD">
+      <div class="room"></div>
+      <div class="wall-props"></div>
+      <div class="table"></div>
+      <div class="seat-name left">JaxAnt713</div>
+      <div class="seat-name mid">Seat 06</div>
+      <div class="seat-name right">rtx_sigma</div>
+      <div class="coin"></div>
+
+      <div class="state-label">Idle: table stays visible</div>
+
+      <nav class="top-icons">
+        <div class="round-icon">R</div>
+        <div class="round-icon">≡</div>
+        <div class="round-icon">?</div>
+        <div class="round-icon">⚙</div>
+        <div class="round-icon">🏆</div>
+        <div class="round-icon">▣</div>
+      </nav>
+
+      <div class="wallet">
+        <div class="currency"><span class="chip"></span><span>15,535</span></div>
+        <div class="currency"><span class="gem"></span><span>27</span></div>
+      </div>
+
+      <aside class="edge-stats">
+        <div class="stat-pill"><label>Cash</label><strong>$100K</strong></div>
+        <div class="stat-pill"><label>Streak</label><strong>0</strong></div>
+      </aside>
+
+      <aside class="right-stats">
+        <div class="mini-upgrade"><label>Chance</label><strong>23%</strong></div>
+        <div class="mini-upgrade"><label>Speed</label><strong>1.6s</strong></div>
+        <div class="mini-upgrade"><label>Value</label><strong>Lv.0</strong></div>
+        <div class="mini-upgrade"><label>Bias</label><strong>Lv.0</strong></div>
+      </aside>
+
+      <div class="flip-action">
+        <button class="flip-button">FLIP</button>
+        <div class="prompt-row">
+          <div class="prompt">Click</div>
+          <div class="prompt">Space</div>
+          <div class="prompt">RT</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen flip-mode" aria-label="During flip animation">
+      <div class="room"></div>
+      <div class="wall-props"></div>
+      <div class="table"></div>
+      <div class="seat-name left">JaxAnt713</div>
+      <div class="seat-name mid">Seat 06</div>
+      <div class="seat-name right">rtx_sigma</div>
+      <div class="focus-ring"></div>
+      <div class="coin flip-state"></div>
+
+      <div class="state-label">Flip in progress: UI clears away</div>
+
+      <nav class="top-icons">
+        <div class="round-icon">R</div>
+        <div class="round-icon">≡</div>
+        <div class="round-icon">?</div>
+        <div class="round-icon">⚙</div>
+      </nav>
+      <div class="wallet">
+        <div class="currency"><span class="chip"></span><span>15,535</span></div>
+        <div class="currency"><span class="gem"></span><span>27</span></div>
+      </div>
+      <aside class="edge-stats">
+        <div class="stat-pill"><label>Cash</label><strong>$100K</strong></div>
+        <div class="stat-pill"><label>Streak</label><strong>0</strong></div>
+      </aside>
+      <aside class="right-stats">
+        <div class="mini-upgrade"><label>Chance</label><strong>23%</strong></div>
+        <div class="mini-upgrade"><label>Speed</label><strong>1.6s</strong></div>
+      </aside>
+      <div class="flip-action">
+        <button class="flip-button">FLIP</button>
+      </div>
+      <div class="result-callout">Flipping...</div>
+    </section>
+
+    <section class="screen" aria-label="Shop overlay when not flipping">
+      <div class="room"></div>
+      <div class="wall-props"></div>
+      <div class="table"></div>
+      <div class="coin"></div>
+
+      <div class="overlay">
+        <nav class="tabs">
+          <div class="tab active">COINS</div>
+          <div class="tab">DESK</div>
+          <div class="tab">SPECIAL</div>
+          <div class="tab">CODES</div>
+        </nav>
+        <section class="overlay-panel">
+          <h2 class="menu-title">Daily Shop</h2>
+          <div class="shop-grid">
+            <article class="shop-card"><div class="coin-art"></div><h3>Coin1</h3><div class="buy-row"><span class="chip"></span><span>ON</span></div></article>
+            <article class="shop-card"><div class="coin-art"></div><h3>Coin2</h3><div class="buy-row"><span class="chip"></span><span>180</span></div></article>
+            <article class="shop-card"><div class="coin-art"></div><h3>Coin3</h3><div class="buy-row"><span class="chip"></span><span>520</span></div></article>
+            <article class="shop-card"><div class="coin-art"></div><h3>Coin4</h3><div class="buy-row"><span class="chip"></span><span>1400</span></div></article>
+          </div>
+        </section>
+        <aside class="loadout">
+          <h3>Current Loadout</h3>
+          <div class="loadout-box">Coin1</div>
+          <div class="loadout-box">Folding Table</div>
+          <div class="loadout-box">x1 Cash<br>+0% Luck</div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="notes">
+      <div class="note"><b>Idle 状态</b><span>保留可点击 `FLIP`，但主视野不再被大标题/大面板占据。统计信息压到左右下边缘，顶部只留图标和货币。</span></div>
+      <div class="note"><b>Flip 状态</b><span>按 `$game-ui-design` 的 contextual visibility：硬币飞行时非关键 UI 降到 12% 透明度或隐藏，只留下硬币焦点和短状态。</span></div>
+      <div class="note"><b>Menu 状态</b><span>Shop / Inventory / Rebirth 可以继续全屏或大面板，因为那是玩家主动打开的暂停式界面；但不应该代表主 gameplay HUD。</span></div>
+    </section>
+  </main>
+</body>
+</html>

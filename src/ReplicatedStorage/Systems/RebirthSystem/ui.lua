@@ -1,11 +1,14 @@
 local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
+local SoundService = game:GetService("SoundService")
+local GuiService = game:GetService("GuiService")
 
 local SystemMgr = require(Replicated.Systems.SystemMgr)
 local ClientData = require(Replicated.Systems.ClientData)
 local Keys = require(Replicated.configs.Keys)
 local RebirthPresets = require(script.Parent.Presets)
 local Util = require(Replicated.modules.Util)
+local Icon = require(Replicated.Packages.topbarplus)
 
 local dataKey = Keys.DataKey
 
@@ -35,6 +38,8 @@ local RebirthUi = {}
 local initialized = false
 local currentCash = 0
 local currentRebirthState = {}
+local suppressTopbarToggle = false
+local rebirthTopbarIcon
 
 local function setButtonText(button, text, isEnabled)
 	button.Text = text
@@ -42,36 +47,18 @@ local function setButtonText(button, text, isEnabled)
 	button.Active = isEnabled
 end
 
-local function styleSmallButtonText(button, textSize)
-	button.TextScaled = false
-	button.TextSize = textSize
-	button.TextWrapped = false
-	button.TextTruncate = Enum.TextTruncate.AtEnd
-	button.TextXAlignment = Enum.TextXAlignment.Center
-	button.TextYAlignment = Enum.TextYAlignment.Center
-	button.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-	button.TextStrokeTransparency = 1
-	button.LineHeight = 1
-
-	local constraint = button:FindFirstChild("GrowthTextSizeConstraint")
-		or button:FindFirstChild("CodexTextSizeConstraint")
-	if not constraint then
-		constraint = Instance.new("UITextSizeConstraint")
-		constraint.Parent = button
+local function playSfx(soundName)
+	if typeof(soundName) ~= "string" or soundName == "" then
+		return
 	end
-	constraint.Name = "GrowthTextSizeConstraint"
-	constraint.MinTextSize = math.max(11, textSize - 5)
-	constraint.MaxTextSize = textSize
-end
 
-local function applyTextPolish()
-	styleSmallButtonText(RebirthFrame.X, 22)
-	styleSmallButtonText(RebirthConfirmButton, 22)
-	styleSmallButtonText(RebirthKeepRunButton, 22)
-
-	for _, card in ipairs(RebirthPerkCards) do
-		styleSmallButtonText(card.UpgradeButton, 16)
+	local sfxGroup = SoundService:FindFirstChild("SFX")
+	local sound = sfxGroup and sfxGroup:FindFirstChild(soundName)
+	if not sound or not sound:IsA("Sound") or sound.SoundId == "" then
+		return
 	end
+
+	sound:Play()
 end
 
 local function updateRebirthPanel()
@@ -121,6 +108,41 @@ local function updateRebirthPanel()
 	end
 end
 
+local function syncTopbarIcon(icon, frame)
+	frame:GetPropertyChangedSignal("Visible"):Connect(function()
+		suppressTopbarToggle = true
+		if frame.Visible then
+			icon:select()
+		else
+			icon:deselect()
+		end
+		suppressTopbarToggle = false
+	end)
+end
+
+local function bindTopbarIcon()
+	rebirthTopbarIcon = Icon.new()
+		:align("Left")
+		:setName("Rebirth")
+		:setLabel("R")
+		:setOrder(19)
+		:setCaption("Rebirth")
+		:autoDeselect(false)
+
+	rebirthTopbarIcon.toggled:Connect(function(isSelected): ()
+		if suppressTopbarToggle or GuiService.MenuIsOpen then
+			return
+		end
+		if isSelected then
+			updateRebirthPanel()
+			uiController.OpenFrame("Rebirth")
+		else
+			uiController.CloseFrame("Rebirth")
+		end
+	end)
+	syncTopbarIcon(rebirthTopbarIcon, RebirthFrame)
+end
+
 local function bindButtons()
 	uiController.SetButtonHoverAndClick(CoinFlipMenu.RebirthButton, function()
 		updateRebirthPanel()
@@ -156,8 +178,8 @@ function RebirthUi.Init()
 	RebirthFrame.Visible = false
 	currentCash = ClientData:GetOneData(dataKey.wins) or 0
 	currentRebirthState = ClientData:GetOneData("rebirthState") or currentRebirthState
-	applyTextPolish()
 	bindButtons()
+	bindTopbarIcon()
 	updateRebirthPanel()
 end
 
@@ -175,6 +197,12 @@ function RebirthUi.SyncRebirthState(args)
 
 	if initialized then
 		updateRebirthPanel()
+	end
+
+	if args and args.rebirthed then
+		playSfx("rebirth")
+	elseif args and args.rebirthUpgradePurchased then
+		playSfx("shopPurchase")
 	end
 end
 

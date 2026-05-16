@@ -44,6 +44,21 @@ if noUseFrames then
 	end
 end
 
+local legacyUiNames = {
+	Buttons = { "TopBar", "RightBottom", "InventoryButton" },
+}
+for containerName, childNames in pairs(legacyUiNames) do
+	local container = PlayerGui.Main:FindFirstChild(containerName)
+	if container then
+		for _, childName in ipairs(childNames) do
+			local child = container:FindFirstChild(childName)
+			if child and child:IsA("GuiObject") then
+				child.Visible = false
+			end
+		end
+	end
+end
+
 -- local vsLabel = PlayerGui.Main:FindFirstChild("vsLabel")
 -- if vsLabel then
 --     vsLabel.Text = "ver "..GameConfig.version

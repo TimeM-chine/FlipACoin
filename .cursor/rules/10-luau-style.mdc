@@ -17,9 +17,20 @@ local text = `{player.Name} dealt {damage} damage`
 ## Code shape
 
 - Prefer direct, readable modules over unnecessary abstraction.
-- Keep lifecycle and entry methods easy to find near the top of entry modules.
+- Keep lifecycle and entry methods easy to find near the top when the repository uses them.
+- Keep helper functions near the end of the file instead of scattering them above the main flow.
+- Group helpers only when that improves scanability.
+- Do not predeclare local function variables unless there is a real need; direct Luau function definitions are preferred.
 - Push pure logic into helper modules instead of growing entry files indefinitely.
 - Follow the repository's existing file layout instead of forcing a new one.
+- Only extract a helper when logic is reused, non-trivial, or noticeably clearer after extraction.
+- Do not wrap simple one-off logic in tiny helper functions when inline code is easier to read.
+- Prefer explicit, readable control flow over compact or clever patterns.
+
+## Deterministic paths and config
+
+- Do not add defensive nil guards around resource paths, config paths, or owned assets when the path is deterministic by project design.
+- Use defensive checks only for truly optional state, runtime timing issues, or user-driven absence.
 
 ## Consistency
 

@@ -5,14 +5,38 @@ alwaysApply: true
 
 # Repository Context
 
-Before making changes in a repository, first look for project guidance such as:
+Before answering repository questions or making changes, read in this order:
 
-- `AGENTS.md`
-- `README.md`
-- `docs/`
-- top-level architecture or workflow notes
+1. `AGENTS.md` — cross-tool working rules and non-negotiables, when present.
+2. The repository's startup / bootstrap docs, when present.
+3. The repository's task-state docs, when present. Start from current active work; read backlog when planning follow-up work.
+4. `README.md`, project-logic docs, framework docs, or archive docs only when the task route needs them.
 
-Use those files as the first orientation layer if they exist.
+The startup docs are intentionally small so a fresh conversation can avoid rereading full framework and project manuals.
+
+Which doc answers which question:
+
+- How does the framework work → the repository's framework docs.
+- What does this repo have / do → the repository's project-logic docs.
+- What are we doing right now → the repository's task-state docs.
+- What should I read first → the repository's startup / bootstrap docs.
+- Where are historical plans / audit details → the repository's archive docs.
+
+Before writing or reviewing Luau, read the repository's canonical Luau / framework guidance when it exists.
+
+## Docs maintenance
+
+- Framework docs — update only when the framework itself changes. Do not put repo-specific facts there.
+- Project-logic docs — update when a repo-specific runtime fact changes.
+- Task-state docs — live task log:
+  - Add a new entry under `## Active` when starting a task.
+  - Keep `Progress` / `Next` / `Decisions` current while working.
+  - Move finished entries to `## Done` with a one-line outcome and date.
+  - Use `## Backlog / Ideas` for unscheduled follow-ups.
+- Startup / bootstrap docs — keep as a small startup summary and routing map.
+- Archive docs — detailed historical records read on demand, not part of the default startup read.
+- Do not duplicate content across tiers. If the same fact appears in two, the more specific tier is canonical and the other should be trimmed.
+- When docs and code disagree, trust the code and update docs.
 
 ## Discovery rules
 
@@ -33,5 +57,7 @@ Use those files as the first orientation layer if they exist.
 ## Validation mindset
 
 - Test new behavior in the environment the project normally uses first.
+- For code-only Luau edits, do not run `rojo build`; reserve Rojo build checks for project mapping, instance tree, asset structure, or Rojo config changes.
 - Check edge cases and cleanup behavior, not only the happy path.
 - Before considering work done, think through initialization, runtime behavior, teardown, and persistence impact where relevant.
+- Do not add defensive type / shape checks for deterministic project-owned data, configs, UI paths, or internal system calls. Validate player-provided remote inputs and genuinely optional runtime state only.

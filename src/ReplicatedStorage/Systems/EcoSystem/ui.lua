@@ -1,13 +1,18 @@
 local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
+local SoundService = game:GetService("SoundService")
+local GuiService = game:GetService("GuiService")
 
 local SystemMgr = require(Replicated.Systems.SystemMgr)
 local ClientData = require(Replicated.Systems.ClientData)
 local Keys = require(Replicated.configs.Keys)
 local EcoPresets = require(script.Parent.Presets)
 local Util = require(Replicated.modules.Util)
+local Icon = require(Replicated.Packages.topbarplus)
 
 local dataKey = Keys.DataKey
+local PANEL_COLOR = Color3.fromRGB(5, 5, 6)
+local CREAM_COLOR = Color3.fromRGB(255, 244, 220)
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -51,9 +56,12 @@ local currentLoadoutState = {}
 local selectedShopCategory = "coin"
 local selectedInventoryCategory = "coin"
 local selectedTabBackgroundColor = Color3.fromRGB(198, 158, 68)
-local idleTabBackgroundColor = Color3.fromRGB(34, 39, 48)
+local idleTabBackgroundColor = PANEL_COLOR
 local selectedTabTextColor = Color3.fromRGB(36, 32, 26)
-local idleTabTextColor = Color3.fromRGB(246, 240, 226)
+local idleTabTextColor = CREAM_COLOR
+local suppressTopbarToggle = false
+local shopTopbarIcon
+local inventoryTopbarIcon
 
 local function getOwnedItems(category)
 	if category == "coin" then
@@ -102,53 +110,18 @@ local function setButtonText(button, text, isEnabled)
 	button.Active = isEnabled
 end
 
-local function styleSmallButtonText(button, textSize)
-	button.TextScaled = false
-	button.TextSize = textSize
-	button.TextWrapped = false
-	button.TextTruncate = Enum.TextTruncate.AtEnd
-	button.TextXAlignment = Enum.TextXAlignment.Center
-	button.TextYAlignment = Enum.TextYAlignment.Center
-	button.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-	button.TextStrokeTransparency = 1
-	button.LineHeight = 1
-
-	local constraint = button:FindFirstChild("GrowthTextSizeConstraint")
-		or button:FindFirstChild("CodexTextSizeConstraint")
-	if not constraint then
-		constraint = Instance.new("UITextSizeConstraint")
-		constraint.Parent = button
-	end
-	constraint.Name = "GrowthTextSizeConstraint"
-	constraint.MinTextSize = math.max(11, textSize - 5)
-	constraint.MaxTextSize = textSize
-end
-
-local function styleCategoryTab(button)
-	button.Size = UDim2.fromScale(0.92, 0.2)
-	styleSmallButtonText(button, 16)
-end
-
-local function applyTextPolish()
-	styleSmallButtonText(ShopFrame.X, 22)
-	styleSmallButtonText(InventoryFrame.X, 22)
-	styleCategoryTab(ShopTabs.CoinTab)
-	styleCategoryTab(ShopTabs.DeskTab)
-	styleCategoryTab(InventoryTabs.CoinTab)
-	styleCategoryTab(InventoryTabs.DeskTab)
-	styleCategoryTab(InventoryTabs.OtherTab)
-
-	InventoryLoadout.ApplyButton.Visible = false
-	InventoryLoadout.ApplyButton.Active = false
-	InventoryLoadout.ApplyButton.Selectable = false
-
-	for _, card in ipairs(ShopItemCards) do
-		styleSmallButtonText(card.BuyButton, 14)
+local function playSfx(soundName)
+	if typeof(soundName) ~= "string" or soundName == "" then
+		return
 	end
 
-	for _, card in ipairs(InventoryItemCards) do
-		styleSmallButtonText(card.EquipButton, 13)
+	local sfxGroup = SoundService:FindFirstChild("SFX")
+	local sound = sfxGroup and sfxGroup:FindFirstChild(soundName)
+	if not sound or not sound:IsA("Sound") or sound.SoundId == "" then
+		return
 	end
+
+	sound:Play()
 end
 
 local function updateTabButton(button, isSelected)
@@ -251,6 +224,47 @@ local function updatePanels()
 	updateInventoryPanel()
 end
 
+local function syncTopbarIcon(icon, frame)
+	frame:GetPropertyChangedSignal("Visible"):Connect(function()
+		suppressTopbarToggle = true
+		if frame.Visible then
+			icon:select()
+		else
+			icon:deselect()
+		end
+		suppressTopbarToggle = false
+	end)
+end
+
+local function createTopbarFrameIcon(name, label, order, frame, beforeOpen)
+	local icon: any = Icon.new()
+		:align("Left")
+		:setName(name)
+		:setLabel(label)
+		:setOrder(order)
+		:setCaption(name)
+		:autoDeselect(false)
+
+	icon.toggled:Connect(function(isSelected): ()
+		if suppressTopbarToggle or GuiService.MenuIsOpen then
+			return
+		end
+		if isSelected then
+			beforeOpen()
+			uiController.OpenFrame(frame.Name)
+		else
+			uiController.CloseFrame(frame.Name)
+		end
+	end)
+	syncTopbarIcon(icon, frame)
+	return icon
+end
+
+local function bindTopbarIcons()
+	shopTopbarIcon = createTopbarFrameIcon("Shop", "S", 20, ShopFrame, updatePanels)
+	inventoryTopbarIcon = createTopbarFrameIcon("Inventory", "B", 21, InventoryFrame, updatePanels)
+end
+
 local function bindButtons()
 	uiController.SetButtonHoverAndClick(CoinFlipMenu.ShopButton, function()
 		updatePanels()
@@ -343,8 +357,8 @@ function EcoUi.Init()
 	InventoryFrame.Visible = false
 	currentCash = ClientData:GetOneData(dataKey.wins) or 0
 	currentLoadoutState = ClientData:GetOneData("loadoutState") or currentLoadoutState
-	applyTextPolish()
 	bindButtons()
+	bindTopbarIcons()
 	updatePanels()
 end
 
@@ -361,6 +375,12 @@ function EcoUi.SyncLoadoutState(args)
 
 	if initialized then
 		updatePanels()
+	end
+
+	if args and args.purchasedItem then
+		playSfx("shopPurchase")
+	elseif args and args.equippedItem then
+		playSfx("equipItem")
 	end
 end
 

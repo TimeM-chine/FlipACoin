@@ -1,0 +1,43 @@
+---
+description: Generic runtime architecture rules for Roblox projects
+globs:
+  - "src/**/*.lua"
+alwaysApply: false
+---
+
+# Architecture
+
+## Entry points and registration
+
+- Find the project's real runtime entry points before adding new modules or systems.
+- Keep new runtime modules aligned with the existing loader and startup flow.
+- If the project has an active registry, update that registry when a new runtime unit is meant to run.
+- Add priority / load-order entries only when startup order is truly required.
+
+## Communication layers
+
+- Reuse the repository's existing communication layer before introducing a second one.
+- Keep server-authoritative logic on the server, then wire client presentation on top of it.
+- Preserve existing ownership boundaries between orchestration modules, feature logic, and client rendering.
+
+## File responsibilities
+
+- Keep entry modules focused on initialization, bridge logic, and orchestration.
+- Move heavy feature logic into the repository's established split-out modules instead of growing entry files indefinitely.
+- Keep constants and rules in the repository's existing config / preset layer.
+- Keep client rendering and local interaction logic in the repository's existing UI layer.
+
+## Change strategy
+
+- Do not assume a new feature needs a new top-level module; first check whether an existing owner already fits.
+- Understand the current call chain before changing behavior in a central runtime path.
+- Preserve the repository's existing dependency direction unless there is a strong reason to refactor it.
+- Avoid circular dependencies.
+- Do not store large, long-lived state without a clear cleanup path.
+- Remember to handle both server and client behavior when touching shared runtime entry points.
+
+## Assets
+
+- Reuse established asset locations and config-driven references before introducing new paths.
+- Colocate source-controlled feature assets with the feature only when the repository already uses that pattern.
+- Do not assume new art, audio, or models are required for normal code tasks; first wire features to existing assets and asset paths already used by the codebase.

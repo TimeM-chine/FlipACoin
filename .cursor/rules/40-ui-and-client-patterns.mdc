@@ -17,7 +17,8 @@ alwaysApply: false
 
 ## Layout
 
-- For new responsive UI, prefer `UDim2.fromScale()` and keep offsets at `0` unless fixed-size behavior is intentional.
+- Do not build editable UI layout or style structure with runtime `Instance.new`; use MCP/Studio to create the prefab and keep code focused on binding, visibility, and data updates.
+- For editable UI prefabs, use `Scale` for both `Position` and `Size` on layout-bearing containers and controls. Keep `Offset` at `0` unless fixed-size behavior is intentional for padding, borders, or text inset.
 - Keep UI behavior consistent with the repository's established screen and HUD structure.
 - Prefer scale-based layout over fixed offsets for cross-device behavior.
 - Use `TextScaled` when the repository already relies on it for responsive text in UI-heavy flows.

@@ -11,7 +11,6 @@ EffectPresets.CoinFlipVisuals = table.freeze({
 	TravelDuration = 0.72,
 	LandingDuration = 0.18,
 	ResultRevealDelay = 0.08,
-	CleanupDelay = 0.85,
 	SpinTurns = 7,
 	BankAngle = math.rad(16),
 	HeadsPulseColor = Color3.fromRGB(255, 225, 109),
