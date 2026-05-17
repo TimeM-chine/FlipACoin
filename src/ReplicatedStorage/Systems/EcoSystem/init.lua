@@ -153,6 +153,9 @@ local function getOwnedKey(category)
 	if category == "desk" then
 		return dataKey.ownedDeskSetups
 	end
+	if category == "chair" then
+		return dataKey.ownedChairs
+	end
 
 	return nil
 end
@@ -164,6 +167,9 @@ local function getEquippedKey(category)
 	if category == "desk" then
 		return dataKey.equippedDeskSetup
 	end
+	if category == "chair" then
+		return dataKey.equippedChair
+	end
 
 	return nil
 end
@@ -173,6 +179,8 @@ local function normalizeLoadoutData(playerIns)
 	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin)
 	local ownedDeskSetups = playerIns:GetOneData(dataKey.ownedDeskSetups)
 	local equippedDeskSetup = playerIns:GetOneData(dataKey.equippedDeskSetup)
+	local ownedChairs = playerIns:GetOneData(dataKey.ownedChairs)
+	local equippedChair = playerIns:GetOneData(dataKey.equippedChair)
 
 	if typeof(ownedCoins) ~= "table" then
 		ownedCoins = {
@@ -200,11 +208,26 @@ local function normalizeLoadoutData(playerIns)
 		playerIns:SetOneData(dataKey.ownedDeskSetups, ownedDeskSetups)
 	end
 
+	if typeof(ownedChairs) ~= "table" then
+		ownedChairs = {
+			[EcoPresets.LoadoutDefaults.equippedChair] = true,
+		}
+		playerIns:SetOneData(dataKey.ownedChairs, ownedChairs)
+	end
+	if not EcoPresets.GetShopItem("chair", equippedChair) or not ownedChairs[equippedChair] then
+		equippedChair = EcoPresets.LoadoutDefaults.equippedChair
+		ownedChairs[equippedChair] = true
+		playerIns:SetOneData(dataKey.equippedChair, equippedChair)
+		playerIns:SetOneData(dataKey.ownedChairs, ownedChairs)
+	end
+
 	return {
 		ownedCoins = ownedCoins,
 		equippedCoin = equippedCoin,
 		ownedDeskSetups = ownedDeskSetups,
 		equippedDeskSetup = equippedDeskSetup,
+		ownedChairs = ownedChairs,
+		equippedChair = equippedChair,
 	}
 end
 
@@ -213,8 +236,8 @@ local function refreshCashDisplays(player)
 	SystemMgr.systems.PlayerSystem:UpdatePlayerHeadGui(player)
 end
 
-local function refreshDeskDecoration(player, category)
-	if category == "desk" then
+local function refreshDecoration(player, category)
+	if category == "desk" or category == "chair" then
 		SystemMgr.systems.DecorationSystem:RefreshPlayerDecoration(SENDER, player)
 	end
 end
@@ -588,10 +611,16 @@ function EcoSystem:GetLoadoutState(sender, player)
 		return {
 			equippedCoin = loadoutData.equippedCoin,
 			equippedDeskSetup = loadoutData.equippedDeskSetup,
+			equippedChair = loadoutData.equippedChair,
 			ownedCoins = table.clone(loadoutData.ownedCoins),
 			ownedDeskSetups = table.clone(loadoutData.ownedDeskSetups),
+			ownedChairs = table.clone(loadoutData.ownedChairs),
 			shopItems = EcoPresets.GrowthShopItems,
-			derivedStats = EcoPresets.BuildLoadoutBonuses(loadoutData.equippedCoin, loadoutData.equippedDeskSetup),
+			derivedStats = EcoPresets.BuildLoadoutBonuses(
+				loadoutData.equippedCoin,
+				loadoutData.equippedDeskSetup,
+				loadoutData.equippedChair
+			),
 		}
 	else
 		return ClientData:GetOneData("loadoutState")
@@ -616,7 +645,11 @@ function EcoSystem:GetLoadoutBonuses(sender, player)
 		end
 
 		local loadoutData = normalizeLoadoutData(playerIns)
-		return EcoPresets.BuildLoadoutBonuses(loadoutData.equippedCoin, loadoutData.equippedDeskSetup)
+		return EcoPresets.BuildLoadoutBonuses(
+			loadoutData.equippedCoin,
+			loadoutData.equippedDeskSetup,
+			loadoutData.equippedChair
+		)
 	else
 		local loadoutState = ClientData:GetOneData("loadoutState") or {}
 		return loadoutState.derivedStats
@@ -651,7 +684,7 @@ function EcoSystem:RequestShopPurchase(sender, player, args)
 		if ownedItems[item.id] then
 			playerIns:SetOneData(equippedKey, item.id)
 			refreshCashDisplays(player)
-			refreshDeskDecoration(player, category)
+			refreshDecoration(player, category)
 			SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
 			SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
 				equippedItem = item.id,
@@ -680,7 +713,7 @@ function EcoSystem:RequestShopPurchase(sender, player, args)
 		playerIns:SetOneData(ownedKey, ownedItems)
 		playerIns:SetOneData(equippedKey, item.id)
 
-		refreshDeskDecoration(player, category)
+		refreshDecoration(player, category)
 		SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
 		SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
 			purchasedItem = item.id,
@@ -723,7 +756,7 @@ function EcoSystem:RequestEquipItem(sender, player, args)
 
 		playerIns:SetOneData(equippedKey, item.id)
 		refreshCashDisplays(player)
-		refreshDeskDecoration(player, category)
+		refreshDecoration(player, category)
 		SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
 		SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
 			equippedItem = item.id,
@@ -746,6 +779,8 @@ function EcoSystem:SyncLoadoutState(sender, player, args)
 		ClientData:SetOneData(dataKey.ownedCoins, loadoutState.ownedCoins)
 		ClientData:SetOneData(dataKey.equippedDeskSetup, loadoutState.equippedDeskSetup)
 		ClientData:SetOneData(dataKey.ownedDeskSetups, loadoutState.ownedDeskSetups)
+		ClientData:SetOneData(dataKey.equippedChair, loadoutState.equippedChair)
+		ClientData:SetOneData(dataKey.ownedChairs, loadoutState.ownedChairs)
 	end
 
 	EcoUi.SyncLoadoutState(args)

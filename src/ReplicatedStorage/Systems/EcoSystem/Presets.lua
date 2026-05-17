@@ -14,11 +14,14 @@ EcoPresets.ShopCategoryAliases = table.freeze({
 	desks = "desk",
 	desksetup = "desk",
 	desksetups = "desk",
+	chair = "chair",
+	chairs = "chair",
 })
 
 EcoPresets.LoadoutDefaults = table.freeze({
 	equippedCoin = "coin1",
 	equippedDeskSetup = "1",
+	equippedChair = "1",
 })
 
 EcoPresets.GrowthShopItems = {
@@ -166,6 +169,129 @@ EcoPresets.GrowthShopItems = {
 			stats = {
 				coinMultiplier = 1.30,
 				luckBonus = 0.02,
+			},
+		},
+	}),
+	chair = table.freeze({
+		{
+			id = "1",
+			displayName = "Chair 1",
+			rarity = "Common",
+			role = "Starter",
+			cost = 0,
+			stats = {
+				coinMultiplier = 1,
+				luckBonus = 0,
+			},
+		},
+		{
+			id = "2",
+			displayName = "Chair 2",
+			rarity = "Common",
+			role = "Comfort",
+			cost = 420,
+			stats = {
+				coinMultiplier = 1.04,
+				luckBonus = 0.004,
+			},
+		},
+		{
+			id = "3",
+			displayName = "Chair 3",
+			rarity = "Uncommon",
+			role = "Steady",
+			cost = 900,
+			stats = {
+				coinMultiplier = 1.08,
+				luckBonus = 0.008,
+			},
+		},
+		{
+			id = "4",
+			displayName = "Chair 4",
+			rarity = "Uncommon",
+			role = "Focus",
+			cost = 1800,
+			stats = {
+				coinMultiplier = 1.12,
+				luckBonus = 0.012,
+			},
+		},
+		{
+			id = "5",
+			displayName = "Chair 5",
+			rarity = "Rare",
+			role = "Boost",
+			cost = 3600,
+			stats = {
+				coinMultiplier = 1.16,
+				luckBonus = 0.016,
+			},
+		},
+		{
+			id = "6",
+			displayName = "Chair 6",
+			rarity = "Rare",
+			role = "Value",
+			cost = 6800,
+			stats = {
+				coinMultiplier = 1.20,
+				luckBonus = 0.020,
+			},
+		},
+		{
+			id = "7",
+			displayName = "Chair 7",
+			rarity = "Epic",
+			role = "Lucky",
+			cost = 11000,
+			stats = {
+				coinMultiplier = 1.25,
+				luckBonus = 0.025,
+			},
+		},
+		{
+			id = "8",
+			displayName = "Chair 8",
+			rarity = "Epic",
+			role = "Fortune",
+			cost = 17000,
+			stats = {
+				coinMultiplier = 1.30,
+				luckBonus = 0.030,
+			},
+		},
+		{
+			id = "9",
+			displayName = "Chair 9",
+			rarity = "Legendary",
+			role = "Premium",
+			cost = 26000,
+			stats = {
+				coinMultiplier = 1.36,
+				luckBonus = 0.036,
+			},
+		},
+		{
+			id = "10",
+			displayName = "Chair 10",
+			rarity = "Legendary",
+			role = "Jackpot",
+			cost = 38000,
+			stats = {
+				coinMultiplier = 1.43,
+				luckBonus = 0.043,
+			},
+		},
+		{
+			id = "11",
+			displayName = "Chair 11",
+			rarity = "Mythic",
+			role = "Apex",
+			cost = 55000,
+			stats = {
+				coinMultiplier = 1.50,
+				luckBonus = 0.050,
 			},
 		},
 	}),
@@ -730,7 +856,7 @@ function EcoPresets.GetShopItemDisplayName(category, itemId)
 	return (item and item.displayName) or itemId
 end
 
-function EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDeskSetup)
+function EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDeskSetup, equippedChair)
 	local bonuses = {
 		coinMultiplier = 1,
 		luckBonus = 0,
@@ -738,6 +864,7 @@ function EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDeskSetup)
 	local equippedItems = {
 		EcoPresets.GetShopItem("coin", equippedCoin),
 		EcoPresets.GetShopItem("desk", equippedDeskSetup),
+		EcoPresets.GetShopItem("chair", equippedChair),
 	}
 
 	for _, item in ipairs(equippedItems) do

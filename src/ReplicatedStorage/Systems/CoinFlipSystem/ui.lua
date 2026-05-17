@@ -536,6 +536,8 @@ function CoinFlipUi.SyncRunState(args)
 		ClientData:SetOneData(dataKey.ownedCoins, args.loadoutState.ownedCoins)
 		ClientData:SetOneData(dataKey.equippedDeskSetup, args.loadoutState.equippedDeskSetup)
 		ClientData:SetOneData(dataKey.ownedDeskSetups, args.loadoutState.ownedDeskSetups)
+		ClientData:SetOneData(dataKey.equippedChair, args.loadoutState.equippedChair)
+		ClientData:SetOneData(dataKey.ownedChairs, args.loadoutState.ownedChairs)
 	end
 	if args.rebirthState then
 		ClientData:SetOneData(dataKey.rebirth, args.rebirthState.rebirth)

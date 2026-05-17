@@ -94,6 +94,10 @@ local DefaultData = {
 	ownedDeskSetups = {
 		["1"] = true,
 	},
+	equippedChair = "1",
+	ownedChairs = {
+		["1"] = true,
+	},
 	rebirthTree = {
 		polishedStart = 0,
 		chainStart = 0,

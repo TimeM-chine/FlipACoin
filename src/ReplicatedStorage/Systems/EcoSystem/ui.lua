@@ -29,6 +29,7 @@ local ShopBody = ShopFrame:WaitForChild("Body")
 local ShopTabs = ShopBody:WaitForChild("Tabs")
 local ShopItems = ShopBody:WaitForChild("Items")
 local ShopPreview = ShopBody:WaitForChild("Preview")
+local ShopPageControls = ShopBody:WaitForChild("PageControls")
 local ShopItemCards = {
 	ShopItems:WaitForChild("Item1"),
 	ShopItems:WaitForChild("Item2"),
@@ -40,6 +41,7 @@ local InventoryBody = InventoryFrame:WaitForChild("Body")
 local InventoryTabs = InventoryBody:WaitForChild("Tabs")
 local InventoryItems = InventoryBody:WaitForChild("Items")
 local InventoryLoadout = InventoryBody:WaitForChild("Loadout")
+local InventoryPageControls = InventoryBody:WaitForChild("PageControls")
 local InventoryItemCards = {
 	InventoryItems:WaitForChild("Item1"),
 	InventoryItems:WaitForChild("Item2"),
@@ -55,6 +57,16 @@ local currentCash = 0
 local currentLoadoutState = {}
 local selectedShopCategory = "coin"
 local selectedInventoryCategory = "coin"
+local selectedShopPageByCategory = {
+	coin = 1,
+	desk = 1,
+	chair = 1,
+}
+local selectedInventoryPageByCategory = {
+	coin = 1,
+	desk = 1,
+	chair = 1,
+}
 local selectedTabBackgroundColor = Color3.fromRGB(198, 158, 68)
 local idleTabBackgroundColor = PANEL_COLOR
 local selectedTabTextColor = Color3.fromRGB(36, 32, 26)
@@ -62,6 +74,8 @@ local idleTabTextColor = CREAM_COLOR
 local suppressTopbarToggle = false
 local shopTopbarIcon
 local inventoryTopbarIcon
+local shopRenderedItems = {}
+local inventoryRenderedItems = {}
 
 local function getOwnedItems(category)
 	if category == "coin" then
@@ -69,6 +83,9 @@ local function getOwnedItems(category)
 	end
 	if category == "desk" then
 		return currentLoadoutState.ownedDeskSetups or {}
+	end
+	if category == "chair" then
+		return currentLoadoutState.ownedChairs or {}
 	end
 
 	return {}
@@ -80,6 +97,9 @@ local function getEquippedItem(category)
 	end
 	if category == "desk" then
 		return currentLoadoutState.equippedDeskSetup or EcoPresets.LoadoutDefaults.equippedDeskSetup
+	end
+	if category == "chair" then
+		return currentLoadoutState.equippedChair or EcoPresets.LoadoutDefaults.equippedChair
 	end
 
 	return ""
@@ -131,30 +151,84 @@ local function updateTabButton(button, isSelected)
 	button.TextColor3 = isSelected and selectedTabTextColor or idleTabTextColor
 end
 
+local function getPageCount(category, pageSize)
+	local items = EcoPresets.GrowthShopItems[category] or {}
+	return math.max(1, math.ceil(#items / pageSize))
+end
+
+local function getOwnedPageCount(category, pageSize)
+	local ownedItems = getOwnedItems(category)
+	local ownedCount = 0
+	for _, item in ipairs(EcoPresets.GrowthShopItems[category] or {}) do
+		if ownedItems[item.id] then
+			ownedCount += 1
+		end
+	end
+
+	return math.max(1, math.ceil(ownedCount / pageSize))
+end
+
+local function clampPage(category, pageByCategory, pageSize)
+	local pageCount = getPageCount(category, pageSize)
+	pageByCategory[category] = math.clamp(pageByCategory[category] or 1, 1, pageCount)
+	return pageByCategory[category], pageCount
+end
+
+local function clampOwnedPage(category, pageByCategory, pageSize)
+	local pageCount = getOwnedPageCount(category, pageSize)
+	pageByCategory[category] = math.clamp(pageByCategory[category] or 1, 1, pageCount)
+	return pageByCategory[category], pageCount
+end
+
+local function getPagedItem(category, pageIndex, pageSize, slotIndex)
+	local items = EcoPresets.GrowthShopItems[category] or {}
+	local itemIndex = (pageIndex - 1) * pageSize + slotIndex
+	return items[itemIndex]
+end
+
+local function updatePageControls(pageControls, pageIndex, pageCount)
+	pageControls.PageLabel.Text = `{pageIndex}/{pageCount}`
+	setButtonText(pageControls.PrevButton, "<", pageIndex > 1)
+	setButtonText(pageControls.NextButton, ">", pageIndex < pageCount)
+end
+
 local function updateLoadoutSummary()
 	local equippedCoin = getEquippedItem("coin")
 	local equippedDesk = getEquippedItem("desk")
+	local equippedChair = getEquippedItem("chair")
 	local equippedCoinName = EcoPresets.GetShopItemDisplayName("coin", equippedCoin)
 	local equippedDeskName = EcoPresets.GetShopItemDisplayName("desk", equippedDesk)
-	local bonuses = EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDesk)
+	local equippedChairName = EcoPresets.GetShopItemDisplayName("chair", equippedChair)
+	local bonuses = EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDesk, equippedChair)
 	InventoryLoadout.CoinSlot.Value.Text = equippedCoinName
 	InventoryLoadout.DeskSlot.Value.Text = equippedDeskName
+	InventoryLoadout.ChairSlot.Value.Text = equippedChairName
 	InventoryLoadout.TotalBonus.Text = describeItemStats(bonuses)
-	ShopPreview.Equipped.Text = `{equippedCoinName} / {equippedDeskName}`
+	ShopPreview.Equipped.Text = `{equippedCoinName} / {equippedDeskName} / {equippedChairName}`
 	ShopPreview.TotalBonus.Text = describeItemStats(bonuses)
 end
 
 local function updateShopPanel()
 	updateTabButton(ShopTabs.CoinTab, selectedShopCategory == "coin")
 	updateTabButton(ShopTabs.DeskTab, selectedShopCategory == "desk")
-	ShopPreview.Title.Text = selectedShopCategory == "coin" and "Coin Loadout" or "Desk Setup"
+	updateTabButton(ShopTabs.ChairTab, selectedShopCategory == "chair")
+	if selectedShopCategory == "coin" then
+		ShopPreview.Title.Text = "Coin Loadout"
+	elseif selectedShopCategory == "desk" then
+		ShopPreview.Title.Text = "Desk Setup"
+	else
+		ShopPreview.Title.Text = "Chair Setup"
+	end
 
 	local ownedItems = getOwnedItems(selectedShopCategory)
 	local equippedItem = getEquippedItem(selectedShopCategory)
-	local items = EcoPresets.GrowthShopItems[selectedShopCategory] or {}
+	local pageIndex, pageCount = clampPage(selectedShopCategory, selectedShopPageByCategory, #ShopItemCards)
+	updatePageControls(ShopPageControls, pageIndex, pageCount)
+	table.clear(shopRenderedItems)
 
 	for index, card in ipairs(ShopItemCards) do
-		local item = items[index]
+		local item = getPagedItem(selectedShopCategory, pageIndex, #ShopItemCards, index)
+		shopRenderedItems[index] = item
 		card.Visible = item ~= nil
 		if item then
 			local isOwned = ownedItems[item.id] == true
@@ -178,17 +252,22 @@ end
 local function updateInventoryPanel()
 	updateTabButton(InventoryTabs.CoinTab, selectedInventoryCategory == "coin")
 	updateTabButton(InventoryTabs.DeskTab, selectedInventoryCategory == "desk")
+	updateTabButton(InventoryTabs.ChairTab, selectedInventoryCategory == "chair")
 	updateTabButton(InventoryTabs.OtherTab, selectedInventoryCategory == "other")
 
 	local ownedItems = getOwnedItems(selectedInventoryCategory)
 	local equippedItem = getEquippedItem(selectedInventoryCategory)
 	local visibleIndex = 0
+	local pageIndex, pageCount = clampOwnedPage(selectedInventoryCategory, selectedInventoryPageByCategory, #InventoryItemCards)
+	updatePageControls(InventoryPageControls, pageIndex, pageCount)
+	table.clear(inventoryRenderedItems)
 
 	for _, card in ipairs(InventoryItemCards) do
 		card.Visible = false
 	end
 
 	if selectedInventoryCategory == "other" then
+		updatePageControls(InventoryPageControls, 1, 1)
 		local card = InventoryItemCards[1]
 		card.Visible = true
 		setTextIfPresent(card, "Name", "Coming Soon")
@@ -201,10 +280,16 @@ local function updateInventoryPanel()
 	for _, item in ipairs(EcoPresets.GrowthShopItems[selectedInventoryCategory] or {}) do
 		if ownedItems[item.id] then
 			visibleIndex += 1
-			local card = InventoryItemCards[visibleIndex]
+			if visibleIndex <= (pageIndex - 1) * #InventoryItemCards then
+				continue
+			end
+
+			local cardIndex = visibleIndex - (pageIndex - 1) * #InventoryItemCards
+			local card = InventoryItemCards[cardIndex]
 			if not card then
 				break
 			end
+			inventoryRenderedItems[cardIndex] = item
 			card.Visible = true
 			setTextIfPresent(card, "Name", item.displayName)
 			card.Bonus.Text = describeItemStats(item.stats)
@@ -290,10 +375,22 @@ local function bindButtons()
 		selectedShopCategory = "desk"
 		updateShopPanel()
 	end)
+	uiController.SetButtonHoverAndClick(ShopTabs.ChairTab, function()
+		selectedShopCategory = "chair"
+		updateShopPanel()
+	end)
+	uiController.SetButtonHoverAndClick(ShopPageControls.PrevButton, function()
+		selectedShopPageByCategory[selectedShopCategory] = (selectedShopPageByCategory[selectedShopCategory] or 1) - 1
+		updateShopPanel()
+	end)
+	uiController.SetButtonHoverAndClick(ShopPageControls.NextButton, function()
+		selectedShopPageByCategory[selectedShopCategory] = (selectedShopPageByCategory[selectedShopCategory] or 1) + 1
+		updateShopPanel()
+	end)
 	for index, card in ipairs(ShopItemCards) do
 		local boundIndex = index
 		uiController.SetButtonHoverAndClick(card.BuyButton, function()
-			local item = (EcoPresets.GrowthShopItems[selectedShopCategory] or {})[boundIndex]
+			local item = shopRenderedItems[boundIndex]
 			if not item then
 				return
 			end
@@ -319,8 +416,22 @@ local function bindButtons()
 		selectedInventoryCategory = "desk"
 		updateInventoryPanel()
 	end)
+	uiController.SetButtonHoverAndClick(InventoryTabs.ChairTab, function()
+		selectedInventoryCategory = "chair"
+		updateInventoryPanel()
+	end)
 	uiController.SetButtonHoverAndClick(InventoryTabs.OtherTab, function()
 		selectedInventoryCategory = "other"
+		updateInventoryPanel()
+	end)
+	uiController.SetButtonHoverAndClick(InventoryPageControls.PrevButton, function()
+		selectedInventoryPageByCategory[selectedInventoryCategory] =
+			(selectedInventoryPageByCategory[selectedInventoryCategory] or 1) - 1
+		updateInventoryPanel()
+	end)
+	uiController.SetButtonHoverAndClick(InventoryPageControls.NextButton, function()
+		selectedInventoryPageByCategory[selectedInventoryCategory] =
+			(selectedInventoryPageByCategory[selectedInventoryCategory] or 1) + 1
 		updateInventoryPanel()
 	end)
 	for index, card in ipairs(InventoryItemCards) do
@@ -330,19 +441,14 @@ local function bindButtons()
 				return
 			end
 
-			local visibleIndex = 0
-			for _, item in ipairs(EcoPresets.GrowthShopItems[selectedInventoryCategory] or {}) do
-				if getOwnedItems(selectedInventoryCategory)[item.id] then
-					visibleIndex += 1
-					if visibleIndex == boundIndex then
-						SystemMgr.systems.EcoSystem.Server:RequestEquipItem({
-							category = selectedInventoryCategory,
-							itemId = item.id,
-						})
-						return
-					end
-				end
+			local item = inventoryRenderedItems[boundIndex]
+			if not item then
+				return
 			end
+			SystemMgr.systems.EcoSystem.Server:RequestEquipItem({
+				category = selectedInventoryCategory,
+				itemId = item.id,
+			})
 		end)
 	end
 end

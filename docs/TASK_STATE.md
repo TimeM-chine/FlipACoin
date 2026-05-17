@@ -1,6 +1,6 @@
 # TASK_STATE
 
-最后更新：2026-05-17
+最后更新：2026-05-18
 
 > 目的：记录当前正在做什么、下一步是什么、关键决策、待验证项与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`；不要把本文件变成长篇历史日志。
 
@@ -50,6 +50,11 @@
 - 可评估极简决策点：高 streak 后出现 `Cash Out` / `Double` / bonus choice，但不要破坏“一键 Flip”的主循环。
 
 ## Done
+
+### 2026-05-18 Chair replacement loadout
+
+- Outcome: `chair` 已作为第三类 loadout 接入，新增 `equippedChair / ownedChairs` 持久字段、`EcoSystem` 的 chair 商品与页签、`DecorationSystem` 的座位椅子运行时克隆，以及 Studio 里的 `SeatXXChairAnchor`、`ChairTab`、`PageControls` 和 `ChairSlot`。
+- Validation: `git diff --check` 通过；Studio MCP 确认 `Assets.Chairs` 下有 11 个椅子模型、8 个 `SeatXXChairAnchor`、Shop/Inventory 的 chair 页签与分页控件、`Inventory.Loadout.ChairSlot`；Play-time 确认 `Workspace.CoinFlipTable.Assets.DecorationsRuntime` 会生成 `Seat01Chair` 和 `Seat01Decoration`。
 
 ### 2026-05-17 Auto Flip and persistent coin result
 

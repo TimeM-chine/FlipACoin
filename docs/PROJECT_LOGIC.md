@@ -371,24 +371,30 @@ FlipACoin
 - `src/ReplicatedStorage/Systems/DecorationSystem/init.lua`
 - `src/ReplicatedStorage/Systems/DecorationSystem/Presets.lua`
 - `src/ReplicatedStorage/Systems/DecorationSystem/Assets/TableDecoration`
+- `src/ReplicatedStorage/Systems/DecorationSystem/Assets/Chairs`
 
 当前职责：
 
 - 服务端按玩家当前 `equippedDeskSetup` 克隆座位桌搭模型到 `Workspace.CoinFlipTable.Assets.DecorationsRuntime`
 - 每个座位运行时模型命名为 `{rawSeatId}Decoration`
+- 服务端按玩家当前 `equippedChair` 克隆座位椅子模型到同一 `DecorationsRuntime`
+- 每个座位椅子运行时模型命名为 `{rawSeatId}Chair`
 - 桌搭模型按座位显示，不是全桌共享装饰
-- `EcoSystem` 在 Desk Setup 购买 / 装备成功后刷新该玩家桌搭
-- `TableSeatSystem` 在入座、离座、离服时刷新或清理该玩家桌搭
+- `EcoSystem` 在 Desk Setup / Chair 购买或装备成功后刷新该玩家座位装饰
+- `TableSeatSystem` 在入座、离座、离服时刷新或清理该玩家座位装饰
 - 系统名保持通用，因为后续玩家凳子等可视装饰也应由该系统承接
 
 资产约定：
 
 - 桌搭资产长期应放在 `ReplicatedStorage.Systems.DecorationSystem.Assets.TableDecoration`
+- 椅子资产长期应放在 `ReplicatedStorage.Systems.DecorationSystem.Assets.Chairs`
 - 如果运行时仍存在 `Workspace.TableDecoration`，服务端启动时会迁移到 `DecorationSystem.Assets.TableDecoration`
 - Desk Setup 商品 id 为字符串 `"1"`–`"4"`（见 `EcoSystem/Presets.lua` 的 `GrowthShopItems.desk`），`TableDecoration` 下子 Model 名与之相同
+- Chair 商品 id 为字符串 `"1"`–`"11"`（见 `EcoSystem/Presets.lua` 的 `GrowthShopItems.chair`），`Chairs` 下子 Model 名与之相同
 - 如果 `Workspace.TableDecoration` 只有一整套模型而不是同名商品子模型，会作为 `Default` 资产供所有 Desk Setup 临时复用
 - 摆放优先读取 `Workspace.CoinFlipTable.Attachments/<SeatId>Decoration`、`<SeatId>DecorationAnchor`、`<SeatId>DeskSetup`，再回退到 `<SeatId>Marker` 或桌面位置
 - 当前 Studio 资源使用 `<SeatId>DecorationAnchor` 作为每个座位的桌搭定位块，位于玩家左前方桌面
+- 当前 Studio 资源使用 `<SeatId>ChairAnchor` 作为每个座位椅子的定位块，位于玩家座位锚点后方
 - 摆放后会按模型实际包围角点沿桌面法线抬升，让桌搭最低点落在 `TableTop` 表面上方一点，避免沉入桌面
 - 缺少精确商品模型但有 `Default` 时不报错；精确外观后续通过补同名子模型覆盖
 
@@ -409,6 +415,7 @@ FlipACoin
 - 处理 `RequestFlip`
 - 按 `GameConfig.FlipACoin` 计算正面概率、奖励、速度
 - 从 `EcoSystem` 读取当前 Coin / Desk Setup 加成，用于修正正面概率和 Cash 倍率
+- 从 `EcoSystem` 读取当前 Coin / Desk Setup / Chair 加成，用于修正正面概率和 Cash 倍率
 - 写入 `runData`
 - 维护首局 `coinFlipOnboarding` 引导状态
 - 累积 `wins / bestStreak / lifetimeFlips / lifetimeHeads / lifetimeCashEarned`
@@ -435,6 +442,7 @@ FlipACoin
 - 重生点复用 `dataKey.fateShards`，UI 文案显示为 Rebirth Points
 - Coin 装配写入 `equippedCoin / ownedCoins`
 - Desk Setup 装配写入 `equippedDeskSetup / ownedDeskSetups`
+- Chair 装配写入 `equippedChair / ownedChairs`
 - 永久重生升级写入 `rebirthTree`
 - 装备 Coin 的外观只用于 flip 中的硬币模型，不新增 idle 常驻桌面硬币
 - 四项升级：
@@ -453,7 +461,7 @@ FlipACoin
 
 当前首发成长配置按职责拆分：
 
-- `EcoSystem/Presets.lua`：首发 Coin / Desk Setup 商品、价格、稀有度 / 角色、Cash 倍率和 luck 加成
+- `EcoSystem/Presets.lua`：首发 Coin / Desk Setup / Chair 商品、价格、稀有度 / 角色、Cash 倍率和 luck 加成
 - `RebirthSystem/Presets.lua`：重生最低 Cash、Cash 到点数换算、单次点数上限、重生后 Cash，以及 `polishedStart / chainStart / quickStart / luckyStart` 四个永久起步升级
 - `EffectSystem/Presets.lua`：桌面硬币飞行、落地、脉冲和上次结果保留表现
 
@@ -719,6 +727,8 @@ FlipACoin
 - `ownedCoins`
 - `equippedDeskSetup`
 - `ownedDeskSetups`
+- `equippedChair`
+- `ownedChairs`
 - `autoFlipUnlocked`
 - `rebirthTree`
 - `runData`
@@ -844,6 +854,7 @@ FlipACoin
 其中：
 
 - `Attachments/<SeatId>Marker` 可作为座位视觉锚点
+- `Attachments/<SeatId>ChairAnchor` 可作为座位椅子锚点
 - 旧座位 Billboard 不再是首发主路径；若需要桌面反馈，应改成低噪音桌面信号
 
 ### 11.2 `Workspace.RankingList`

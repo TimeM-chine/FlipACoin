@@ -9,6 +9,7 @@ local DecorationPresets = require(script.Presets)
 local EcoPresets = require(Replicated.Systems.EcoSystem.Presets)
 local RuntimeFolderName = DecorationPresets.RuntimeFolderName
 local TableDecorationAssetFolderName = DecorationPresets.TableDecorationAssetFolderName
+local ChairAssetFolderName = DecorationPresets.ChairAssetFolderName
 local DefaultTableDecorationAssetName = DecorationPresets.DefaultTableDecorationAssetName
 local WorkspaceTableDecorationName = DecorationPresets.WorkspaceTableDecorationName
 local TableDecorationSurfaceGap = DecorationPresets.TableDecorationSurfaceGap
@@ -114,32 +115,53 @@ function DecorationSystem:RefreshPlayerDecoration(sender, player)
 		return
 	end
 
-	local deskSetupId = playerIns:GetOneData(dataKey.equippedDeskSetup)
-	local assetModel = getDecorationAsset(deskSetupId)
-	if not assetModel then
-		warn(`[DecorationSystem] Missing table decoration model asset for desk setup: {deskSetupId}`)
-		return
-	end
-
 	local runtimeFolder = getRuntimeFolder(assignment.tableModel)
-	local decorationName = `{assignment.rawSeatId}Decoration`
-	local existingDecoration = runtimeFolder:FindFirstChild(decorationName)
-	if existingDecoration then
-		existingDecoration:Destroy()
-	end
-
-	local decorationModel = assetModel:Clone()
-	decorationModel.Name = decorationName
-	prepareDecorationModel(decorationModel)
-	decorationModel:PivotTo(getDecorationCFrame(assignment))
-	settleDecorationOnTable(decorationModel, assignment.tableModel)
-	decorationModel.Parent = runtimeFolder
-
-	self._playerDecorations[player.UserId] = {
-		model = decorationModel,
+	local record = {
+		models = {},
 		rawSeatId = assignment.rawSeatId,
 		tableModel = assignment.tableModel,
 	}
+
+	local deskSetupId = playerIns:GetOneData(dataKey.equippedDeskSetup)
+	local assetModel = getDecorationAsset(deskSetupId)
+	if assetModel then
+		local decorationName = `{assignment.rawSeatId}Decoration`
+		local existingDecoration = runtimeFolder:FindFirstChild(decorationName)
+		if existingDecoration then
+			existingDecoration:Destroy()
+		end
+
+		local decorationModel = assetModel:Clone()
+		decorationModel.Name = decorationName
+		prepareDecorationModel(decorationModel)
+		decorationModel:PivotTo(getDecorationCFrame(assignment))
+		settleDecorationOnTable(decorationModel, assignment.tableModel)
+		decorationModel.Parent = runtimeFolder
+		record.models.decoration = decorationModel
+	else
+		warn(`[DecorationSystem] Missing table decoration model asset for desk setup: {deskSetupId}`)
+	end
+
+	local chairId = playerIns:GetOneData(dataKey.equippedChair)
+	local chairAsset = getChairAsset(chairId)
+	if chairAsset then
+		local chairName = `{assignment.rawSeatId}Chair`
+		local existingChair = runtimeFolder:FindFirstChild(chairName)
+		if existingChair then
+			existingChair:Destroy()
+		end
+
+		local chairModel = chairAsset:Clone()
+		chairModel.Name = chairName
+		prepareDecorationModel(chairModel)
+		chairModel:PivotTo(getChairCFrame(assignment))
+		chairModel.Parent = runtimeFolder
+		record.models.chair = chairModel
+	else
+		warn(`[DecorationSystem] Missing chair model asset for chair: {chairId}`)
+	end
+
+	self._playerDecorations[player.UserId] = record
 end
 
 function DecorationSystem:RefreshAllDecorations(sender)
@@ -172,6 +194,11 @@ function DecorationSystem:ClearPlayerDecoration(sender, player)
 	if record.model and record.model.Parent then
 		record.model:Destroy()
 	end
+	for _, model in pairs(record.models or {}) do
+		if model and model.Parent then
+			model:Destroy()
+		end
+	end
 	self._playerDecorations[player.UserId] = nil
 end
 
@@ -191,6 +218,20 @@ function getDecorationAsset(deskSetupId)
 		or assetFolder:FindFirstChild(WorkspaceTableDecorationName)
 	if defaultAsset and defaultAsset:IsA("Model") then
 		return defaultAsset
+	end
+
+	return nil
+end
+
+function getChairAsset(chairId)
+	if typeof(chairId) ~= "string" then
+		return nil
+	end
+
+	local assetFolder = getChairAssetFolder()
+	local asset = assetFolder:FindFirstChild(chairId)
+	if asset and asset:IsA("Model") then
+		return asset
 	end
 
 	return nil
@@ -242,6 +283,17 @@ function getDecorationCFrame(assignment)
 	return CFrame.lookAt(position, position - outward, tableNormal)
 end
 
+function getChairCFrame(assignment)
+	local tableModel = assignment.tableModel
+	local rawSeatId = assignment.rawSeatId
+	local anchor = findChairAnchor(tableModel, rawSeatId)
+	if anchor then
+		return getAnchorCFrame(anchor)
+	end
+
+	return assignment.seat.CFrame * CFrame.new(0, -2.28, 0.51)
+end
+
 function findDecorationAnchor(tableModel, rawSeatId)
 	local attachmentsFolder = tableModel:FindFirstChild("Attachments")
 	if not attachmentsFolder then
@@ -253,6 +305,30 @@ function findDecorationAnchor(tableModel, rawSeatId)
 		`{rawSeatId}DecorationAnchor`,
 		`{rawSeatId}DeskSetup`,
 		`{rawSeatId}Marker`,
+	}
+
+	for _, candidateName in ipairs(candidateNames) do
+		local candidate = attachmentsFolder:FindFirstChild(candidateName)
+		if candidate then
+			local attachment = candidate:IsA("Attachment") and candidate
+				or candidate:FindFirstChildWhichIsA("Attachment")
+			return attachment or candidate
+		end
+	end
+
+	return nil
+end
+
+function findChairAnchor(tableModel, rawSeatId)
+	local attachmentsFolder = tableModel:FindFirstChild("Attachments")
+	if not attachmentsFolder then
+		return nil
+	end
+
+	local candidateNames = {
+		`{rawSeatId}Chair`,
+		`{rawSeatId}ChairAnchor`,
+		`{rawSeatId}Seat`,
 	}
 
 	for _, candidateName in ipairs(candidateNames) do
@@ -365,6 +441,10 @@ end
 
 function getTableDecorationAssetFolder()
 	return script.Assets:WaitForChild(TableDecorationAssetFolderName)
+end
+
+function getChairAssetFolder()
+	return script.Assets:WaitForChild(ChairAssetFolderName)
 end
 
 function migrateWorkspaceTableDecoration()
