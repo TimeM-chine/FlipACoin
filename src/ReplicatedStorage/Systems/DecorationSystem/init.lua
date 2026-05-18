@@ -2,6 +2,7 @@
 local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 ---- requires ----
@@ -31,6 +32,7 @@ local DecorationSystem: Types.System = {
 		"RefreshPlayerDecoration",
 		"RefreshAllDecorations",
 		"ClearPlayerDecoration",
+		"TweenAllDecorations",
 	},
 	players = {},
 	IsLoaded = false,
@@ -135,7 +137,7 @@ function DecorationSystem:RefreshPlayerDecoration(sender, player)
 		decorationModel.Name = decorationName
 		prepareDecorationModel(decorationModel)
 		decorationModel:PivotTo(getDecorationCFrame(assignment))
-		settleDecorationOnTable(decorationModel, assignment.tableModel)
+		decorationModel:PivotTo(getSettledDecorationCFrame(decorationModel, decorationModel:GetPivot(), assignment.tableModel))
 		decorationModel.Parent = runtimeFolder
 		record.models.decoration = decorationModel
 	else
@@ -174,6 +176,40 @@ function DecorationSystem:RefreshAllDecorations(sender)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		self:RefreshPlayerDecoration(SENDER, player)
+	end
+end
+
+function DecorationSystem:TweenAllDecorations(sender)
+	if not IsServer then
+		return
+	end
+	if sender ~= SENDER then
+		return
+	end
+
+	self._playerDecorations = self._playerDecorations or {}
+	for userId, record in pairs(self._playerDecorations) do
+		local player = Players:GetPlayerByUserId(userId)
+		if not player or not player:IsDescendantOf(Players) then
+			continue
+		end
+
+		local assignment = GetSystemMgr().systems.TableSeatSystem:GetPlayerSeatAssignment(player)
+		if not assignment then
+			continue
+		end
+
+		record.rawSeatId = assignment.rawSeatId
+		record.tableModel = assignment.tableModel
+		if record.models and record.models.decoration then
+			tweenModelPivot(
+				record.models.decoration,
+				getSettledDecorationCFrame(record.models.decoration, getDecorationCFrame(assignment), assignment.tableModel)
+			)
+		end
+		if record.models and record.models.chair then
+			tweenModelPivot(record.models.chair, getChairCFrame(assignment))
+		end
 	end
 end
 
@@ -256,6 +292,11 @@ function getRuntimeFolder(tableModel)
 end
 
 function getDecorationCFrame(assignment)
+	local dynamicSeatCFrame = getDynamicSeatCFrame(assignment)
+	if dynamicSeatCFrame then
+		return getDynamicDecorationCFrame(assignment, dynamicSeatCFrame)
+	end
+
 	local tableModel = assignment.tableModel
 	local rawSeatId = assignment.rawSeatId
 	local anchor = findDecorationAnchor(tableModel, rawSeatId)
@@ -284,6 +325,11 @@ function getDecorationCFrame(assignment)
 end
 
 function getChairCFrame(assignment)
+	local dynamicSeatCFrame = getDynamicSeatCFrame(assignment)
+	if dynamicSeatCFrame then
+		return dynamicSeatCFrame * CFrame.new(0, -2.28, 0.51)
+	end
+
 	local tableModel = assignment.tableModel
 	local rawSeatId = assignment.rawSeatId
 	local anchor = findChairAnchor(tableModel, rawSeatId)
@@ -292,6 +338,40 @@ function getChairCFrame(assignment)
 	end
 
 	return assignment.seat.CFrame * CFrame.new(0, -2.28, 0.51)
+end
+
+function getDynamicSeatCFrame(assignment)
+	return GetSystemMgr().systems.TableSeatSystem:GetSeatTargetCFrame(assignment.seatId)
+end
+
+function getDynamicDecorationCFrame(assignment, seatCFrame)
+	local tableTop = assignment.tableModel:FindFirstChild("TableTop")
+	if not tableTop then
+		return seatCFrame
+	end
+
+	local tableNormal, halfThickness = getTableSurfaceData(tableTop)
+	local surfaceCenter = tableTop.Position + tableNormal * halfThickness
+	local inward = seatCFrame.LookVector - tableNormal * seatCFrame.LookVector:Dot(tableNormal)
+	if inward.Magnitude < 0.001 then
+		inward = (surfaceCenter - seatCFrame.Position) - tableNormal * (surfaceCenter - seatCFrame.Position):Dot(tableNormal)
+	end
+	if inward.Magnitude < 0.001 then
+		inward = tableTop.CFrame.LookVector
+	else
+		inward = inward.Unit
+	end
+	local right = seatCFrame.RightVector - tableNormal * seatCFrame.RightVector:Dot(tableNormal)
+	if right.Magnitude < 0.001 then
+		right = inward:Cross(tableNormal).Unit
+	else
+		right = right.Unit
+	end
+
+	local rawPosition = seatCFrame.Position + inward * 2.25 - right * 0.85
+	local surfacePosition = rawPosition - tableNormal * (rawPosition - surfaceCenter):Dot(tableNormal)
+	local position = surfacePosition + tableNormal * 0.03
+	return CFrame.lookAt(position, position - inward, tableNormal)
 end
 
 function findDecorationAnchor(tableModel, rawSeatId)
@@ -395,18 +475,51 @@ function prepareDecorationModel(decorationModel)
 end
 
 function settleDecorationOnTable(decorationModel, tableModel)
+	decorationModel:PivotTo(getSettledDecorationCFrame(decorationModel, decorationModel:GetPivot(), tableModel))
+end
+
+function getSettledDecorationCFrame(decorationModel, targetCFrame, tableModel)
 	local tableTop = tableModel:FindFirstChild("TableTop")
 	if not tableTop then
-		return
+		return targetCFrame
 	end
 
 	local tableNormal, halfThickness = getTableSurfaceData(tableTop)
 	local surfaceCenter = tableTop.Position + tableNormal * halfThickness
-	local pivot = decorationModel:GetPivot()
-	local surfaceAtPivot = pivot.Position - tableNormal * (pivot.Position - surfaceCenter):Dot(tableNormal)
-	local lift = getDecorationSurfaceLift(decorationModel, pivot, tableNormal) + TableDecorationSurfaceGap
+	local surfaceAtPivot = targetCFrame.Position - tableNormal * (targetCFrame.Position - surfaceCenter):Dot(tableNormal)
+	local lift = getDecorationSurfaceLift(decorationModel, targetCFrame, tableNormal) + TableDecorationSurfaceGap
 	local correctedPosition = surfaceAtPivot + tableNormal * lift
-	decorationModel:PivotTo(pivot + (correctedPosition - pivot.Position))
+	return targetCFrame + (correctedPosition - targetCFrame.Position)
+end
+
+function tweenModelPivot(model, targetCFrame)
+	if not model or not model.Parent then
+		return
+	end
+
+	local cframeValue = Instance.new("CFrameValue")
+	cframeValue.Value = model:GetPivot()
+	local connection = cframeValue:GetPropertyChangedSignal("Value"):Connect(function()
+		if model.Parent then
+			model:PivotTo(cframeValue.Value)
+		end
+	end)
+
+	local tween = TweenService:Create(
+		cframeValue,
+		TweenInfo.new(DecorationPresets.LayoutTweenDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			Value = targetCFrame,
+		}
+	)
+	tween:Play()
+	tween.Completed:Once(function()
+		connection:Disconnect()
+		cframeValue:Destroy()
+		if model.Parent then
+			model:PivotTo(targetCFrame)
+		end
+	end)
 end
 
 function getDecorationSurfaceLift(decorationModel, modelCFrame, normal)

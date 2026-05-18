@@ -1,6 +1,6 @@
 # TASK_STATE
 
-最后更新：2026-05-18
+最后更新：2026-05-19
 
 > 目的：记录当前正在做什么、下一步是什么、关键决策、待验证项与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`；不要把本文件变成长篇历史日志。
 
@@ -30,12 +30,13 @@
 - Shop / Inventory 小按钮采用固定字号 Bold 文本；短状态标签优先于挤压长文案。
 - Inventory 装备从 item card 立即生效；除非新增 staged-loadout 流程，否则独立 Apply 按钮保持隐藏。
 - 运行态 Rebirth / Shop / Inventory 入口使用 TopbarPlus 顶栏按钮；`CoinFlipMenu` 只保留为旧绑定兼容节点，玩法态不再显示。
-- Growth panels 保持 Studio-authored 结构但由运行时代码统一套黑底大面板布局；当前游戏不支持 mobile，不再做 mobile-only runtime reposition。
+- Growth panels 保持 Studio-authored 结构但由运行时代码统一套黑底大面板布局；当前游戏具备基础触屏支持，但移动端布局、提示、安全区和实机观感仍需专项收敛。
 - `Main.Frames.noUse` 下的 legacy 透明 UI 保持不可交互，避免抢 Rebirth / Shop / Inventory hit test。
 - 复杂客户端视觉、多客户端、移动端设备或 Studio-only 观感验证交由用户手动确认；Codex 只记录可自动覆盖的源码 / 单客户端 sanity 和用户回传结果。
 
 ## Known Follow-Ups
 
+- Studio / device QA：按 `docs/ROBLOX_PLATFORM_IMPROVEMENT.md` 覆盖手机 portrait / landscape、平板、桌面键鼠、手柄和双客户端同桌，确认 HUD 响应式布局、安全区、growth panels、Topbar 入口与装扮刷新。
 - Studio Play：确认 `coin1` through `coin9` 资产能按装备显示，新档默认 `Coin1`，旧 Coin id 存档能 reconcile 到 `coin1`。
 - Studio Play：确认启动后 HUD 从 `Seat --` 切到分配座位并保持稳定，立刻点击 `FLIP` 不会被客户端旧 seat state 错拦。
 - Studio Play：确认不同 Coin 自己/他人 flip 视觉正常，落点在桌面上方，不沉入桌面。
@@ -45,11 +46,53 @@
 
 ## Backlog / Ideas
 
+- `P0` 移动端首发剩余收敛：安全区、growth panels、Topbar 入口和真实设备观感 QA。
+- `P1` 同桌弱社交补强：他人 flip pulse、streak 小高光、全桌 milestone 轻反馈。
 - `P2` 首发成长补强：少量每日目标、Profile XP。
 - `P3` 首发表现与运营：庆祝 VFX / SFX、桌面轻表情 / cheer、基础 gamepass、核心埋点。
 - 可评估极简决策点：高 streak 后出现 `Cash Out` / `Double` / bonus choice，但不要破坏“一键 Flip”的主循环。
 
 ## Done
+
+### 2026-05-19 In-flight random coin spin
+
+- Outcome: `EffectSystem` now decides the random tabletop yaw at flip start, applies extra randomized yaw turns while the coin is airborne, and blends the final descent into the exact flat Heads / Tails rest orientation so the coin no longer visibly rotates after it has landed.
+- Validation: `git diff --check` passed; Studio MCP / Play validation intentionally skipped per user request, with final visual feel left for manual Studio review.
+
+### 2026-05-19 Random coin landing yaw
+
+- Outcome: `EffectSystem` now applies a random tabletop yaw around the table surface normal whenever a coin settles, stores that yaw with the persistent coin visual, and reuses it for idle refresh / delayed coin replacement so the coin stays flat while keeping its landed Heads / Tails face.
+- Validation: `git diff --check` passed; Studio Play single-client sanity confirmed HUD stayed visible, coin remained about `0.01` studs above `TableTop`, and consecutive flips changed the coin's tabletop orientation; `stylua --check src/ReplicatedStorage/Systems/EffectSystem/init.lua` could not run because Aftman has no `stylua` entry in repo/user `aftman.toml`.
+
+### 2026-05-18 Coin result persistence and HUD visibility
+
+- Outcome: `CoinFlipSystem` now sends delayed post-join run-state resyncs so the HUD recovers after auto-seat timing races; `CoinFlipSystem/ui.lua` keeps the gameplay HUD visible during flip and only disables repeat flip input; `EffectSystem` stores each persistent coin visual's last result so Tails / Heads survives seat refreshes, idle re-placement, and delayed coin replacement.
+- Validation: `git diff --check` passed; Studio Play after restart confirmed HUD visible after auto-seat (`Click FLIP`, left/right panels and Flip button visible), equipped coin exists as a Model with `PrimaryPart = coin`, a Tails result kept identical coin orientation after a 1 second refresh wait, and the landed coin stayed about `0.01` studs above `TableTop`; `stylua --check` could not run because Aftman has no `stylua` entry in repo/user `aftman.toml`.
+
+### 2026-05-18 Coin PrimaryPart landing correction
+
+- Outcome: `EffectSystem` now treats equipped coin Model `PrimaryPart` as the coin focus for camera follow, keeps fallback coin movement only for fallback tracking, resolves landed height from one `TableTop` raycast plus one bounds lift, and moves dynamic landing radius from `4.4` to `5.4` so the player's coin sits closer on the table; synchronized `PROJECT_LOGIC.md`.
+- Validation: `git diff --check` passed; Studio MCP confirmed all 10 `CoinFlipSystem.Assets.Coins` Models have `PrimaryPart`; Studio Play single-client sanity confirmed `Seat01` equipped coin Model uses `PrimaryPart = coin` and rests/lands with about `0.01` studs gap above `TableTop`; `stylua --check` could not run because Aftman has no `stylua` entry in repo/user `aftman.toml`; local `selene` / `luau` commands were unavailable; multi-client visual QA remains user-side.
+
+### 2026-05-18 Mobile growth panel safe-area code pass
+
+- Outcome: `uiController.OpenFrame()` 会在触屏移动端对现有 `Shop / Inventory / Rebirth` Frame 套用 viewport / Core UI inset 感知的 Scale 布局，打开面板和 viewport 变化时都会刷新；未新增运行时 editable prefab 或并行 UI 系统；同步更新 `PROJECT_LOGIC.md` 和 `ROBLOX_PLATFORM_IMPROVEMENT.md`。
+- Validation: `git diff --check` 通过；`stylua --check src/StarterGui/Main/uiController.lua` 因 Aftman 未在仓库 `aftman.toml` 列出 stylua 被拒绝运行；本机未发现 `selene` / `luau` 可执行命令；Roblox Studio MCP 未发现打开的 Studio 实例，未做 Studio Play / 真机 / 多客户端 QA。
+
+### 2026-05-18 Dynamic table seating and persistent coin visuals
+
+- Outcome: `TableSeatSystem` 按当前活跃入座人数计算 `360 / n` 圆环座位目标并 tween 座位；`DecorationSystem` 会把现有桌搭 / 椅子 tween 到动态座位推导出的目标位；`CoinFlipSystem/ui.lua` 在 `Auto:On` 时不再请求相机跟随；`EffectSystem` 改为每座位维护一个持久 coin visual，idle 留在桌面、flip 垂直抛起落回同一落点，换装在 flip 中会延后到落地后替换；同步更新 `PROJECT_LOGIC.md`。
+- Validation: `git diff --check` 通过；`stylua --check` 因 Aftman 未在仓库 `aftman.toml` 列出 stylua 被拒绝运行；本机未发现 `selene` 可执行命令；Roblox Studio MCP 未发现打开的 Studio 实例，未做 Play / 多客户端 / 设备观感验证。
+
+### 2026-05-18 Mobile HUD P0 code pass
+
+- Outcome: `CoinFlipSystem/ui.lua` 已接入 `Presets.UiLayout` 的 mobile HUD 参数；触屏且 viewport 命中移动端 profile 时会用 Scale 调整 `CoinFlipHUD` 尺寸 / 位置，监听 camera viewport 变化刷新布局，触屏端隐藏 keyboard / gamepad 输入提示，ready 文案改为 `Tap FLIP`，手机 portrait 下折叠 Chance / Speed 状态以优先保留主操作、Auto、Cash、Streak 和升级入口；同步更新 `PROJECT_LOGIC.md` 的移动端现状。
+- Validation: `git diff --check` 通过；`stylua --check src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua` 因 Aftman 未在仓库 `aftman.toml` 列出 stylua 被拒绝运行；Studio 未开启，未做 Play / device QA。
+
+### 2026-05-18 Roblox platform and mobile improvement plan
+
+- Outcome: 新增 `docs/ROBLOX_PLATFORM_IMPROVEMENT.md`，记录当前 Roblox 平台匹配度、移动端就绪评分、证据、P0/P1/P2 改进项、落地顺序和实机 QA 清单；同步修正 `TASK_STATE.md` 中过时的 mobile 口径，明确当前是“基础触屏可玩，但移动端布局、提示、安全区和实机观感仍需专项收敛”。
+- Validation: 文档层检查完成；未改 Luau 源码或 Studio 资产，未运行 Play / Rojo 验证。
 
 ### 2026-05-18 Chair replacement loadout
 

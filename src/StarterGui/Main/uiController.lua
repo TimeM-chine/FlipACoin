@@ -36,6 +36,14 @@ local coolDown = false
 local coolDownTime = 0.2
 local guideButton = nil
 local guideFrame = nil
+local responsiveGrowthFrameLayouts = {}
+local responsiveGrowthFrameBound = false
+local responsiveViewportConnection
+local GrowthFrameNames = {
+	Shop = true,
+	Inventory = true,
+	Rebirth = true,
+}
 
 local Main = PlayerGui:WaitForChild("Main")
 local Frames = Main:WaitForChild("Frames")
@@ -81,6 +89,112 @@ local function refreshNotificationLifetime(entry, duration)
 		if entry.unit and entry.unit.Parent then
 			entry.unit:Destroy()
 		end
+	end)
+end
+
+local function getViewportSize()
+	local camera = workspace.CurrentCamera
+	if camera then
+		return camera.ViewportSize
+	end
+
+	return Vector2.new(1280, 720)
+end
+
+local function captureGrowthFrameLayout(frame)
+	if responsiveGrowthFrameLayouts[frame] then
+		return
+	end
+
+	responsiveGrowthFrameLayouts[frame] = {
+		AnchorPoint = frame.AnchorPoint,
+		Position = frame.Position,
+		Size = frame.Size,
+	}
+end
+
+local function restoreGrowthFrameLayout(frame)
+	local layout = responsiveGrowthFrameLayouts[frame]
+	if not layout then
+		return
+	end
+
+	frame.AnchorPoint = layout.AnchorPoint
+	frame.Position = layout.Position
+	frame.Size = layout.Size
+end
+
+local function resolveMobileGrowthFrameLayout()
+	local viewportSize = getViewportSize()
+	local aspectRatio = viewportSize.X / viewportSize.Y
+	local isMobile = UserInputService.TouchEnabled and (viewportSize.X <= 980 or aspectRatio <= 1.55)
+	if not isMobile then
+		return nil
+	end
+
+	local isPortrait = viewportSize.Y >= viewportSize.X
+	local topInset, bottomInset = GuiService:GetGuiInset()
+	local horizontalPadding = isPortrait and 18 or 28
+	local topPadding = topInset.Y + 14
+	local bottomPadding = bottomInset.Y + 18
+	local availableWidthScale = math.clamp((viewportSize.X - horizontalPadding * 2) / viewportSize.X, 0.68, 0.94)
+	local availableHeightScale = math.clamp((viewportSize.Y - topPadding - bottomPadding) / viewportSize.Y, 0.58, 0.88)
+	local maxWidthScale = isPortrait and 0.94 or 0.82
+	local maxHeightScale = isPortrait and 0.86 or 0.8
+	local centerY = math.clamp((topPadding + (viewportSize.Y - topPadding - bottomPadding) * 0.5) / viewportSize.Y, 0.46, 0.56)
+
+	return {
+		Position = UDim2.fromScale(0.5, centerY),
+		Size = UDim2.fromScale(math.min(availableWidthScale, maxWidthScale), math.min(availableHeightScale, maxHeightScale)),
+	}
+end
+
+local function applyResponsiveGrowthFrameLayout(frame)
+	if not frame or not frame:IsA("GuiObject") or not GrowthFrameNames[frame.Name] then
+		return
+	end
+
+	captureGrowthFrameLayout(frame)
+	local layout = resolveMobileGrowthFrameLayout()
+	if not layout then
+		restoreGrowthFrameLayout(frame)
+		return
+	end
+
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = layout.Position
+	frame.Size = layout.Size
+end
+
+local function refreshResponsiveGrowthFrameLayout()
+	if frameCache then
+		applyResponsiveGrowthFrameLayout(frameCache)
+	end
+end
+
+local function bindResponsiveGrowthFrameLayout()
+	if responsiveGrowthFrameBound then
+		return
+	end
+
+	responsiveGrowthFrameBound = true
+	local camera = workspace.CurrentCamera
+	if camera then
+		responsiveViewportConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(refreshResponsiveGrowthFrameLayout)
+	end
+
+	workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+		if responsiveViewportConnection then
+			responsiveViewportConnection:Disconnect()
+			responsiveViewportConnection = nil
+		end
+
+		local currentCamera = workspace.CurrentCamera
+		if currentCamera then
+			responsiveViewportConnection =
+				currentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(refreshResponsiveGrowthFrameLayout)
+		end
+		refreshResponsiveGrowthFrameLayout()
 	end)
 end
 
@@ -137,6 +251,8 @@ function controller.OpenFrame(name)
 		frameCache.Visible = false
 	end
 	frameCache = frame
+	applyResponsiveGrowthFrameLayout(frame)
+	bindResponsiveGrowthFrameLayout()
 	MaskFrame.ZIndex = 0
 	MaskFrame.BackgroundTransparency = 0.48
 	MaskFrame.Visible = true

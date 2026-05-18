@@ -1,4 +1,5 @@
 ---- services ----
+local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -244,6 +245,13 @@ function CoinFlipSystem:PlayerAdded(sender, player, args)
 		self.Client:PlayerAdded(player, {
 			state = buildClientState(player),
 		})
+		for _, delaySeconds in ipairs({ 0.5, 1.5, 3 }) do
+			task.delay(delaySeconds, function()
+				if player:IsDescendantOf(Players) then
+					syncPlayerState(self, player)
+				end
+			end)
+		end
 	else
 		local pendingCalls = CoinFlipUi.pendingCalls
 

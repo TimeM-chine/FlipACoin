@@ -2,6 +2,7 @@
 local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 ---- requires ----
@@ -47,6 +48,7 @@ local TableSeatSystem: Types.System = {
 		"RegisterActivity",
 		"GetClientSeatState",
 		"GetAudiencePlayers",
+		"GetSeatTargetCFrame",
 	},
 	players = {},
 	tasks = {},
@@ -103,6 +105,166 @@ end
 local function getTableSortPosition(tableModel)
 	local anchor = tableModel.PrimaryPart or tableModel:FindFirstChildWhichIsA("BasePart", true)
 	return anchor and anchor.Position or Vector3.zero
+end
+
+local function getTableSurfaceData(tableModel)
+	local tableTop = tableModel and tableModel:FindFirstChild("TableTop")
+	if tableTop and tableTop:IsA("BasePart") then
+		local axisRecords = {
+			{
+				size = tableTop.Size.X,
+				normal = tableTop.CFrame.RightVector,
+			},
+			{
+				size = tableTop.Size.Y,
+				normal = tableTop.CFrame.UpVector,
+			},
+			{
+				size = tableTop.Size.Z,
+				normal = -tableTop.CFrame.LookVector,
+			},
+		}
+
+		table.sort(axisRecords, function(a, b)
+			return a.size < b.size
+		end)
+
+		local normal = axisRecords[1].normal
+		if normal:Dot(Vector3.yAxis) < 0 then
+			normal = -normal
+		end
+
+		return tableTop.Position + normal * axisRecords[1].size * 0.5, normal
+	end
+
+	local pivot = tableModel and tableModel:GetPivot() or CFrame.new()
+	return pivot.Position, Vector3.yAxis
+end
+
+local function getPlanarDirection(position, center, normal)
+	local direction = position - center
+	direction = direction - normal * direction:Dot(normal)
+	if direction.Magnitude < 0.001 then
+		return nil
+	end
+
+	return direction.Unit
+end
+
+local function rotateAroundNormal(vector, normal, angle)
+	return CFrame.fromAxisAngle(normal, angle):VectorToWorldSpace(vector)
+end
+
+local function cframesAreClose(cframeA, cframeB)
+	return (cframeA.Position - cframeB.Position).Magnitude < 0.02 and cframeA.LookVector:Dot(cframeB.LookVector) > 0.999
+end
+
+local function getSeatTargetCFrame(self, seatKey)
+	local seatRecord = getSeatRecord(self, seatKey)
+	if not seatRecord then
+		return nil
+	end
+
+	local layoutTargets = self._seatLayoutTargets
+	return layoutTargets and layoutTargets[seatKey] or seatRecord.seat.CFrame
+end
+
+local function applyDynamicSeatLayout(self)
+	if not IsServer then
+		return false
+	end
+
+	self:_EnsureSeatCatalog()
+
+	local activeSeatKeys = {}
+	for _, seatKey in ipairs(self._seatOrder or {}) do
+		local occupant = self._seatOwners[seatKey]
+		if occupant and occupant:IsDescendantOf(Players) then
+			table.insert(activeSeatKeys, seatKey)
+		end
+	end
+
+	local layoutTargets = {}
+	local changed = false
+	self._seatTweens = self._seatTweens or {}
+
+	if #activeSeatKeys > 0 then
+		local firstRecord = getSeatRecord(self, activeSeatKeys[1])
+		local surfaceCenter, tableNormal = getTableSurfaceData(firstRecord.tableModel)
+		local totalRadius = 0
+		local radiusCount = 0
+		local seatHeight = Presets.DynamicLayoutFallbackSeatHeight
+		local firstDirection
+
+		for _, seatKey in ipairs(activeSeatKeys) do
+			local seatRecord = getSeatRecord(self, seatKey)
+			local homeCFrame = seatRecord.homeCFrame or seatRecord.seat.CFrame
+			local direction = getPlanarDirection(homeCFrame.Position, surfaceCenter, tableNormal)
+			if direction then
+				totalRadius += (homeCFrame.Position - surfaceCenter - tableNormal * (homeCFrame.Position - surfaceCenter):Dot(tableNormal)).Magnitude
+				radiusCount += 1
+				firstDirection = firstDirection or direction
+			end
+			seatHeight = (homeCFrame.Position - surfaceCenter):Dot(tableNormal)
+		end
+
+		local radius = radiusCount > 0 and totalRadius / radiusCount or Presets.DynamicLayoutFallbackRadius
+		firstDirection = firstDirection or Vector3.xAxis
+
+		for index, seatKey in ipairs(activeSeatKeys) do
+			local direction = rotateAroundNormal(firstDirection, tableNormal, ((index - 1) / #activeSeatKeys) * math.pi * 2)
+			local position = surfaceCenter + direction * radius + tableNormal * seatHeight
+			local targetCFrame = CFrame.lookAt(position, surfaceCenter, tableNormal)
+			layoutTargets[seatKey] = targetCFrame
+
+			local seatRecord = getSeatRecord(self, seatKey)
+			if not cframesAreClose(seatRecord.seat.CFrame, targetCFrame) then
+				changed = true
+				local existingTween = self._seatTweens[seatKey]
+				if existingTween then
+					existingTween:Cancel()
+				end
+
+				local tween = TweenService:Create(
+					seatRecord.seat,
+					TweenInfo.new(Presets.DynamicLayoutTweenDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+					{
+						CFrame = targetCFrame,
+					}
+				)
+				self._seatTweens[seatKey] = tween
+				tween:Play()
+				tween.Completed:Once(function()
+					if self._seatTweens and self._seatTweens[seatKey] == tween then
+						self._seatTweens[seatKey] = nil
+					end
+				end)
+			end
+		end
+	end
+
+	for seatKey, previousTarget in pairs(self._seatLayoutTargets or {}) do
+		if not layoutTargets[seatKey] then
+			changed = true
+		elseif not cframesAreClose(previousTarget, layoutTargets[seatKey]) then
+			changed = true
+		end
+	end
+	for seatKey in pairs(layoutTargets) do
+		if not (self._seatLayoutTargets and self._seatLayoutTargets[seatKey]) then
+			changed = true
+		end
+	end
+
+	self._seatLayoutTargets = layoutTargets
+	return changed
+end
+
+local function tweenDecorationsToSeatLayout()
+	local decorationSystem = GetSystemMgr().systems.DecorationSystem
+	if decorationSystem then
+		decorationSystem:TweenAllDecorations(SENDER)
+	end
 end
 
 local function buildSeatState(self, player)
@@ -233,6 +395,10 @@ end
 
 local function broadcastSeatStates(self)
 	local systemMgr = GetSystemMgr()
+	local layoutChanged = applyDynamicSeatLayout(self)
+	if layoutChanged then
+		tweenDecorationsToSeatLayout()
+	end
 
 	disableSeatBillboards(self)
 
@@ -401,6 +567,7 @@ function TableSeatSystem:_EnsureSeatCatalog()
 			self._seats[seatKey].displaySeatId = displaySeatId
 			self._seats[seatKey].rawSeatId = rawSeatId
 			self._seats[seatKey].tableModel = tableModel
+			self._seats[seatKey].homeCFrame = self._seats[seatKey].homeCFrame or seat.CFrame
 			refreshPromptAttributes(self, seatKey)
 
 			if not IsServer then
@@ -671,6 +838,7 @@ function TableSeatSystem:_BuildSeatDisplayEntry(seatKey, occupant)
 	entry.userId = occupant.UserId
 	entry.displayName = occupant.DisplayName
 	entry.coinName = equippedCoinName
+	entry.equippedCoin = equippedCoin
 	entry.streak = streak
 	entry.cash = cash
 	entry.cashText = `$ {Util.FormatNumber(cash, true)}`
@@ -759,6 +927,12 @@ function TableSeatSystem:GetSeatRecordByDisplayId(displaySeatId)
 	self:_EnsureSeatCatalog()
 	local seatKey = resolveSeatKey(self, displaySeatId)
 	return getSeatRecord(self, seatKey)
+end
+
+function TableSeatSystem:GetSeatTargetCFrame(displaySeatId)
+	self:_EnsureSeatCatalog()
+	local seatKey = resolveSeatKey(self, displaySeatId)
+	return seatKey and getSeatTargetCFrame(self, seatKey) or nil
 end
 
 function TableSeatSystem:GetTablePlayers(seatId)

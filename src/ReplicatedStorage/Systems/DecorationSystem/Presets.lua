@@ -6,5 +6,6 @@ Presets.ChairAssetFolderName = "Chairs"
 Presets.DefaultTableDecorationAssetName = "Default"
 Presets.WorkspaceTableDecorationName = "TableDecoration"
 Presets.TableDecorationSurfaceGap = 0.03
+Presets.LayoutTweenDuration = 0.45
 
 return Presets

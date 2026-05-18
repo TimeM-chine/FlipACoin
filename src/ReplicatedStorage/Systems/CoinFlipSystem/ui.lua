@@ -111,6 +111,9 @@ local UpgradeTitles = {
 local CoinFlipUi = {}
 local initialized = false
 local flipInputBound = false
+local responsiveLayoutBound = false
+local viewportSizeConnection
+local cameraChangedConnection
 local currentSeatId
 local currentFlipInterval = 1.8
 local localFlipCooldownEndsAt = 0
@@ -121,6 +124,7 @@ local defaultResultTextTransparency = ResultLabel.TextTransparency
 local defaultResultStrokeTransparency = ResultLabel.TextStrokeTransparency
 local currentSeatState
 local currentFlipInProgress = false
+local currentLayoutIsMobilePortrait = false
 local autoFlipEnabled = false
 local autoFlipToken = 0
 local currentRunSnapshot = {
@@ -198,6 +202,88 @@ local function playSfx(soundName)
 	sound:Play()
 end
 
+local function getReadyPrompt()
+	return UserInputService.TouchEnabled and "Tap FLIP" or "Click FLIP"
+end
+
+local function getViewportSize()
+	local camera = Workspace.CurrentCamera
+	if camera then
+		return camera.ViewportSize
+	end
+
+	return Vector2.new(1280, 720)
+end
+
+local function resolveHudSizeScale(baseSize, minSize, maxSize, viewportSize)
+	local targetWidth = viewportSize.X * baseSize.X
+	local targetHeight = viewportSize.Y * baseSize.Y
+
+	if minSize then
+		targetWidth = math.max(targetWidth, minSize.X)
+		targetHeight = math.max(targetHeight, minSize.Y)
+	end
+	if maxSize then
+		targetWidth = math.min(targetWidth, maxSize.X)
+		targetHeight = math.min(targetHeight, maxSize.Y)
+	end
+
+	return Vector2.new(
+		math.clamp(targetWidth / viewportSize.X, 0, 1),
+		math.clamp(targetHeight / viewportSize.Y, 0, 1)
+	)
+end
+
+local function resolveHudLayoutProfile()
+	local layout = Presets.UiLayout
+	local hudLayout = layout.Hud
+	local viewportSize = getViewportSize()
+	local aspectRatio = viewportSize.X / viewportSize.Y
+	local isMobile = UserInputService.TouchEnabled
+		and (viewportSize.X <= layout.MobileMaxWidth or aspectRatio <= layout.MobileMaxAspect)
+
+	if not isMobile then
+		local size = hudLayout.DesktopSize
+		if viewportSize.X <= layout.NarrowWidth then
+			size = hudLayout.NarrowSize
+		end
+
+		return {
+			size = size,
+			y = hudLayout.DesktopY,
+			viewportSize = viewportSize,
+			isMobilePortrait = false,
+		}
+	end
+
+	local isPortrait = viewportSize.Y >= viewportSize.X
+	local size = hudLayout.MobileLandscapeSize
+	local y = hudLayout.MobileLandscapeY
+	if isPortrait then
+		size = hudLayout.MobilePortraitSize
+		y = hudLayout.MobilePortraitY
+	end
+
+	return {
+		size = size,
+		y = y,
+		minSize = hudLayout.MobileMinSize,
+		maxSize = hudLayout.MobileMaxSize,
+		viewportSize = viewportSize,
+		isMobilePortrait = isPortrait,
+	}
+end
+
+local function applyHudLayout()
+	local profile = resolveHudLayoutProfile()
+	local sizeScale = resolveHudSizeScale(profile.size, profile.minSize, profile.maxSize, profile.viewportSize)
+
+	currentLayoutIsMobilePortrait = profile.isMobilePortrait
+	Hud.AnchorPoint = Vector2.new(0.5, 1)
+	Hud.Position = UDim2.fromScale(0.5, profile.y)
+	Hud.Size = UDim2.fromScale(sizeScale.X, sizeScale.Y)
+end
+
 local function hideOnboardingPanel()
 	uiController.SetGuideButton(nil)
 
@@ -245,19 +331,21 @@ end
 
 local function applyGameplayVisibility(isVisible)
 	local showHud = isVisible == true and not isGrowthFrameOpen()
-	local showInteractiveHud = showHud and not currentFlipInProgress
+	local canRequestFlip = showHud and not currentFlipInProgress and not awaitingFlipResponse
 
 	Hud.Visible = showHud
 	CoinFlipMenu.Visible = false
-	LeftPanel.Visible = showInteractiveHud
-	RightPanel.Visible = showInteractiveHud
+	LeftPanel.Visible = showHud
+	RightPanel.Visible = showHud
+	RightStatsFrame.Visible = showHud and not currentLayoutIsMobilePortrait
+	UpgradeButtons.Visible = showHud
 	CenterPanel.Visible = showHud
-	SeatLabel.Visible = showInteractiveHud
-	InputHints.Visible = showInteractiveHud
+	SeatLabel.Visible = showHud
+	InputHints.Visible = canRequestFlip and not UserInputService.TouchEnabled
 	ResultLabel.Visible = showHud
-	FlipButton.Visible = showInteractiveHud
-	FlipButton.Active = showInteractiveHud
-	FlipButton.AutoButtonColor = showInteractiveHud
+	FlipButton.Visible = showHud
+	FlipButton.Active = canRequestFlip
+	FlipButton.AutoButtonColor = canRequestFlip
 	AutoButton.Visible = showHud
 	AutoButton.Active = showHud
 	AutoButton.AutoButtonColor = showHud
@@ -422,6 +510,11 @@ end
 local function updateTableOverview(seatState)
 	currentSeatState = seatState
 	hideLegacySeatBillboards(seatState)
+	if seatState and seatState.seatDisplayEntries then
+		EffectSystem:RefreshPersistentSeatCoins(nil, nil, {
+			seatDisplayEntries = seatState.seatDisplayEntries,
+		})
+	end
 	if TableOverview and TableOverview:IsA("GuiObject") then
 		TableOverview.Visible = false
 	end
@@ -460,11 +553,41 @@ end
 
 local function applyResponsiveLayout()
 	hideOnboardingPanel()
+	applyHudLayout()
 	applyGameplayVisibility(currentSeatId ~= nil)
 
 	if currentSeatState then
 		updateTableOverview(currentSeatState)
 	end
+end
+
+local function bindResponsiveLayout()
+	if responsiveLayoutBound then
+		return
+	end
+
+	responsiveLayoutBound = true
+	local camera = Workspace.CurrentCamera
+	if camera then
+		viewportSizeConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+			applyResponsiveLayout()
+		end)
+	end
+
+	cameraChangedConnection = Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+		if viewportSizeConnection then
+			viewportSizeConnection:Disconnect()
+			viewportSizeConnection = nil
+		end
+
+		local currentCamera = Workspace.CurrentCamera
+		if currentCamera then
+			viewportSizeConnection = currentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+				applyResponsiveLayout()
+			end)
+		end
+		applyResponsiveLayout()
+	end)
 end
 
 local function bindGrowthFrameVisibility()
@@ -488,6 +611,7 @@ function CoinFlipUi.Init()
 	hideOnboardingPanel()
 	ensureLeaveButton()
 	applyResponsiveLayout()
+	bindResponsiveLayout()
 	bindGrowthFrameVisibility()
 	bindFlipInput()
 
@@ -567,7 +691,7 @@ function CoinFlipUi.SyncRunState(args)
 	updateTableOverview(seatState)
 	CoinFlipUi.UpdateOnboarding(args.onboarding)
 	if isSeated and ResultLabel.Text == "Waiting for seat assignment..." then
-		updateResultText("Click FLIP", "Neutral")
+		updateResultText(getReadyPrompt(), "Neutral")
 	end
 end
 
@@ -578,7 +702,7 @@ function CoinFlipUi.FlipResolved(args)
 		seatId = args.seatState and args.seatState.seatId,
 		result = args.result,
 		coinId = args.equippedCoin or (args.loadoutState and args.loadoutState.equippedCoin),
-		shouldFollowCamera = true,
+		shouldFollowCamera = not autoFlipEnabled,
 		landedCallback = function()
 			currentFlipInProgress = false
 			CoinFlipUi.SyncRunState(args)
@@ -623,7 +747,7 @@ function CoinFlipUi.SeatStateChanged(args)
 	if isSeated then
 		SeatLabel.Text = args.seatState.seatId and tostring(args.seatState.seatId):gsub("^Seat", "Seat ") or "Seat --"
 		if ResultLabel.Text == "Waiting for seat assignment..." then
-			updateResultText("Click FLIP", "Neutral")
+			updateResultText(getReadyPrompt(), "Neutral")
 		end
 	end
 end

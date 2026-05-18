@@ -45,6 +45,7 @@ local EffectSystem: Types.System = {
 		"PlayInsideEffects",
 		"ToggleInsideEffects",
 		"PlayCoinFlipVisual",
+		"RefreshPersistentSeatCoins",
 	},
 	players = {},
 	IsLoaded = false,
@@ -221,51 +222,51 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 		return
 	end
 
-	local visualModel, coin, shadow, landingPulse, streakPulse = getCoinVisual(seatId)
-	if not visualModel or not coin or not shadow or not landingPulse or not streakPulse then
+	local visual = getOrCreatePersistentCoinVisual(seatId, args and args.coinId)
+	if not visual then
+		if landedCallback then
+			landedCallback()
+		end
+		return
+	end
+	if visual.isFlipping then
+		visual.pendingCoinId = args and args.coinId or visual.pendingCoinId
 		if landedCallback then
 			landedCallback()
 		end
 		return
 	end
 
-	clearCoinVisual(seatId)
-	local coinObject, clonedCoinObject = createCoinObject(visualModel, coin, args and args.coinId)
+	local coinObject = visual.coin
+	local shadow = visual.shadow
+	local landingPulse = visual.landingPulse
+	local streakPulse = visual.streakPulse
 	local baseCoinSize = getCoinObjectSize(coinObject)
 	local baseShadowSize = shadow.Size
-	local result = args.result
+	local result = args.result == "Tails" and "Tails" or "Heads"
+	local restSpinRadians = getRandomRestSpinRadians()
+	local airborneYawRadians = getRandomAirborneYawRadians(restSpinRadians)
 	local finalRotation = math.rad(VisualConfig.SpinTurns * 360) + (result == "Tails" and math.pi or 0)
-	local airborneRotation = math.rad((VisualConfig.SpinTurns + 0.35) * 360) + (result == "Tails" and math.pi or 0)
+	local airborneRotation = finalRotation
 	local startPos, endPos, tableNormal, surfaceEndPos, flipAxisWorld =
 		getFlipPositions(seatId, coinObject, finalRotation)
 	if not startPos or not endPos or not tableNormal or not surfaceEndPos then
-		if clonedCoinObject then
-			coinObject:Destroy()
-		else
-			setCoinObjectEnabled(coin, nil, false)
-		end
+		hidePersistentCoinVisual(visual)
 		if landedCallback then
 			landedCallback()
 		end
 		return
 	end
+	local flatWorldRot = buildFlatCoinWorldRotation(tableNormal, flipAxisWorld, result, restSpinRadians)
+	local endPosFlat = resolveFlatLandWorldPosition(surfaceEndPos, tableNormal, flatWorldRot, visual.coin)
+	endPos = endPosFlat
 
 	shadow.Size = baseShadowSize
 	shadow.Transparency = VisualConfig.ShadowBaseTransparency
 
-	local visual = {
-		model = visualModel,
-		coin = coinObject,
-		focusPart = coin,
-		fallbackCoin = coin,
-		clonedCoinObject = clonedCoinObject,
-		shadow = shadow,
-		landingPulse = landingPulse,
-		streakPulse = streakPulse,
-		baseShadowSize = baseShadowSize,
-		shouldFollowCamera = args.shouldFollowCamera == true,
-	}
-	activeCoinFlipVisuals[seatId] = visual
+	visual.baseShadowSize = baseShadowSize
+	visual.shouldFollowCamera = args.shouldFollowCamera == true
+	visual.isFlipping = true
 
 	local startTime = os.clock()
 	local arcHeight =
@@ -303,19 +304,27 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 
 		local alpha = math.clamp((os.clock() - startTime) / airborneDuration, 0, 1)
 		local height = math.sin(alpha * math.pi) * arcHeight
-		local position = startPos + (travel * alpha) + Vector3.new(0, height, 0)
+		local position = startPos + (travel * alpha) + tableNormal * height
 		local flipAngle = airborneRotation * alpha
 		local bankAngle = math.sin(alpha * math.pi) * VisualConfig.BankAngle
+		local yawAngle = airborneYawRadians * easeOutCubic(alpha)
 		local shadowAlpha = math.clamp(height / arcHeight, 0, 1)
 		local shadowScale = VisualConfig.ShadowMaxScale
 			- ((VisualConfig.ShadowMaxScale - VisualConfig.ShadowMinScale) * shadowAlpha)
 		local shadowTransparency = VisualConfig.ShadowBaseTransparency
 			+ ((VisualConfig.ShadowMaxTransparency - VisualConfig.ShadowBaseTransparency) * shadowAlpha)
 
-		local coinCFrame = CFrame.new(position)
-			* CFrame.fromAxisAngle(flipAxisWorld, flipAngle)
-			* CoinVisualBaseRot
-			* CFrame.fromAxisAngle(bankReference, bankAngle)
+		local coinWorldRot = buildAirborneCoinWorldRotation(
+			tableNormal,
+			flipAxisWorld,
+			bankReference,
+			flipAngle,
+			bankAngle,
+			yawAngle,
+			flatWorldRot,
+			alpha
+		)
+		local coinCFrame = CFrame.new(position) * coinWorldRot
 		pivotCoinVisual(visual, coinCFrame)
 		shadow.CFrame = CFrame.new(position.X, shadowPos.Y, position.Z) * CoinVisualBaseRot
 		shadow.Size = Vector3.new(baseShadowSize.X, baseCoinSize.Y * shadowScale, baseCoinSize.Z * shadowScale)
@@ -347,9 +356,6 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 		visual.settleConnection = settleCFrame:GetPropertyChangedSignal("Value"):Connect(function()
 			pivotCoinVisual(visual, settleCFrame.Value)
 		end)
-
-		local flatWorldRot = buildFlatCoinWorldRotation(tableNormal, flipAxisWorld, result)
-		local endPosFlat = resolveFlatLandWorldPosition(surfaceEndPos, tableNormal, flatWorldRot, visual.coin)
 
 		local settleTween = TweenService:Create(
 			settleCFrame,
@@ -386,15 +392,48 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 				visual.settleCFrame = nil
 			end
 			visual.settleTween = nil
+			visual.isFlipping = false
+			visual.lastResult = result
+			visual.lastRestSpinRadians = restSpinRadians
 			if visual.shouldFollowCamera then
 				FirstPersonCamera.ReturnToFirstPerson(visual.focusPart)
 			end
+			visual.shouldFollowCamera = false
 			playSfx(result == "Heads" and "headsWin" or "tailsLose")
+			refreshPendingCoinVisual(visual, seatId)
 			if landedCallback then
 				task.delay(VisualConfig.ResultRevealDelay or 0, landedCallback)
 			end
 		end)
 	end)
+end
+
+function EffectSystem:RefreshPersistentSeatCoins(sender, player, args)
+	if IsServer then
+		return
+	end
+	if typeof(args) ~= "table" or typeof(args.seatDisplayEntries) ~= "table" then
+		return
+	end
+
+	local occupiedSeats = {}
+	for _, entry in ipairs(args.seatDisplayEntries) do
+		if entry.isOccupied and typeof(entry.seatId) == "string" then
+			occupiedSeats[entry.seatId] = true
+			local visual = getOrCreatePersistentCoinVisual(entry.seatId, entry.equippedCoin)
+			if visual and not visual.isFlipping then
+				placePersistentCoinAtRest(visual, entry.seatId, visual.lastResult)
+			elseif visual then
+				visual.pendingCoinId = entry.equippedCoin or visual.pendingCoinId
+			end
+		end
+	end
+
+	for seatId, visual in pairs(activeCoinFlipVisuals) do
+		if not occupiedSeats[seatId] and not visual.isFlipping then
+			hidePersistentCoinVisual(visual)
+		end
+	end
 end
 
 function getTableModel()
@@ -469,6 +508,10 @@ function getCoinLandingAnchor(tableModel, rawSeatId)
 	return nil
 end
 
+function getDynamicSeatCFrame(seatId)
+	return SystemMgr.systems.TableSeatSystem:GetSeatTargetCFrame(seatId)
+end
+
 function getAnchorPosition(anchor)
 	if anchor:IsA("Attachment") then
 		return anchor.WorldPosition
@@ -511,7 +554,7 @@ function getTableSurfaceData(tableTop)
 	return normal, axisRecords[1].size * 0.5
 end
 
--- 用射线命中 TableTop 得到真实落点，再沿桌面法线迭代抬升，避免 pivot/几何与 surfaceEndPos 不一致时穿进桌面
+-- 用射线命中 TableTop 得到真实落点，再按硬币当前姿态做一次 bounds lift，避免重复抬高导致浮空
 function resolveFlatLandWorldPosition(surfaceEndPos, tableNormal, flatWorldRot, coinObject)
 	local n = tableNormal.Unit
 	local tableModel = getTableModel()
@@ -531,23 +574,15 @@ function resolveFlatLandWorldPosition(surfaceEndPos, tableNormal, flatWorldRot, 
 		rayParams.FilterDescendantsInstances = { tableModel }
 		hit = Workspace:Raycast(origin, -n * 120, rayParams)
 	end
-	local anchor
+	local surfacePosition
 	if hit then
-		anchor = hit.Position + n * 0.12
+		surfacePosition = hit.Position
 	else
-		anchor = surfaceEndPos + n * 2.5
+		surfacePosition = surfaceEndPos
 	end
 
-	local pos = anchor
-	for _ = 1, 8 do
-		local lift = getObjectSurfaceLift(coinObject, CFrame.new(pos) * flatWorldRot, n)
-		if lift <= 0.001 then
-			break
-		end
-		pos = pos + n * math.max(lift, 0)
-	end
-
-	return pos + n * VisualConfig.CoinSurfaceGap
+	local lift = math.max(getObjectSurfaceLift(coinObject, CFrame.new(surfacePosition) * flatWorldRot, n), 0)
+	return surfacePosition + n * (lift + VisualConfig.CoinSurfaceGap)
 end
 
 function getFlipPositions(seatId, coinObject, landingSpinRadians)
@@ -573,6 +608,10 @@ function getFlipPositions(seatId, coinObject, landingSpinRadians)
 	local tableNormal, halfThickness = getTableSurfaceData(tableTop)
 	local surfaceCenter = tableTop.Position + (tableNormal * halfThickness)
 	local centerPos = centerAttachment and centerAttachment.WorldPosition or surfaceCenter
+	local dynamicSeatCFrame = getDynamicSeatCFrame(seatId)
+	if dynamicSeatCFrame then
+		startPos = dynamicSeatCFrame.Position + tableNormal * (1.25 + VisualConfig.CoinStartHeight)
+	end
 	local outward = startPos - surfaceCenter
 	outward = outward - (tableNormal * outward:Dot(tableNormal))
 	if outward.Magnitude < 0.001 then
@@ -592,12 +631,13 @@ function getFlipPositions(seatId, coinObject, landingSpinRadians)
 	local landingAnchor = getCoinLandingAnchor(tableModel, rawSeatId)
 	local landingAnchorPosition = landingAnchor and getAnchorPosition(landingAnchor)
 	local surfaceEndPos = centerPos + (outward * VisualConfig.LandingRadius)
-	if landingAnchorPosition then
+	if landingAnchorPosition and not dynamicSeatCFrame then
 		surfaceEndPos = landingAnchorPosition - tableNormal * (landingAnchorPosition - surfaceCenter):Dot(tableNormal)
 	end
 	local landedRotation = CFrame.fromAxisAngle(flipAxisWorld, landingSpinRadians) * CoinVisualBaseRot
 	local surfaceLift = getObjectSurfaceLift(coinObject, CFrame.new() * landedRotation, tableNormal)
 	local endPos = surfaceEndPos + (tableNormal * (surfaceLift + VisualConfig.CoinSurfaceGap))
+	startPos = endPos
 
 	return startPos, endPos, tableNormal, surfaceEndPos, flipAxisWorld
 end
@@ -616,6 +656,123 @@ function getCoinVisual(seatId)
 		visualModel:WaitForChild("Shadow"),
 		visualModel:WaitForChild("LandingPulse"),
 		visualModel:WaitForChild("StreakPulse")
+end
+
+function getOrCreatePersistentCoinVisual(seatId, coinId)
+	local visual = activeCoinFlipVisuals[seatId]
+	if visual then
+		visual.lastResult = visual.lastResult or "Heads"
+		visual.lastRestSpinRadians = visual.lastRestSpinRadians or getRandomRestSpinRadians()
+		if coinId and visual.coinId ~= coinId and not visual.isFlipping then
+			replacePersistentCoinObject(visual, coinId)
+		elseif coinId and visual.coinId ~= coinId then
+			visual.pendingCoinId = coinId
+		end
+		setCoinObjectEnabled(visual.coin, visual.shadow, true)
+		return visual
+	end
+
+	local visualModel, fallbackCoin, shadow, landingPulse, streakPulse = getCoinVisual(seatId)
+	if not visualModel or not fallbackCoin or not shadow or not landingPulse or not streakPulse then
+		return nil
+	end
+
+	local coinObject, clonedCoinObject = createCoinObject(visualModel, fallbackCoin, coinId)
+	visual = {
+		model = visualModel,
+		coin = coinObject,
+		coinId = coinId,
+		focusPart = getCoinFocusPart(coinObject, fallbackCoin),
+		fallbackCoin = fallbackCoin,
+		clonedCoinObject = clonedCoinObject,
+		shadow = shadow,
+		landingPulse = landingPulse,
+		streakPulse = streakPulse,
+		baseShadowSize = shadow.Size,
+		lastResult = "Heads",
+		lastRestSpinRadians = getRandomRestSpinRadians(),
+		shouldFollowCamera = false,
+		isFlipping = false,
+	}
+	activeCoinFlipVisuals[seatId] = visual
+	setCoinObjectEnabled(visual.coin, visual.shadow, true)
+	hidePulseVisual(landingPulse)
+	hidePulseVisual(streakPulse)
+	placePersistentCoinAtRest(visual, seatId, visual.lastResult)
+
+	return visual
+end
+
+function replacePersistentCoinObject(visual, coinId)
+	if visual.clonedCoinObject and visual.coin and visual.coin.Parent then
+		visual.coin:Destroy()
+	elseif visual.fallbackCoin then
+		setCoinObjectEnabled(visual.fallbackCoin, nil, false)
+	end
+
+	local coinObject, clonedCoinObject = createCoinObject(visual.model, visual.fallbackCoin, coinId)
+	visual.coin = coinObject
+	visual.coinId = coinId
+	visual.focusPart = getCoinFocusPart(coinObject, visual.fallbackCoin)
+	visual.clonedCoinObject = clonedCoinObject
+	setCoinObjectEnabled(visual.coin, visual.shadow, true)
+end
+
+function refreshPendingCoinVisual(visual, seatId)
+	if not visual.pendingCoinId or visual.pendingCoinId == visual.coinId then
+		visual.pendingCoinId = nil
+		return
+	end
+
+	local pendingCoinId = visual.pendingCoinId
+	visual.pendingCoinId = nil
+	replacePersistentCoinObject(visual, pendingCoinId)
+	placePersistentCoinAtRest(visual, seatId, visual.lastResult)
+end
+
+function placePersistentCoinAtRest(visual, seatId, result)
+	local _, _, tableNormal, surfaceEndPos, flipAxisWorld = getFlipPositions(seatId, visual.coin, 0)
+	if not tableNormal or not surfaceEndPos or not flipAxisWorld then
+		return
+	end
+
+	visual.lastRestSpinRadians = visual.lastRestSpinRadians or getRandomRestSpinRadians()
+	local flatWorldRot =
+		buildFlatCoinWorldRotation(tableNormal, flipAxisWorld, result or "Heads", visual.lastRestSpinRadians)
+	local endPosFlat = resolveFlatLandWorldPosition(surfaceEndPos, tableNormal, flatWorldRot, visual.coin)
+	local targetCFrame = CFrame.new(endPosFlat) * flatWorldRot
+	local shadowPos = surfaceEndPos + tableNormal * ((visual.baseShadowSize.X * 0.5) + VisualConfig.ShadowSurfaceGap)
+	pivotCoinVisual(visual, targetCFrame)
+	visual.shadow.CFrame = CFrame.new(shadowPos) * CoinVisualBaseRot
+	visual.shadow.Size = visual.baseShadowSize
+	visual.shadow.Transparency = VisualConfig.ShadowBaseTransparency
+end
+
+function hidePersistentCoinVisual(visual)
+	if visual.shouldFollowCamera then
+		FirstPersonCamera.ReturnToFirstPerson(visual.focusPart)
+	end
+	visual.shouldFollowCamera = false
+	visual.isFlipping = false
+	if visual.connection then
+		visual.connection:Disconnect()
+		visual.connection = nil
+	end
+	if visual.settleTween then
+		visual.settleTween:Cancel()
+		visual.settleTween = nil
+	end
+	if visual.settleConnection then
+		visual.settleConnection:Disconnect()
+		visual.settleConnection = nil
+	end
+	if visual.settleCFrame then
+		visual.settleCFrame:Destroy()
+		visual.settleCFrame = nil
+	end
+	setCoinObjectEnabled(visual.coin, visual.shadow, false)
+	hidePulseVisual(visual.landingPulse)
+	hidePulseVisual(visual.streakPulse)
 end
 
 function getCoinAssetFolder()
@@ -702,6 +859,17 @@ function createCoinObject(visualModel, fallbackCoin, coinId)
 	return fallbackCoin, false
 end
 
+function getCoinFocusPart(coinObject, fallbackCoin)
+	if coinObject:IsA("BasePart") then
+		return coinObject
+	end
+	if coinObject:IsA("Model") and coinObject.PrimaryPart then
+		return coinObject.PrimaryPart
+	end
+
+	return fallbackCoin
+end
+
 function getCoinObjectSize(coinObject)
 	if coinObject:IsA("BasePart") then
 		return coinObject.Size
@@ -728,22 +896,69 @@ end
 
 function pivotCoinVisual(visual, targetCFrame)
 	pivotCoinObject(visual.coin, targetCFrame)
-	if visual.focusPart ~= visual.coin then
+	if visual.focusPart and not visual.focusPart:IsDescendantOf(visual.coin) then
 		visual.focusPart.CFrame = targetCFrame
 	end
 end
 
--- 硬币平铺在桌面：局部Y沿厚度方向对齐 `FlatThicknessLocalSign * tableNormal`；局部X沿 flip 轴
-function buildFlatCoinWorldRotation(tableNormal, flipAxisWorld, flipResult)
+function buildAirborneCoinWorldRotation(
+	tableNormal,
+	flipAxisWorld,
+	bankReference,
+	flipAngle,
+	bankAngle,
+	yawAngle,
+	finalFlatWorldRot,
+	alpha
+)
+	local airborneRot = CFrame.fromAxisAngle(tableNormal.Unit, yawAngle)
+		* CFrame.fromAxisAngle(flipAxisWorld, flipAngle)
+		* CoinVisualBaseRot
+		* CFrame.fromAxisAngle(bankReference, bankAngle)
+	local blendAlpha = getLandingOrientationBlendAlpha(alpha)
+	if blendAlpha <= 0 then
+		return airborneRot
+	end
+
+	return airborneRot:Lerp(finalFlatWorldRot, blendAlpha)
+end
+
+-- 硬币平铺在桌面：局部Y沿厚度方向对齐 `FlatThicknessLocalSign * tableNormal`，再绕桌面法线随机转向
+function buildFlatCoinWorldRotation(tableNormal, flipAxisWorld, flipResult, restSpinRadians)
 	local n = tableNormal.Unit
 	local u = flipAxisWorld.Unit
 	local yThickness = n * VisualConfig.FlatThicknessLocalSign
 	local z = u:Cross(yThickness).Unit
 	local basis = CFrame.fromMatrix(Vector3.zero, u, yThickness, z)
 	if flipResult == "Tails" then
-		return basis * CFrame.fromAxisAngle(u, math.pi)
+		basis = basis * CFrame.fromAxisAngle(u, math.pi)
 	end
-	return basis
+	return CFrame.fromAxisAngle(n, restSpinRadians or 0) * basis
+end
+
+function getRandomRestSpinRadians()
+	return math.random() * math.pi * 2
+end
+
+function getRandomAirborneYawRadians(restSpinRadians)
+	local direction = math.random(0, 1) == 0 and -1 or 1
+	local fullTurns = math.random(VisualConfig.AirYawMinTurns, VisualConfig.AirYawMaxTurns)
+	return restSpinRadians + direction * fullTurns * math.pi * 2
+end
+
+function getLandingOrientationBlendAlpha(alpha)
+	if alpha <= VisualConfig.LandingOrientationBlendStart then
+		return 0
+	end
+
+	local blendRange = 1 - VisualConfig.LandingOrientationBlendStart
+	local t = math.clamp((alpha - VisualConfig.LandingOrientationBlendStart) / blendRange, 0, 1)
+	return t * t * (3 - 2 * t)
+end
+
+function easeOutCubic(alpha)
+	local inverseAlpha = 1 - alpha
+	return 1 - inverseAlpha * inverseAlpha * inverseAlpha
 end
 
 function getObjectSurfaceLift(coinObject, objectCFrame, normal)
