@@ -71,39 +71,52 @@ function AnnouncementSystem:HandleFlipResolved(sender, player, args)
 	if sender ~= SENDER then
 		return
 	end
-	if args.result ~= "Heads" then
+
+	local milestone = args.streakMilestone or self:BuildStreakMilestonePayload(SENDER, player, args)
+	if not milestone then
 		return
 	end
 
-	local thresholdConfig = Presets.Thresholds[args.streak]
-	if not thresholdConfig then
-		return
-	end
-
-	local dedupeKey = `{player.UserId}:{args.streak}`
+	local dedupeKey = `{player.UserId}:{milestone.streak}`
 	local now = os.clock()
 	if self.recentAnnouncements[dedupeKey] and now - self.recentAnnouncements[dedupeKey] < Presets.DebounceSeconds then
 		return
 	end
 	self.recentAnnouncements[dedupeKey] = now
 
-	local text = Presets.BuildText(player, args.streak)
 	local audiencePlayers = GetSystemMgr().systems.TableSeatSystem:GetAudiencePlayers(args.seatId)
 	for _, audiencePlayer in ipairs(audiencePlayers) do
-		self.Client:PlayAnnouncement(audiencePlayer, {
-			userId = player.UserId,
-			seatId = args.seatId,
-			streak = args.streak,
-			tier = thresholdConfig.tier,
-			text = text,
-			textColor = thresholdConfig.color,
-			strokeColor = thresholdConfig.strokeColor,
-			duration = thresholdConfig.duration,
-			bannerText = thresholdConfig.bannerText,
-			soundName = thresholdConfig.soundName,
-			isJackpot = thresholdConfig.isJackpot == true,
-		})
+		self.Client:PlayAnnouncement(audiencePlayer, milestone)
 	end
+end
+
+function AnnouncementSystem:BuildStreakMilestonePayload(sender, player, args)
+	if not IsServer then
+		return nil
+	end
+	if sender ~= SENDER then
+		return nil
+	end
+	if args.result ~= "Heads" then
+		return nil
+	end
+
+	local effectConfig = Presets.StreakEffects[args.streak]
+	if not effectConfig then
+		return nil
+	end
+
+	return {
+		userId = player.UserId,
+		seatId = args.seatId,
+		streak = args.streak,
+		text = Presets.BuildText(player, args.streak),
+		textColor = Presets.NotificationColor,
+		duration = Presets.NotificationDuration,
+		sfx = effectConfig.sfx,
+		vfx = effectConfig.vfx,
+		cameraShake = effectConfig.cameraShake,
+	}
 end
 
 function AnnouncementSystem:PlayAnnouncement(sender, player, args)

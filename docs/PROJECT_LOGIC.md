@@ -51,7 +51,7 @@
 - `src/ReplicatedStorage/Systems` 下很多系统目录目前没有启用
 - `src/ReplicatedStorage/Systems/SystemMgr Fail.lua` 是旧版本，不是当前入口
 - `BaseSystem.lua` 是新基类尝试，但当前活跃系统大多仍是手写风格
-- `analytics.server.lua` 整个文件目前是注释状态
+- `analytics.server.lua` 整个文件仍是注释状态；当前主线埋点走已注册的 `AnalyticsSystem` + Roblox `AnalyticsService`
 - `Excels/` 和大部分 `ExcelConfig/` 更像数据工具或旧数据沉淀，不等于都在当前玩法链路里生效
 
 结论：
@@ -193,6 +193,7 @@ FlipACoin
 以 `systems = { ... }` 当前注册表为准，活跃系统是：
 
 - `AnimateSystem`
+- `AnalyticsSystem`
 - `AnnouncementSystem`
 - `CharacterSystem`
 - `CoinFlipSystem`
@@ -483,10 +484,12 @@ FlipACoin
 当前额外要记住：
 
 - 服务端仍维护首局引导链，主要用于头顶文案和漏斗埋点；客户端主 HUD 不再显示旧 guide 面板。引导链围绕“进服即坐下，直接 Flip”：
-  - 自动入座
+  - 自动入座完成确认
+  - 首次 Flip
   - flip `3` 次
   - 购买首次升级
-  - 达成 `2 streak`
+  - 购买后再 Flip 一次以理解 streak 目标，不再把随机达成 `2 streak` 作为引导完成门槛
+- 首次升级引导只使用已有 HUD 升级按钮做短 pulse 和通知提示，不恢复旧大引导浮层
 - 桌面沉浸视角当前由 `StarterPlayerScripts/Modules/FirstPersonCamera.lua` 负责：
   - 平时是头部第一人称：镜头贴到 `Head.Position`，保留默认相机输入，所以玩家可自由转头
   - 镜头相对 `HumanoidRootPart` 的左右转向被限制在 `-90° ~ 90°`，避免玩家坐在桌边时回头穿帮
@@ -541,6 +544,7 @@ FlipACoin
 - 自己 flip 时接管并释放 `FirstPersonCamera`；装备硬币为 Model 时跟随该 Model 的 `PrimaryPart`
 - 其他玩家 flip 时只播放桌面表现，不接管相机
 - `PlayInsideEffects()` 使用 `SettingSystem:GetParticleRateFactor()` 决定粒子倍率
+- `PlayStreakMilestone()` 按 `AnnouncementSystem/Presets.lua` 的 fixed streak 配置，在硬币本地落地回调后播放 `SoundService.SFX` 音效、`EffectSystem.Assets` VFX，并可选触发本地 camera shake
 
 ### 7.4d `SettingSystem`
 
@@ -560,17 +564,36 @@ FlipACoin
 
 当前职责：
 
-- 当 `CoinFlipSystem` 出现正面且 streak 到阈值时，生成轻量播报
-- 当前阈值是：
-  - `4`
-  - `6`
-  - `8`
-  - `10`
-- 客户端不再动态创建顶部 banner；当前只通过 `uiController.SetNotification` 和可选音效做低噪音反馈
+- 当 `CoinFlipSystem` 出现正面且 streak 命中 `Presets.StreakEffects` 时，生成 milestone payload 和轻量播报
+- 当前默认配置是：
+  - `5`：`sfx = "streak1"`，`vfx = "streak1"`，无 camera shake
+  - `10`：`sfx = "streak2"`，`vfx = "streak2"`，带 camera shake 参数
+- 客户端不再动态创建顶部 banner；当前通知只通过 `uiController.SetNotification` 做低噪音反馈，SFX / VFX / camera shake 由 `EffectSystem:PlayStreakMilestone()` 在硬币落地后播放
 
 当前依赖关系：
 
-- `CoinFlipSystem:RequestFlip()` -> `AnnouncementSystem:HandleFlipResolved()`
+- `CoinFlipSystem:RequestFlip()` -> `AnnouncementSystem:BuildStreakMilestonePayload()` / `AnnouncementSystem:HandleFlipResolved()`
+
+### 7.5a `AnalyticsSystem`
+
+文件：
+
+- `src/ReplicatedStorage/Systems/AnalyticsSystem/init.lua`
+
+当前职责：
+
+- 作为 Roblox `AnalyticsService` 的服务端内部门面；所有公开方法都在 `whiteList`，不暴露给客户端 remote
+- 记录核心 Flip A Coin 玩法节点：
+  - `coinflip_seat_assigned`
+  - `coinflip_flip_resolved`
+  - `coinflip_streak_milestone`
+  - `coinflip_run_upgrade`
+  - `coinflip_shop_purchase`
+  - `coinflip_item_equip`
+  - `coinflip_rebirth`
+  - `coinflip_rebirth_upgrade`
+- 自定义字段只放低基数维度，例如 result、streak band、装备 id、商品 category、rarity、来源和 cash band
+- Cash 来源 / 消耗数量继续走 `EcoSystem:AddResource()` 中的 `LogEconomyEvent`；首局漏斗继续走 `PlayerServerClass:LogOnboarding()` 的 `LogOnboardingFunnelStepEvent`
 
 ### 7.6 `GuiSystem`
 
@@ -601,7 +624,7 @@ FlipACoin
 
 - 这个系统已经启用
 - 它依赖 `SoundService` 下的分组和资源命名，以及 `workspace.BGSoundsFolder`
-- 当前主玩法音效占位在 `SoundService.SFX`：`flipPress`、`coinToss`、`coinSpin`、`coinLand`、`headsWin`、`tailsLose`、`cashReward`、`streak3`、`streak5`、`streak7`、`streak10`、`shopPurchase`、`equipItem`、`rebirth`、`notification`
+- 当前主玩法音效占位在 `SoundService.SFX`：`flipPress`、`coinToss`、`coinSpin`、`coinLand`、`headsWin`、`tailsLose`、`cashReward`、`streak1`、`streak2`、`streak3`、`streak5`、`streak7`、`streak10`、`shopPurchase`、`equipItem`、`rebirth`、`notification`
 - UI 通用按钮仍使用 `SFX.hoverBtn` / `SFX.clickBtn`，BGM 使用 `SoundService.bgm`
 - 当前音效 `SoundId` 可为空；客户端播放逻辑会跳过空 `SoundId`，后续填入资源 id 后自动生效
 
@@ -986,6 +1009,6 @@ FlipACoin
 
 如果只用一句工程化的话概括当前仓库：
 
-这是一个已经用旧框架成功跑通“8 人同桌翻硬币”主链路的 Flip A Coin 项目，当前最该相信的是 `SystemMgr + PlayerSystem + TableSeatSystem + DecorationSystem + CoinFlipSystem + EcoSystem + RebirthSystem + EffectSystem + SettingSystem + ClientData` 这条线，其余大量目录都应先视为遗留或候选，而不是默认活跃。
+这是一个已经用旧框架成功跑通“8 人同桌翻硬币”主链路的 Flip A Coin 项目，当前最该相信的是 `SystemMgr + PlayerSystem + TableSeatSystem + DecorationSystem + CoinFlipSystem + EcoSystem + RebirthSystem + EffectSystem + SettingSystem + AnalyticsSystem + ClientData` 这条线，其余大量目录都应先视为遗留或候选，而不是默认活跃。
 
 产品方向上，它应被理解为“单桌 8 人弱社交桌面运气游戏”：不要再往多桌大厅、自由走动、复杂观战面板方向扩展；首发重点是进服即坐下、面前一个强 `FLIP` 按钮、短循环升级、streak 情绪曲线、以及轻量同桌存在感。

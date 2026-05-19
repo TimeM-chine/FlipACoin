@@ -1068,6 +1068,8 @@ function TableSeatSystem:RequestSit(sender, player, args)
 
 	local seatOccupant = seatRecord.seat.Occupant
 	local occupant = self._seatOwners[seatKey]
+	local currentSeatKey = self._playerSeats[player.UserId]
+	local wasAlreadyAssigned = currentSeatKey == seatKey and occupant == player
 	if occupant and occupant ~= player and occupant:IsDescendantOf(Players) then
 		return false
 	end
@@ -1078,7 +1080,6 @@ function TableSeatSystem:RequestSit(sender, player, args)
 		end
 	end
 
-	local currentSeatKey = self._playerSeats[player.UserId]
 	if currentSeatKey and currentSeatKey ~= seatKey then
 		clearSeatOwnership(self, player)
 	end
@@ -1090,6 +1091,13 @@ function TableSeatSystem:RequestSit(sender, player, args)
 		refreshPromptAttributes(self, seatKey)
 		refreshPlayerDecoration(player)
 		GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(player)
+		GetSystemMgr().systems.CoinFlipSystem:HandleGuideSit(SENDER, player)
+		if not wasAlreadyAssigned then
+			GetSystemMgr().systems.AnalyticsSystem:LogSeatAssigned(SENDER, player, {
+				seatId = seatRecord.displaySeatId,
+				autoAssigned = args and args.autoAssigned == true,
+			})
+		end
 		broadcastSeatStates(self)
 		return true
 	end
@@ -1102,6 +1110,13 @@ function TableSeatSystem:RequestSit(sender, player, args)
 		refreshPromptAttributes(self, seatKey)
 		refreshPlayerDecoration(player)
 		GetSystemMgr().systems.PlayerSystem:UpdatePlayerHeadGui(player)
+		GetSystemMgr().systems.CoinFlipSystem:HandleGuideSit(SENDER, player)
+		if not wasAlreadyAssigned then
+			GetSystemMgr().systems.AnalyticsSystem:LogSeatAssigned(SENDER, player, {
+				seatId = seatRecord.displaySeatId,
+				autoAssigned = args and args.autoAssigned == true,
+			})
+		end
 		broadcastSeatStates(self)
 		return true
 	end

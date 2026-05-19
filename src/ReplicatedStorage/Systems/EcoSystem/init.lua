@@ -685,6 +685,11 @@ function EcoSystem:RequestShopPurchase(sender, player, args)
 			playerIns:SetOneData(equippedKey, item.id)
 			refreshCashDisplays(player)
 			refreshDecoration(player, category)
+			SystemMgr.systems.AnalyticsSystem:LogItemEquipped(SENDER, player, {
+				category = category,
+				itemId = item.id,
+				source = "shop_owned",
+			})
 			SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
 			SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
 				equippedItem = item.id,
@@ -714,6 +719,17 @@ function EcoSystem:RequestShopPurchase(sender, player, args)
 		playerIns:SetOneData(equippedKey, item.id)
 
 		refreshDecoration(player, category)
+		SystemMgr.systems.AnalyticsSystem:LogShopItemPurchased(SENDER, player, {
+			category = category,
+			itemId = item.id,
+			rarity = item.rarity,
+			cost = item.cost,
+		})
+		SystemMgr.systems.AnalyticsSystem:LogItemEquipped(SENDER, player, {
+			category = category,
+			itemId = item.id,
+			source = "shop_purchase",
+		})
 		SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
 		SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
 			purchasedItem = item.id,
@@ -757,6 +773,11 @@ function EcoSystem:RequestEquipItem(sender, player, args)
 		playerIns:SetOneData(equippedKey, item.id)
 		refreshCashDisplays(player)
 		refreshDecoration(player, category)
+		SystemMgr.systems.AnalyticsSystem:LogItemEquipped(SENDER, player, {
+			category = category,
+			itemId = item.id,
+			source = "inventory",
+		})
 		SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
 		SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
 			equippedItem = item.id,

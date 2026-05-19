@@ -379,15 +379,22 @@ function CoinFlipSystem:RequestFlip(sender, player)
 		bestStreakThisRun = runData.bestStreakThisRun,
 		equippedCoin = equippedCoin,
 	}
+	local streakMilestone =
+		SystemMgr.systems.AnnouncementSystem:BuildStreakMilestonePayload(SENDER, player, observedPayload)
+	if streakMilestone then
+		observedPayload.streakMilestone = streakMilestone
+	end
 
 	emitObservedFlip(self, player, observedPayload)
 	SystemMgr.systems.AnnouncementSystem:HandleFlipResolved(SENDER, player, observedPayload)
+	SystemMgr.systems.AnalyticsSystem:LogCoinFlipResolved(SENDER, player, observedPayload)
 
 	syncPlayerState(self, player, {
 		result = observedPayload.result,
 		reward = reward,
 		streak = runData.currentStreak,
 		equippedCoin = equippedCoin,
+		streakMilestone = streakMilestone,
 	}, true)
 end
 
@@ -436,6 +443,12 @@ function CoinFlipSystem:BuyUpgrade(sender, player, args)
 	runData[upgradeKey] += 1
 	playerIns:SetOneData(dataKey.runData, runData)
 	applyOnboardingAction(self, player, "buyUpgrade")
+	SystemMgr.systems.AnalyticsSystem:LogRunUpgradePurchased(SENDER, player, {
+		upgradeKey = upgradeKey,
+		newLevel = runData[upgradeKey],
+		cost = cost,
+		cashAfterPurchase = playerIns:GetOneData(dataKey.wins),
+	})
 
 	seatSystem:RegisterActivity(SENDER, player)
 	refreshCashDisplays(player)
@@ -490,7 +503,7 @@ function CoinFlipSystem:ReportGuideAction(sender, player, args)
 		return
 	end
 
-	if args.action ~= "approachSeat" then
+	if args.action ~= "autoSeat" and args.action ~= "approachSeat" then
 		return
 	end
 
@@ -505,7 +518,7 @@ function CoinFlipSystem:HandleGuideSit(sender, player)
 		return
 	end
 
-	applyOnboardingAction(self, player, "sitDown", nil, true)
+	applyOnboardingAction(self, player, "autoSeat", nil, true)
 end
 
 function CoinFlipSystem:UpdateOnboarding(sender, player, args)

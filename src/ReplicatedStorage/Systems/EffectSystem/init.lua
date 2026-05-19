@@ -33,6 +33,8 @@ local activeCoinFlipVisuals = {}
 local VisualConfig = Presets.CoinFlipVisuals
 local CoinAssetFolderName = "Coins"
 local missingCoinAssetWarnings = {}
+local cameraShakeToken = 0
+local CameraShakeRenderStepName = "StreakMilestoneCameraShake"
 
 -- 硬币相对世界的“立起”基准；空中翻转绕世界水平轴 `outward×tableNormal`（见 getFlipPositions），再乘基准
 local CoinVisualBaseRot = CFrame.Angles(0, 0, math.rad(90))
@@ -45,6 +47,7 @@ local EffectSystem: Types.System = {
 		"PlayInsideEffects",
 		"ToggleInsideEffects",
 		"PlayCoinFlipVisual",
+		"PlayStreakMilestone",
 		"RefreshPersistentSeatCoins",
 	},
 	players = {},
@@ -434,6 +437,31 @@ function EffectSystem:RefreshPersistentSeatCoins(sender, player, args)
 			hidePersistentCoinVisual(visual)
 		end
 	end
+end
+
+function EffectSystem:PlayStreakMilestone(sender, player, args)
+	if IsServer then
+		if sender ~= SENDER then
+			return
+		end
+		if typeof(args) ~= "table" then
+			return
+		end
+
+		args.unreliable = true
+		self.AllClients:PlayStreakMilestone(args)
+		return
+	end
+	if typeof(args) ~= "table" then
+		return
+	end
+	if typeof(args.seatId) ~= "string" then
+		return
+	end
+
+	playSfx(args.sfx)
+	playStreakMilestoneVfx(args.seatId, args.vfx, args.lifeTime)
+	playConfiguredCameraShake(args.cameraShake)
 end
 
 function getTableModel()
@@ -1082,6 +1110,176 @@ function playTimedSfx(soundName, duration)
 			clone:Stop()
 		end
 	end)
+end
+
+function playStreakMilestoneVfx(seatId, vfxName, lifeTime)
+	if typeof(vfxName) ~= "string" or vfxName == "" then
+		return
+	end
+
+	local effectAsset = getStreakMilestoneVfxAsset(vfxName)
+	if not effectAsset then
+		warn(`[EffectSystem] Missing streak milestone VFX asset: {vfxName}`)
+		return
+	end
+
+	local targetCFrame = getStreakMilestoneCFrame(seatId)
+	local effectClone = buildStreakMilestoneEffectClone(effectAsset, targetCFrame)
+	if not effectClone then
+		warn(`[EffectSystem] Streak milestone VFX must be a Model, BasePart, Attachment, or Folder: {vfxName}`)
+		return
+	end
+
+	effectClone.Parent = getEffectRuntimeParent()
+	EffectSystem:PlayInsideEffects(effectClone)
+	Debris:AddItem(effectClone, lifeTime or 5)
+end
+
+function getStreakMilestoneVfxAsset(vfxName)
+	local assets = script.Assets
+	local effectAsset = assets:FindFirstChild(vfxName)
+	if effectAsset then
+		return effectAsset
+	end
+
+	local effectsFolder = assets:FindFirstChild("Effects")
+	return effectsFolder and effectsFolder:FindFirstChild(vfxName)
+end
+
+function getStreakMilestoneCFrame(seatId)
+	local visual = activeCoinFlipVisuals[seatId] or getOrCreatePersistentCoinVisual(seatId)
+	if visual then
+		return getCoinObjectPivot(visual.coin)
+	end
+
+	local seatAttachment = getSeatAttachment(seatId)
+	if seatAttachment then
+		return seatAttachment.WorldCFrame
+	end
+
+	local seatPart = getSeatPart(seatId)
+	if seatPart then
+		return seatPart.CFrame
+	end
+
+	return CFrame.new()
+end
+
+function buildStreakMilestoneEffectClone(effectAsset, targetCFrame)
+	if effectAsset:IsA("BasePart") then
+		local effectClone = effectAsset:Clone()
+		effectClone.Anchored = true
+		effectClone.CanCollide = false
+		effectClone.Massless = true
+		effectClone.CFrame = targetCFrame
+		return effectClone
+	end
+
+	if effectAsset:IsA("Model") then
+		local effectClone = effectAsset:Clone()
+		for _, part in ipairs(effectClone:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.Anchored = true
+				part.CanCollide = false
+				part.Massless = true
+			end
+		end
+		effectClone:PivotTo(targetCFrame)
+		return effectClone
+	end
+
+	if effectAsset:IsA("Attachment") then
+		local anchor = createEffectAnchor(effectAsset.Name, targetCFrame)
+		effectAsset:Clone().Parent = anchor
+		return anchor
+	end
+
+	if effectAsset:IsA("Folder") then
+		local anchor = createEffectAnchor(effectAsset.Name, targetCFrame)
+		for _, child in ipairs(effectAsset:GetChildren()) do
+			child:Clone().Parent = anchor
+		end
+		return anchor
+	end
+
+	return nil
+end
+
+function createEffectAnchor(effectName, targetCFrame)
+	local anchor = Instance.new("Part")
+	anchor.Name = `{effectName}Anchor`
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanTouch = false
+	anchor.CanQuery = false
+	anchor.Transparency = 1
+	anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+	anchor.CFrame = targetCFrame
+	return anchor
+end
+
+function getEffectRuntimeParent()
+	return Workspace:FindFirstChild("Effects") or Workspace
+end
+
+function playConfiguredCameraShake(cameraShake)
+	if not cameraShake then
+		return
+	end
+
+	local shakeConfig = resolveCameraShakeConfig(cameraShake)
+	cameraShakeToken += 1
+	local token = cameraShakeToken
+	local startTime = os.clock()
+	local seed = math.random() * 1000
+
+	RunService:UnbindFromRenderStep(CameraShakeRenderStepName)
+	RunService:BindToRenderStep(CameraShakeRenderStepName, Enum.RenderPriority.Camera.Value + 1, function()
+		if token ~= cameraShakeToken then
+			RunService:UnbindFromRenderStep(CameraShakeRenderStepName)
+			return
+		end
+
+		local elapsed = os.clock() - startTime
+		if elapsed >= shakeConfig.duration then
+			RunService:UnbindFromRenderStep(CameraShakeRenderStepName)
+			return
+		end
+
+		local camera = Workspace.CurrentCamera
+		if not camera then
+			return
+		end
+
+		local progress = math.clamp(elapsed / shakeConfig.duration, 0, 1)
+		local fade = shakeConfig.fadeOut and (1 - progress) or 1
+		local amplitude = shakeConfig.amplitude * fade
+		local noiseTime = elapsed * shakeConfig.frequency
+		local x = math.noise(seed, noiseTime, 0) * amplitude
+		local y = math.noise(seed, 0, noiseTime) * amplitude
+		local roll = math.noise(0, seed, noiseTime) * math.rad(shakeConfig.rotation) * fade
+		camera.CFrame = camera.CFrame * CFrame.new(x, y, 0) * CFrame.Angles(0, 0, roll)
+	end)
+end
+
+function resolveCameraShakeConfig(cameraShake)
+	if typeof(cameraShake) ~= "table" then
+		return {
+			duration = 0.32,
+			amplitude = 0.12,
+			frequency = 20,
+			rotation = 0.8,
+			fadeOut = true,
+		}
+	end
+
+	return {
+		duration = cameraShake.duration or 0.32,
+		amplitude = cameraShake.amplitude or 0.12,
+		frequency = cameraShake.frequency or 20,
+		rotation = cameraShake.rotation or 0.8,
+		fadeOut = cameraShake.fadeOut ~= false,
+	}
 end
 
 function clearCoinVisual(seatId)

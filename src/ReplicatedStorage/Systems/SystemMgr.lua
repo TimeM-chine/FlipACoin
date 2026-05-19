@@ -58,6 +58,7 @@ local mt = {
 local systems = {
 	AnimateSystem = require(Replicated.Systems.AnimateSystem),
 	-- BackpackSystem = require(Replicated.Systems.BackpackSystem),
+	AnalyticsSystem = require(Replicated.Systems.AnalyticsSystem),
 	AnnouncementSystem = require(Replicated.Systems.AnnouncementSystem),
 	-- BoxSystem = require(Replicated.Systems.BoxSystem),
 	-- BuffSystem = require(Replicated.Systems.BuffSystem), -- buff

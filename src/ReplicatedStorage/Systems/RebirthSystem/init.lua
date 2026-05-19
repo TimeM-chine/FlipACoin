@@ -22,7 +22,7 @@ local SENDER, SystemMgr
 local dataKey = Keys.DataKey
 
 ---- server variables ----
-local PlayerServerClass, AnalyticsService
+local PlayerServerClass
 
 ---- client variables ----
 local LocalPlayer, ClientData, RebirthUi, EcoUi, DailyUi, SpinUi, GiftUi
@@ -44,7 +44,6 @@ if IsServer then
 	-- Template.AllClients = setmetatable({}, Template)
 	local ServerStorage = game:GetService("ServerStorage")
 	PlayerServerClass = require(ServerStorage.classes.PlayerServerClass)
-	AnalyticsService = game:GetService("AnalyticsService")
 else
 	RebirthSystem.Server = setmetatable({}, RebirthSystem)
 	LocalPlayer = Players.LocalPlayer
@@ -266,7 +265,11 @@ function RebirthSystem:RequestRebirth(sender, player)
 		playerIns:SetOneData(dataKey.rebirth, playerIns:GetOneData(dataKey.rebirth) + 1)
 		playerIns:SetOneData(dataKey.runData, resetRunData)
 
-		AnalyticsService:LogCustomEvent(player, "rebirth")
+		SystemMgr.systems.AnalyticsSystem:LogRebirth(SENDER, player, {
+			rebirthLevel = playerIns:GetOneData(dataKey.rebirth),
+			pointGain = pointGain,
+			cashBeforeReset = wins,
+		})
 		SystemMgr.systems.TableSeatSystem:RegisterActivity(SENDER, player)
 		SystemMgr.systems.PlayerSystem:UpdateLeaderStats(player)
 		SystemMgr.systems.PlayerSystem:UpdatePlayerHeadGui(player)
@@ -330,6 +333,12 @@ function RebirthSystem:RequestRebirthUpgrade(sender, player, args)
 		SystemMgr.systems.PlayerSystem:UpdateLeaderStats(player)
 		SystemMgr.systems.PlayerSystem:UpdatePlayerHeadGui(player)
 		SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
+		SystemMgr.systems.AnalyticsSystem:LogRebirthUpgradePurchased(SENDER, player, {
+			upgradeKey = args.upgradeKey,
+			newLevel = rebirthTree[args.upgradeKey],
+			cost = cost,
+			remainingPoints = playerIns:GetOneData(dataKey.fateShards),
+		})
 		SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
 			rebirthUpgradePurchased = args.upgradeKey,
 		})

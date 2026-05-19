@@ -54,6 +54,26 @@
 
 ## Done
 
+### 2026-05-19 Analytics service instrumentation
+
+- Outcome: 新增并注册 `AnalyticsSystem` 作为 Roblox `AnalyticsService` 的服务端内部门面；接入座位分配、Flip 结果 / streak milestone、run upgrade、shop purchase / equip、rebirth / rebirth upgrade 成功路径；保留 `EcoSystem:AddResource()` 现有 economy event 和首局 onboarding funnel；同步更新 `PROJECT_LOGIC.md`。
+- Validation: `git diff --check` 通过；`AnalyticsSystem` / `coinflip_` 事件引用扫描通过；`stylua --check` 因 Aftman 未在仓库 / 用户 `aftman.toml` 注册 stylua 无法运行；本机未发现 `luau` / `luau-analyze` / `selene`。
+
+### 2026-05-19 Streak milestone effects
+
+- Outcome: 固定 streak milestone 改为读取 `AnnouncementSystem/Presets.lua` 的 `StreakEffects` 配置；默认 `5` 播放 `streak1` SFX / VFX，`10` 播放 `streak2` SFX / VFX 并触发 camera shake；milestone payload 会随自己和同桌观察者的 flip payload 下发，客户端等硬币本地落地后由 `EffectSystem:PlayStreakMilestone()` 播放表现；通知仍走低噪音 `SetNotification()`。
+- Validation: `git diff --check` 通过；旧 `Presets.Thresholds` / streak `soundName` 引用扫描通过；`stylua --check` 因 Aftman 未在仓库 / 用户 `aftman.toml` 注册 stylua 无法运行；本机未发现 `luau` / `luau-analyze` / `selene`。
+
+### 2026-05-19 Onboarding plan execution
+
+- Outcome: 首局引导状态升到 `version = 2`，改为自动入座确认、首次 Flip、flip `3` 次、首次升级、升级后再 Flip 理解 streak；旧 `approachSeat / sitDown` action 和旧存档会迁移兼容；首次升级步骤会对已有 HUD 升级按钮做短 pulse 和通知提示；同步更新 `PROJECT_LOGIC.md`。
+- Validation: `git diff --check` 通过；旧找座 / 手动坐下 / `2 streak` 随机门槛文案扫描仅剩旧存档迁移兼容引用；`stylua --check` 因 Aftman 未在仓库 / 用户 `aftman.toml` 注册 stylua 无法运行；本机未发现 `luau` / `luau-analyze` / `selene`。
+
+### 2026-05-19 Onboarding design review
+
+- Outcome: 完成当前首局引导设计评估：保留“低打扰、无旧浮层”的方向，但建议把旧找座/坐下语言改成自动入座确认、首 Flip、首次升级和 streak 目标的轻提示计划；本轮未改 Luau 或 Studio UI 资产。
+- Validation: 源码阅读覆盖 `CoinFlipSystem/Modules/Onboarding.lua`、`CoinFlipSystem/init.lua`、`CoinFlipSystem/ui.lua`、`TableSeatSystem/init.lua`、`PlayerSystem/init.lua` 与项目文档；未运行 Studio Play。
+
 ### 2026-05-19 In-flight random coin spin
 
 - Outcome: `EffectSystem` now decides the random tabletop yaw at flip start, applies extra randomized yaw turns while the coin is airborne, and blends the final descent into the exact flat Heads / Tails rest orientation so the coin no longer visibly rotates after it has landed.

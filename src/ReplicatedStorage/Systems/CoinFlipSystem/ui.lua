@@ -127,6 +127,8 @@ local currentFlipInProgress = false
 local currentLayoutIsMobilePortrait = false
 local autoFlipEnabled = false
 local autoFlipToken = 0
+local upgradePromptToken = 0
+local lastUpgradePromptKey = nil
 local currentRunSnapshot = {
 	cash = 0,
 	runData = {},
@@ -165,7 +167,7 @@ local function buildFailureFollowUpText()
 	local suggestedUpgrade = getRecommendedUpgradeKey()
 
 	if not seatState.isSeated then
-		return "Next: take a seat and start again."
+		return "Next: wait for your seat and start again."
 	end
 
 	if suggestedUpgrade then
@@ -186,6 +188,53 @@ local function maybeShowFailureFollowUpNotification(text)
 		soundName = "notification",
 		textColor = Color3.fromRGB(255, 223, 153),
 	})
+end
+
+local function pulseRecommendedUpgrade(onboarding)
+	if not onboarding or onboarding.currentStep ~= "buyUpgrade" then
+		lastUpgradePromptKey = nil
+		return
+	end
+
+	local upgradeKey = getRecommendedUpgradeKey()
+	if not upgradeKey or lastUpgradePromptKey == upgradeKey then
+		return
+	end
+
+	local button = UpgradeMap[upgradeKey]
+	local title = UpgradeTitles[upgradeKey] or "Upgrade"
+	lastUpgradePromptKey = upgradeKey
+	upgradePromptToken += 1
+	local token = upgradePromptToken
+	local originalColor = button.BackgroundColor3
+	local originalTitleColor = button.Title.TextColor3
+
+	uiController.SetNotification({
+		text = `Upgrade {title} to make your next Heads stronger.`,
+		lastTime = 2.6,
+		soundName = "notification",
+		textColor = Color3.fromRGB(255, 231, 163),
+	})
+
+	TweenService:Create(button, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		BackgroundColor3 = Color3.fromRGB(255, 197, 73),
+	}):Play()
+	TweenService:Create(button.Title, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		TextColor3 = Color3.fromRGB(26, 22, 12),
+	}):Play()
+
+	task.delay(0.7, function()
+		if token ~= upgradePromptToken then
+			return
+		end
+
+		TweenService:Create(button, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			BackgroundColor3 = originalColor,
+		}):Play()
+		TweenService:Create(button.Title, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			TextColor3 = originalTitleColor,
+		}):Play()
+	end)
 end
 
 local function playSfx(soundName)
@@ -690,6 +739,7 @@ function CoinFlipUi.SyncRunState(args)
 	setVisible(isSeated)
 	updateTableOverview(seatState)
 	CoinFlipUi.UpdateOnboarding(args.onboarding)
+	pulseRecommendedUpgrade(args.onboarding)
 	if isSeated and ResultLabel.Text == "Waiting for seat assignment..." then
 		updateResultText(getReadyPrompt(), "Neutral")
 	end
@@ -723,6 +773,7 @@ function CoinFlipUi.FlipResolved(args)
 				maybeShowFailureFollowUpNotification(failureFollowUpText)
 			end
 
+			EffectSystem:PlayStreakMilestone(nil, nil, args.streakMilestone)
 			scheduleAutoFlipRequest()
 		end,
 	})
@@ -773,6 +824,9 @@ function CoinFlipUi.ObservedFlip(args)
 			isObserved = true,
 			streak = args.streak or 0,
 		},
+		landedCallback = function()
+			EffectSystem:PlayStreakMilestone(nil, nil, args.streakMilestone)
+		end,
 	})
 end
 

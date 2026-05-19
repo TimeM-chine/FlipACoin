@@ -7,24 +7,23 @@ local dataKey = Keys.DataKey
 local Onboarding = {}
 
 Onboarding.RequiredFlipCount = 3
-Onboarding.RequiredStreak = 2
 
 Onboarding.StepOrder = table.freeze({
 	{
-		key = "approachSeat",
-		label = "Find Seat",
-		title = "Find an open seat",
+		key = "autoSeat",
+		label = "Seat Ready",
+		title = "Get seated at the table",
 		analyticsStep = 2,
-		analyticsName = "coinflip_approach_seat",
-		toastText = "Open seat found. Sit down to start your run.",
+		analyticsName = "coinflip_auto_seated",
+		toastText = "Seat ready. Tap FLIP to start your run.",
 	},
 	{
-		key = "sitDown",
-		label = "Sit Down",
-		title = "Sit down at the table",
+		key = "firstFlip",
+		label = "First Flip",
+		title = "Make your first flip",
 		analyticsStep = 3,
-		analyticsName = "coinflip_sit_down",
-		toastText = "Nice. Flip 3 times to warm up your run.",
+		analyticsName = "coinflip_first_flip",
+		toastText = "Good. Flip 3 times to build your first Cash run.",
 	},
 	{
 		key = "flipThree",
@@ -40,15 +39,15 @@ Onboarding.StepOrder = table.freeze({
 		title = "Buy your first upgrade",
 		analyticsStep = 5,
 		analyticsName = "coinflip_buy_upgrade",
-		toastText = "Now chase a 2 Heads streak.",
+		toastText = "Upgrade bought. Flip again and try to build a streak.",
 	},
 	{
-		key = "reachTwoStreak",
-		label = "2 Streak",
-		title = "Reach a 2 Heads streak",
+		key = "tryStreak",
+		label = "Try Streak",
+		title = "Try for a Heads streak",
 		analyticsStep = 6,
-		analyticsName = "coinflip_reach_two_streak",
-		toastText = "Guide complete. Push for a bigger streak now.",
+		analyticsName = "coinflip_try_streak",
+		toastText = "Guide complete. Chase bigger streaks now.",
 	},
 })
 
@@ -58,12 +57,12 @@ for _, step in ipairs(Onboarding.StepOrder) do
 end
 
 local DefaultState = table.freeze({
-	version = 1,
-	approachSeat = false,
-	sitDown = false,
+	version = 2,
+	autoSeated = false,
+	firstFlip = false,
 	flipCount = 0,
 	boughtUpgrade = false,
-	reachedTwoStreak = false,
+	triedStreak = false,
 	completed = false,
 })
 
@@ -72,19 +71,19 @@ local function cloneDefaultState()
 end
 
 local function isStateComplete(state)
-	return state.approachSeat
-		and state.sitDown
+	return state.autoSeated
+		and state.firstFlip
 		and state.flipCount >= Onboarding.RequiredFlipCount
 		and state.boughtUpgrade
-		and state.reachedTwoStreak
+		and state.triedStreak
 end
 
 function Onboarding.IsStepComplete(state, stepKey)
-	if stepKey == "approachSeat" then
-		return state.approachSeat == true
+	if stepKey == "autoSeat" then
+		return state.autoSeated == true
 	end
-	if stepKey == "sitDown" then
-		return state.sitDown == true
+	if stepKey == "firstFlip" then
+		return state.firstFlip == true
 	end
 	if stepKey == "flipThree" then
 		return (state.flipCount or 0) >= Onboarding.RequiredFlipCount
@@ -92,8 +91,8 @@ function Onboarding.IsStepComplete(state, stepKey)
 	if stepKey == "buyUpgrade" then
 		return state.boughtUpgrade == true
 	end
-	if stepKey == "reachTwoStreak" then
-		return state.reachedTwoStreak == true
+	if stepKey == "tryStreak" then
+		return state.triedStreak == true
 	end
 
 	return false
@@ -144,11 +143,11 @@ function Onboarding.BuildActionText(state, context)
 		return "Free Play"
 	end
 
-	if stepKey == "approachSeat" then
-		return "Take Seat"
+	if stepKey == "autoSeat" then
+		return "Finding Seat"
 	end
-	if stepKey == "sitDown" then
-		return "Sit Down"
+	if stepKey == "firstFlip" then
+		return "First Flip"
 	end
 	if stepKey == "flipThree" then
 		local flipCount = math.min(state.flipCount or 0, Onboarding.RequiredFlipCount)
@@ -157,9 +156,8 @@ function Onboarding.BuildActionText(state, context)
 	if stepKey == "buyUpgrade" then
 		return "Buy Upgrade"
 	end
-	if stepKey == "reachTwoStreak" then
-		local streak = math.min((context and context.streak) or 0, Onboarding.RequiredStreak)
-		return `2 Streak {streak}/{Onboarding.RequiredStreak}`
+	if stepKey == "tryStreak" then
+		return "Try Streak"
 	end
 
 	return "Keep Going"
@@ -175,11 +173,11 @@ function Onboarding.BuildHeadSecondaryText(state, context)
 		return "Cash Run"
 	end
 
-	if stepKey == "approachSeat" then
-		return "Start your first run"
+	if stepKey == "autoSeat" then
+		return "Auto seating"
 	end
-	if stepKey == "sitDown" then
-		return "Joining the table"
+	if stepKey == "firstFlip" then
+		return "Tap FLIP"
 	end
 	if stepKey == "flipThree" then
 		return "Warm up your run"
@@ -194,8 +192,8 @@ function Onboarding.BuildHeadSecondaryText(state, context)
 		end
 		return "Spend your Cash"
 	end
-	if stepKey == "reachTwoStreak" then
-		return "Chain 2 Heads"
+	if stepKey == "tryStreak" then
+		return "Flip after upgrading"
 	end
 
 	return "Keep Going"
@@ -204,6 +202,30 @@ end
 local function persistState(playerIns, guideData, state)
 	guideData.coinFlipOnboarding = state
 	playerIns:SetOneData(dataKey.guideData, guideData)
+end
+
+local function migrateState(state)
+	local migratedState = cloneDefaultState()
+	local flipCount = state.flipCount or 0
+
+	if state.completed == true then
+		migratedState.autoSeated = true
+		migratedState.firstFlip = true
+		migratedState.flipCount = Onboarding.RequiredFlipCount
+		migratedState.boughtUpgrade = true
+		migratedState.triedStreak = true
+		migratedState.completed = true
+		return migratedState
+	end
+
+	migratedState.autoSeated = state.autoSeated == true or state.sitDown == true or state.approachSeat == true
+	migratedState.firstFlip = state.firstFlip == true or flipCount >= 1
+	migratedState.flipCount = flipCount
+	migratedState.boughtUpgrade = state.boughtUpgrade == true
+	migratedState.triedStreak = state.triedStreak == true or state.reachedTwoStreak == true
+	migratedState.completed = isStateComplete(migratedState)
+
+	return migratedState
 end
 
 function Onboarding.EnsureState(playerIns)
@@ -220,16 +242,16 @@ function Onboarding.EnsureState(playerIns)
 		state = cloneDefaultState()
 		needsSave = true
 	else
-		if typeof(state.version) ~= "number" then
-			state.version = DefaultState.version
+		if state.version ~= DefaultState.version then
+			state = migrateState(state)
 			needsSave = true
 		end
-		if typeof(state.approachSeat) ~= "boolean" then
-			state.approachSeat = false
+		if typeof(state.autoSeated) ~= "boolean" then
+			state.autoSeated = false
 			needsSave = true
 		end
-		if typeof(state.sitDown) ~= "boolean" then
-			state.sitDown = false
+		if typeof(state.firstFlip) ~= "boolean" then
+			state.firstFlip = false
 			needsSave = true
 		end
 		if typeof(state.flipCount) ~= "number" then
@@ -240,8 +262,8 @@ function Onboarding.EnsureState(playerIns)
 			state.boughtUpgrade = false
 			needsSave = true
 		end
-		if typeof(state.reachedTwoStreak) ~= "boolean" then
-			state.reachedTwoStreak = false
+		if typeof(state.triedStreak) ~= "boolean" then
+			state.triedStreak = false
 			needsSave = true
 		end
 		if typeof(state.completed) ~= "boolean" then
@@ -292,7 +314,6 @@ function Onboarding.BuildState(playerIns)
 		totalSteps = #Onboarding.StepOrder,
 		flipCount = math.clamp(state.flipCount or 0, 0, Onboarding.RequiredFlipCount),
 		requiredFlips = Onboarding.RequiredFlipCount,
-		requiredStreak = Onboarding.RequiredStreak,
 		steps = steps,
 	}
 end
@@ -306,24 +327,18 @@ function Onboarding.ApplyAction(playerIns, action, context)
 		return false, milestones
 	end
 
-	if action == "approachSeat" then
-		if not state.approachSeat then
-			state.approachSeat = true
+	if action == "autoSeat" or action == "approachSeat" or action == "sitDown" then
+		if not state.autoSeated then
+			state.autoSeated = true
 			changed = true
-			table.insert(milestones, StepLookup.approachSeat)
-		end
-	elseif action == "sitDown" then
-		if not state.approachSeat then
-			state.approachSeat = true
-			changed = true
-			table.insert(milestones, StepLookup.approachSeat)
-		end
-		if not state.sitDown then
-			state.sitDown = true
-			changed = true
-			table.insert(milestones, StepLookup.sitDown)
+			table.insert(milestones, StepLookup.autoSeat)
 		end
 	elseif action == "flip" then
+		if not state.firstFlip then
+			state.firstFlip = true
+			changed = true
+			table.insert(milestones, StepLookup.firstFlip)
+		end
 		local previousCount = state.flipCount or 0
 		local targetCount = context and context.flipCount
 		if typeof(targetCount) ~= "number" then
@@ -344,11 +359,10 @@ function Onboarding.ApplyAction(playerIns, action, context)
 			table.insert(milestones, StepLookup.buyUpgrade)
 		end
 	elseif action == "streak" then
-		local streak = context and context.streak or 0
-		if streak >= Onboarding.RequiredStreak and not state.reachedTwoStreak then
-			state.reachedTwoStreak = true
+		if state.boughtUpgrade and state.flipCount >= Onboarding.RequiredFlipCount and not state.triedStreak then
+			state.triedStreak = true
 			changed = true
-			table.insert(milestones, StepLookup.reachTwoStreak)
+			table.insert(milestones, StepLookup.tryStreak)
 		end
 	end
 
