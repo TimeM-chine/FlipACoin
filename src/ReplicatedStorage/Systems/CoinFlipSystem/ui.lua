@@ -823,6 +823,7 @@ function CoinFlipUi.ObservedFlip(args)
 		visualOptions = {
 			isObserved = true,
 			streak = args.streak or 0,
+			isMilestone = args.streakMilestone ~= nil,
 		},
 		landedCallback = function()
 			EffectSystem:PlayStreakMilestone(nil, nil, args.streakMilestone)

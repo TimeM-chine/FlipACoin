@@ -15,7 +15,7 @@ Onboarding.StepOrder = table.freeze({
 		title = "Get seated at the table",
 		analyticsStep = 2,
 		analyticsName = "coinflip_auto_seated",
-		toastText = "Seat ready. Tap FLIP to start your run.",
+		toastText = "Seat ready. Flip 3 times to earn your first upgrade.",
 	},
 	{
 		key = "firstFlip",
@@ -23,7 +23,7 @@ Onboarding.StepOrder = table.freeze({
 		title = "Make your first flip",
 		analyticsStep = 3,
 		analyticsName = "coinflip_first_flip",
-		toastText = "Good. Flip 3 times to build your first Cash run.",
+		toastText = "Good. Keep flipping until you can buy Value.",
 	},
 	{
 		key = "flipThree",
@@ -31,7 +31,7 @@ Onboarding.StepOrder = table.freeze({
 		title = "Flip 3 times",
 		analyticsStep = 4,
 		analyticsName = "coinflip_flip_three",
-		toastText = "Great. Spend your Cash on the first upgrade.",
+		toastText = "Great. You have enough Cash for the first upgrade.",
 	},
 	{
 		key = "buyUpgrade",
@@ -180,7 +180,7 @@ function Onboarding.BuildHeadSecondaryText(state, context)
 		return "Tap FLIP"
 	end
 	if stepKey == "flipThree" then
-		return "Warm up your run"
+		return "Earn first upgrade"
 	end
 	if stepKey == "buyUpgrade" then
 		local cash = context and context.cash

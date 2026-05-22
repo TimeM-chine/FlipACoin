@@ -280,11 +280,15 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 	local airborneDuration = VisualConfig.TravelDuration
 	local shadowPos = surfaceEndPos + (tableNormal * ((baseShadowSize.X * 0.5) + VisualConfig.ShadowSurfaceGap))
 	local visualOptions = args.visualOptions
+	local isObservedFlip = visualOptions and visualOptions.isObserved == true
+	local isObservedMilestone = visualOptions and visualOptions.isMilestone == true
 	local observedStreak = visualOptions and (visualOptions.streak or 0) or 0
-	local shouldShowObservedStreakPulse = visualOptions
-		and visualOptions.isObserved == true
+	local shouldShowObservedStreakPulse = isObservedFlip
 		and result == "Heads"
-		and observedStreak >= VisualConfig.StreakPulseMinimum
+		and (observedStreak >= VisualConfig.StreakPulseMinimum or isObservedMilestone)
+	local shouldShowObservedHighlight = isObservedFlip
+		and not isObservedMilestone
+		and observedStreak >= VisualConfig.ObservedHighlightMinimum
 
 	pivotCoinVisual(visual, CFrame.new(startPos) * CoinVisualBaseRot)
 	shadow.CFrame = CFrame.new(startPos.X, shadowPos.Y, startPos.Z) * CoinVisualBaseRot
@@ -340,16 +344,25 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 		visual.connection:Disconnect()
 		visual.connection = nil
 
-		local pulseColor = result == "Heads" and VisualConfig.HeadsPulseColor or VisualConfig.TailsPulseColor
+		local pulseColor = getLandingPulseColor(result, isObservedFlip)
+		local landingPulseOptions = getLandingPulseOptions(result, isObservedFlip)
 		playSfx("coinLand")
-		playLandingPulse(landingPulse, shadowPos, pulseColor)
+		playLandingPulse(landingPulse, shadowPos, pulseColor, landingPulseOptions)
 		if shouldShowObservedStreakPulse then
-			local streakPulseBonus = math.clamp(observedStreak - VisualConfig.StreakPulseMinimum, 0, 6) * 0.16
 			playLandingPulse(streakPulse, shadowPos, VisualConfig.StreakPulseColor, {
 				startSize = VisualConfig.StreakPulseStartSize,
-				endSize = VisualConfig.StreakPulseEndSize + streakPulseBonus,
+				endSize = getObservedStreakPulseEndSize(observedStreak),
 				duration = VisualConfig.StreakPulseDuration,
 				transparency = 0.22,
+			})
+		end
+		if shouldShowObservedHighlight then
+			playCoinVisualHighlight(seatId, visual, {
+				duration = VisualConfig.ObservedHighlightDuration,
+				fillColor = VisualConfig.ObservedHighlightFillColor,
+				outlineColor = VisualConfig.ObservedHighlightOutlineColor,
+				fillTransparency = VisualConfig.ObservedHighlightFillTransparency,
+				outlineTransparency = VisualConfig.ObservedHighlightOutlineTransparency,
 			})
 		end
 
@@ -460,7 +473,18 @@ function EffectSystem:PlayStreakMilestone(sender, player, args)
 	end
 
 	playSfx(args.sfx)
-	playStreakMilestoneVfx(args.seatId, args.vfx, args.lifeTime)
+	local playedVfx = playStreakMilestoneVfx(args.seatId, args.vfx, args.lifeTime)
+	if playedVfx then
+		playCoinVisualHighlight(args.seatId, activeCoinFlipVisuals[args.seatId], {
+			duration = VisualConfig.MilestoneHighlightDuration,
+			fillColor = VisualConfig.MilestoneHighlightFillColor,
+			outlineColor = VisualConfig.MilestoneHighlightOutlineColor,
+			fillTransparency = VisualConfig.MilestoneHighlightFillTransparency,
+			outlineTransparency = VisualConfig.MilestoneHighlightOutlineTransparency,
+		})
+	else
+		playStreakMilestoneFallback(args.seatId, args.streak)
+	end
 	playConfiguredCameraShake(args.cameraShake)
 end
 
@@ -1065,6 +1089,77 @@ function playLandingPulse(pulse, position, color, options)
 	end)
 end
 
+function getLandingPulseColor(result, isObservedFlip)
+	if isObservedFlip and result == "Heads" then
+		return VisualConfig.ObservedHeadsPulseColor
+	end
+	if isObservedFlip then
+		return VisualConfig.ObservedTailsPulseColor
+	end
+
+	return result == "Heads" and VisualConfig.HeadsPulseColor or VisualConfig.TailsPulseColor
+end
+
+function getLandingPulseOptions(result, isObservedFlip)
+	if not isObservedFlip then
+		return nil
+	end
+	if result == "Heads" then
+		return {
+			startSize = VisualConfig.ObservedHeadsPulseStartSize,
+			endSize = VisualConfig.ObservedHeadsPulseEndSize,
+			duration = VisualConfig.ObservedHeadsPulseDuration,
+			transparency = VisualConfig.ObservedHeadsPulseTransparency,
+		}
+	end
+
+	return {
+		startSize = VisualConfig.ObservedTailsPulseStartSize,
+		endSize = VisualConfig.ObservedTailsPulseEndSize,
+		duration = VisualConfig.ObservedTailsPulseDuration,
+		transparency = VisualConfig.ObservedTailsPulseTransparency,
+	}
+end
+
+function getObservedStreakPulseEndSize(streak)
+	local streakOverMinimum = math.max((streak or 0) - VisualConfig.StreakPulseMinimum, 0)
+	return VisualConfig.StreakPulseEndSize
+		+ math.clamp(streakOverMinimum, 0, 10) * VisualConfig.ObservedStreakPulseGrowth
+end
+
+function playCoinVisualHighlight(seatId, visual, options)
+	local target = visual and visual.coin or getSeatPart(seatId)
+	if not target then
+		return
+	end
+
+	playHighlightFlash(target, options)
+end
+
+function playHighlightFlash(target, options)
+	local duration = options and options.duration or VisualConfig.ObservedHighlightDuration
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "CoinFlipHighlight"
+	highlight.Adornee = target
+	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+	highlight.FillColor = options and options.fillColor or VisualConfig.ObservedHighlightFillColor
+	highlight.OutlineColor = options and options.outlineColor or VisualConfig.ObservedHighlightOutlineColor
+	highlight.FillTransparency = options and options.fillTransparency or VisualConfig.ObservedHighlightFillTransparency
+	highlight.OutlineTransparency = options and options.outlineTransparency
+		or VisualConfig.ObservedHighlightOutlineTransparency
+	highlight.Parent = getEffectRuntimeParent()
+
+	local tween = TweenService:Create(highlight, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		FillTransparency = 1,
+		OutlineTransparency = 1,
+	})
+	tween:Play()
+	tween.Completed:Once(function()
+		highlight:Destroy()
+	end)
+	Debris:AddItem(highlight, duration + 0.12)
+end
+
 function getSfxSound(soundName)
 	if typeof(soundName) ~= "string" or soundName == "" then
 		return nil
@@ -1114,25 +1209,55 @@ end
 
 function playStreakMilestoneVfx(seatId, vfxName, lifeTime)
 	if typeof(vfxName) ~= "string" or vfxName == "" then
-		return
+		return false
 	end
 
 	local effectAsset = getStreakMilestoneVfxAsset(vfxName)
 	if not effectAsset then
 		warn(`[EffectSystem] Missing streak milestone VFX asset: {vfxName}`)
-		return
+		return false
 	end
 
 	local targetCFrame = getStreakMilestoneCFrame(seatId)
 	local effectClone = buildStreakMilestoneEffectClone(effectAsset, targetCFrame)
 	if not effectClone then
 		warn(`[EffectSystem] Streak milestone VFX must be a Model, BasePart, Attachment, or Folder: {vfxName}`)
-		return
+		return false
 	end
 
 	effectClone.Parent = getEffectRuntimeParent()
 	EffectSystem:PlayInsideEffects(effectClone)
 	Debris:AddItem(effectClone, lifeTime or 5)
+	return true
+end
+
+function playStreakMilestoneFallback(seatId, streak)
+	local visual = activeCoinFlipVisuals[seatId] or getOrCreatePersistentCoinVisual(seatId)
+	if visual then
+		local streakBonus = math.clamp((streak or 0) - 5, 0, 10) * VisualConfig.ObservedStreakPulseGrowth
+		playLandingPulse(visual.streakPulse, visual.shadow.Position, VisualConfig.MilestoneFallbackPulseColor, {
+			startSize = VisualConfig.MilestoneFallbackPulseStartSize,
+			endSize = VisualConfig.MilestoneFallbackPulseEndSize + streakBonus,
+			duration = VisualConfig.MilestoneFallbackPulseDuration,
+			transparency = VisualConfig.MilestoneFallbackPulseTransparency,
+		})
+		playCoinVisualHighlight(seatId, visual, {
+			duration = VisualConfig.MilestoneHighlightDuration,
+			fillColor = VisualConfig.MilestoneHighlightFillColor,
+			outlineColor = VisualConfig.MilestoneHighlightOutlineColor,
+			fillTransparency = VisualConfig.MilestoneHighlightFillTransparency,
+			outlineTransparency = VisualConfig.MilestoneHighlightOutlineTransparency,
+		})
+		return
+	end
+
+	playCoinVisualHighlight(seatId, nil, {
+		duration = VisualConfig.MilestoneHighlightDuration,
+		fillColor = VisualConfig.MilestoneHighlightFillColor,
+		outlineColor = VisualConfig.MilestoneHighlightOutlineColor,
+		fillTransparency = VisualConfig.MilestoneHighlightFillTransparency,
+		outlineTransparency = VisualConfig.MilestoneHighlightOutlineTransparency,
+	})
 end
 
 function getStreakMilestoneVfxAsset(vfxName)

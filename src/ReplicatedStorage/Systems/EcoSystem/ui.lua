@@ -2,6 +2,7 @@ local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
 local GuiService = game:GetService("GuiService")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local SystemMgr = require(Replicated.Systems.SystemMgr)
 local ClientData = require(Replicated.Systems.ClientData)
@@ -27,6 +28,7 @@ local InventoryFrame = Frames:WaitForChild("Inventory")
 
 local ShopBody = ShopFrame:WaitForChild("Body")
 local ShopTabs = ShopBody:WaitForChild("Tabs")
+local ShopBoostTab = ShopTabs:FindFirstChild("BoostTab") or ShopTabs:FindFirstChild("RobuxTab")
 local ShopItems = ShopBody:WaitForChild("Items")
 local ShopPreview = ShopBody:WaitForChild("Preview")
 local ShopPageControls = ShopBody:WaitForChild("PageControls")
@@ -55,12 +57,14 @@ local EcoUi = {}
 local initialized = false
 local currentCash = 0
 local currentLoadoutState = {}
+local currentGamePasses = {}
 local selectedShopCategory = "coin"
 local selectedInventoryCategory = "coin"
 local selectedShopPageByCategory = {
 	coin = 1,
 	desk = 1,
 	chair = 1,
+	boost = 1,
 }
 local selectedInventoryPageByCategory = {
 	coin = 1,
@@ -74,6 +78,7 @@ local idleTabTextColor = CREAM_COLOR
 local suppressTopbarToggle = false
 local shopTopbarIcon
 local inventoryTopbarIcon
+local boostsTopbarIcon
 local shopRenderedItems = {}
 local inventoryRenderedItems = {}
 
@@ -103,6 +108,51 @@ local function getEquippedItem(category)
 	end
 
 	return ""
+end
+
+local function getOrderedBoostItems()
+	local items = {}
+	for productKey, productInfo in pairs(EcoPresets.Products.flipACoin) do
+		table.insert(items, {
+			itemType = "product",
+			key = productKey,
+			order = productInfo.order or 100,
+			displayName = productInfo.productName,
+			description = productInfo.description,
+			price = productInfo.price,
+			storeId = productInfo.productId,
+			configured = typeof(productInfo.productId) == "number" and productInfo.productId > 0,
+		})
+	end
+	for gamePassName, gamePassInfo in pairs(EcoPresets.GamePasses) do
+		if not gamePassInfo.hideInShop then
+			table.insert(items, {
+				itemType = "gamePass",
+				key = gamePassName,
+				order = 100 + (gamePassInfo.order or 100),
+				displayName = gamePassInfo.title,
+				description = gamePassInfo.description,
+				price = gamePassInfo.price,
+				storeId = gamePassInfo.gamePassId,
+				configured = typeof(gamePassInfo.gamePassId) == "number" and gamePassInfo.gamePassId > 0,
+			})
+		end
+	end
+
+	table.sort(items, function(a, b)
+		return a.order < b.order
+	end)
+	return items
+end
+
+local function getBoostPageCount(pageSize)
+	return math.max(1, math.ceil(#getOrderedBoostItems() / pageSize))
+end
+
+local function getPagedBoostItem(pageIndex, pageSize, slotIndex)
+	local items = getOrderedBoostItems()
+	local itemIndex = (pageIndex - 1) * pageSize + slotIndex
+	return items[itemIndex]
 end
 
 local function formatMultiplier(multiplier)
@@ -152,6 +202,10 @@ local function updateTabButton(button, isSelected)
 end
 
 local function getPageCount(category, pageSize)
+	if category == "boost" then
+		return getBoostPageCount(pageSize)
+	end
+
 	local items = EcoPresets.GrowthShopItems[category] or {}
 	return math.max(1, math.ceil(#items / pageSize))
 end
@@ -181,6 +235,10 @@ local function clampOwnedPage(category, pageByCategory, pageSize)
 end
 
 local function getPagedItem(category, pageIndex, pageSize, slotIndex)
+	if category == "boost" then
+		return getPagedBoostItem(pageIndex, pageSize, slotIndex)
+	end
+
 	local items = EcoPresets.GrowthShopItems[category] or {}
 	local itemIndex = (pageIndex - 1) * pageSize + slotIndex
 	return items[itemIndex]
@@ -192,6 +250,26 @@ local function updatePageControls(pageControls, pageIndex, pageCount)
 	setButtonText(pageControls.NextButton, ">", pageIndex < pageCount)
 end
 
+local function setTopbarIconSelected(icon, isSelected)
+	if not icon then
+		return
+	end
+
+	suppressTopbarToggle = true
+	if isSelected then
+		icon:select()
+	else
+		icon:deselect()
+	end
+	suppressTopbarToggle = false
+end
+
+local function refreshTopbarIconState()
+	setTopbarIconSelected(shopTopbarIcon, ShopFrame.Visible and selectedShopCategory ~= "boost")
+	setTopbarIconSelected(boostsTopbarIcon, ShopFrame.Visible and selectedShopCategory == "boost")
+	setTopbarIconSelected(inventoryTopbarIcon, InventoryFrame.Visible)
+end
+
 local function updateLoadoutSummary()
 	local equippedCoin = getEquippedItem("coin")
 	local equippedDesk = getEquippedItem("desk")
@@ -199,7 +277,7 @@ local function updateLoadoutSummary()
 	local equippedCoinName = EcoPresets.GetShopItemDisplayName("coin", equippedCoin)
 	local equippedDeskName = EcoPresets.GetShopItemDisplayName("desk", equippedDesk)
 	local equippedChairName = EcoPresets.GetShopItemDisplayName("chair", equippedChair)
-	local bonuses = EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDesk, equippedChair)
+	local bonuses = EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDesk, equippedChair, currentGamePasses)
 	InventoryLoadout.CoinSlot.Value.Text = equippedCoinName
 	InventoryLoadout.DeskSlot.Value.Text = equippedDeskName
 	InventoryLoadout.ChairSlot.Value.Text = equippedChairName
@@ -212,10 +290,15 @@ local function updateShopPanel()
 	updateTabButton(ShopTabs.CoinTab, selectedShopCategory == "coin")
 	updateTabButton(ShopTabs.DeskTab, selectedShopCategory == "desk")
 	updateTabButton(ShopTabs.ChairTab, selectedShopCategory == "chair")
+	if ShopBoostTab and ShopBoostTab:IsA("TextButton") then
+		updateTabButton(ShopBoostTab, selectedShopCategory == "boost")
+	end
 	if selectedShopCategory == "coin" then
 		ShopPreview.Title.Text = "Coin Loadout"
 	elseif selectedShopCategory == "desk" then
 		ShopPreview.Title.Text = "Desk Setup"
+	elseif selectedShopCategory == "boost" then
+		ShopPreview.Title.Text = "Boosts"
 	else
 		ShopPreview.Title.Text = "Chair Setup"
 	end
@@ -231,17 +314,31 @@ local function updateShopPanel()
 		shopRenderedItems[index] = item
 		card.Visible = item ~= nil
 		if item then
-			local isOwned = ownedItems[item.id] == true
-			local isEquipped = equippedItem == item.id
-			setTextIfPresent(card, "Name", item.displayName)
-			card.Bonus.Text = `{item.rarity} | {item.role} | {describeItemStats(item.stats)}`
-			card.Price.Text = item.cost == 0 and "Starter" or `$ {Util.FormatNumber(item.cost, true)}`
-			if isEquipped then
-				setButtonText(card.BuyButton, "On", false)
-			elseif isOwned then
-				setButtonText(card.BuyButton, "Equip", true)
+			if selectedShopCategory == "boost" then
+				local isOwnedPass = item.itemType == "gamePass" and currentGamePasses[item.key] == true
+				setTextIfPresent(card, "Name", item.displayName)
+				card.Bonus.Text = item.description or "Premium boost"
+				card.Price.Text = item.price and Util.GetRobuxText(item.price) or "Robux"
+				if isOwnedPass then
+					setButtonText(card.BuyButton, "Owned", false)
+				elseif item.configured then
+					setButtonText(card.BuyButton, "Buy", true)
+				else
+					setButtonText(card.BuyButton, "Set ID", false)
+				end
 			else
-				setButtonText(card.BuyButton, currentCash >= item.cost and "Buy" or "Need", currentCash >= item.cost)
+				local isOwned = ownedItems[item.id] == true
+				local isEquipped = equippedItem == item.id
+				setTextIfPresent(card, "Name", item.displayName)
+				card.Bonus.Text = `{item.rarity} | {item.role} | {describeItemStats(item.stats)}`
+				card.Price.Text = item.cost == 0 and "Starter" or `$ {Util.FormatNumber(item.cost, true)}`
+				if isEquipped then
+					setButtonText(card.BuyButton, "On", false)
+				elseif isOwned then
+					setButtonText(card.BuyButton, "Equip", true)
+				else
+					setButtonText(card.BuyButton, currentCash >= item.cost and "Buy" or "Need", currentCash >= item.cost)
+				end
 			end
 		end
 	end
@@ -307,17 +404,12 @@ end
 local function updatePanels()
 	updateShopPanel()
 	updateInventoryPanel()
+	refreshTopbarIconState()
 end
 
-local function syncTopbarIcon(icon, frame)
+local function syncTopbarIcon(frame)
 	frame:GetPropertyChangedSignal("Visible"):Connect(function()
-		suppressTopbarToggle = true
-		if frame.Visible then
-			icon:select()
-		else
-			icon:deselect()
-		end
-		suppressTopbarToggle = false
+		refreshTopbarIconState()
 	end)
 end
 
@@ -341,17 +433,29 @@ local function createTopbarFrameIcon(name, label, order, frame, beforeOpen)
 			uiController.CloseFrame(frame.Name)
 		end
 	end)
-	syncTopbarIcon(icon, frame)
+	syncTopbarIcon(frame)
 	return icon
 end
 
 local function bindTopbarIcons()
-	shopTopbarIcon = createTopbarFrameIcon("Shop", "S", 20, ShopFrame, updatePanels)
-	inventoryTopbarIcon = createTopbarFrameIcon("Inventory", "B", 21, InventoryFrame, updatePanels)
+	shopTopbarIcon = createTopbarFrameIcon("Shop", "S", 20, ShopFrame, function()
+		if selectedShopCategory == "boost" then
+			selectedShopCategory = "coin"
+		end
+		updatePanels()
+	end)
+	boostsTopbarIcon = createTopbarFrameIcon("Boosts", "R$", 21, ShopFrame, function()
+		selectedShopCategory = "boost"
+		updatePanels()
+	end)
+	inventoryTopbarIcon = createTopbarFrameIcon("Inventory", "B", 22, InventoryFrame, updatePanels)
 end
 
 local function bindButtons()
 	uiController.SetButtonHoverAndClick(CoinFlipMenu.ShopButton, function()
+		if selectedShopCategory == "boost" then
+			selectedShopCategory = "coin"
+		end
 		updatePanels()
 		uiController.OpenFrame("Shop")
 	end)
@@ -369,16 +473,22 @@ local function bindButtons()
 
 	uiController.SetButtonHoverAndClick(ShopTabs.CoinTab, function()
 		selectedShopCategory = "coin"
-		updateShopPanel()
+		updatePanels()
 	end)
 	uiController.SetButtonHoverAndClick(ShopTabs.DeskTab, function()
 		selectedShopCategory = "desk"
-		updateShopPanel()
+		updatePanels()
 	end)
 	uiController.SetButtonHoverAndClick(ShopTabs.ChairTab, function()
 		selectedShopCategory = "chair"
-		updateShopPanel()
+		updatePanels()
 	end)
+	if ShopBoostTab and ShopBoostTab:IsA("TextButton") then
+		uiController.SetButtonHoverAndClick(ShopBoostTab, function()
+			selectedShopCategory = "boost"
+			updatePanels()
+		end)
+	end
 	uiController.SetButtonHoverAndClick(ShopPageControls.PrevButton, function()
 		selectedShopPageByCategory[selectedShopCategory] = (selectedShopPageByCategory[selectedShopCategory] or 1) - 1
 		updateShopPanel()
@@ -394,7 +504,16 @@ local function bindButtons()
 			if not item then
 				return
 			end
-			if getOwnedItems(selectedShopCategory)[item.id] then
+			if selectedShopCategory == "boost" then
+				if not item.configured then
+					return
+				end
+				if item.itemType == "product" then
+					MarketplaceService:PromptProductPurchase(LocalPlayer, item.storeId)
+				elseif item.itemType == "gamePass" and not currentGamePasses[item.key] then
+					MarketplaceService:PromptGamePassPurchase(LocalPlayer, item.storeId)
+				end
+			elseif getOwnedItems(selectedShopCategory)[item.id] then
 				SystemMgr.systems.EcoSystem.Server:RequestEquipItem({
 					category = selectedShopCategory,
 					itemId = item.id,
@@ -463,6 +582,7 @@ function EcoUi.Init()
 	InventoryFrame.Visible = false
 	currentCash = ClientData:GetOneData(dataKey.wins) or 0
 	currentLoadoutState = ClientData:GetOneData("loadoutState") or currentLoadoutState
+	currentGamePasses = ClientData:GetOneData(dataKey.gamePasses) or currentGamePasses
 	bindButtons()
 	bindTopbarIcons()
 	updatePanels()
@@ -478,6 +598,7 @@ function EcoUi.SyncLoadoutState(args)
 	if args and args.loadoutState then
 		currentLoadoutState = args.loadoutState
 	end
+	currentGamePasses = ClientData:GetOneData(dataKey.gamePasses) or currentGamePasses
 
 	if initialized then
 		updatePanels()
@@ -505,7 +626,17 @@ function EcoUi.UpdateWinsStore() end
 
 function EcoUi.BuyLimitedPet() end
 
-function EcoUi.BuyGamePass() end
+function EcoUi.BuyGamePass(args)
+	if args and args.gamePasses then
+		currentGamePasses = args.gamePasses
+	else
+		currentGamePasses = ClientData:GetOneData(dataKey.gamePasses) or currentGamePasses
+	end
+
+	if initialized then
+		updatePanels()
+	end
+end
 
 function EcoUi.BuyStarterPack() end
 

@@ -343,7 +343,7 @@ function CoinFlipSystem:RequestFlip(sender, player)
 			math.max(playerIns:GetOneData(dataKey.bestStreak), runData.bestStreakThisRun)
 		)
 	else
-		reward = Presets.GetTailsReward()
+		reward = Presets.GetTailsReward(bonusStats)
 		if reward > 0 then
 			runData.cashEarnedThisRun += reward
 			SystemMgr.systems.EcoSystem:AddResource(SENDER, player, {

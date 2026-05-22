@@ -242,6 +242,44 @@ local function refreshDecoration(player, category)
 	end
 end
 
+local function isStoreIdConfigured(id)
+	return typeof(id) == "number" and id > 0
+end
+
+local function applyLoadoutUnlocks(playerIns, unlocks)
+	if typeof(unlocks) ~= "table" then
+		return false
+	end
+
+	local unlocked = false
+	normalizeLoadoutData(playerIns)
+	for category, itemIds in pairs(unlocks) do
+		local resolvedCategory = EcoPresets.ResolveShopCategory(category)
+		local ownedKey = getOwnedKey(resolvedCategory)
+		if not ownedKey or typeof(itemIds) ~= "table" then
+			continue
+		end
+
+		local ownedItems = playerIns:GetOneData(ownedKey)
+		for _, itemId in ipairs(itemIds) do
+			local item = EcoPresets.GetShopItem(resolvedCategory, itemId)
+			if item and not ownedItems[item.id] then
+				ownedItems[item.id] = true
+				unlocked = true
+			end
+		end
+		playerIns:SetOneData(ownedKey, ownedItems)
+	end
+
+	return unlocked
+end
+
+local function refreshPlayerAfterPremiumChange(player, extraArgs)
+	refreshCashDisplays(player)
+	SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
+	SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, extraArgs)
+end
+
 function EcoSystem:Init()
 	GetSystemMgr()
 	if IsServer then
@@ -249,7 +287,19 @@ function EcoSystem:Init()
 		MarketplaceService.PromptGamePassPurchaseFinished:Connect(gamePassPurchaseFinished)
 		---- [[ product ]] ----
 		for key, products in EcoPresets.Products do
-			if key == ItemType.pet then
+			if key == "flipACoin" then
+				for productKey, productInfo in pairs(products) do
+					if not isStoreIdConfigured(productInfo.productId) then
+						continue
+					end
+					productFunctions[productInfo.productId] = function(receiptInfo, player)
+						return self:GrantFlipACoinProduct(SENDER, player, {
+							productKey = productKey,
+							productInfo = productInfo,
+						})
+					end
+				end
+			elseif key == ItemType.pet then
 				for petName, productInfo in pairs(products) do
 					productFunctions[productInfo.productId] = function(receiptInfo, player)
 						for i = 1, productInfo.count do
@@ -448,6 +498,9 @@ function EcoSystem:Init()
 		end
 		---- [[ game pass ]] ----
 		for gamePassName, gamePassConfig in EcoPresets.GamePasses do
+			if not isStoreIdConfigured(gamePassConfig.gamePassId) then
+				continue
+			end
 			gamePassFunctions[gamePassConfig.gamePassId] = function(player)
 				local playerIns = PlayerServerClass.GetIns(player)
 				local passes = playerIns:GetOneData(dataKey.gamePasses)
@@ -470,7 +523,7 @@ function EcoSystem:PlayerAdded(sender, player, args)
 
 		local gamePasses = playerIns:GetOneData(dataKey.gamePasses)
 		for gamePassName, gamePassConfig in EcoPresets.GamePasses do
-			if gamePasses[gamePassName] then
+			if gamePasses[gamePassName] or not isStoreIdConfigured(gamePassConfig.gamePassId) then
 				continue
 			end
 			local suc, result = pcall(function()
@@ -534,14 +587,6 @@ function EcoSystem:AddResource(sender, player, args: { resourceType: string, cou
 			-- special key and data structure
 			-- total = playerIns:GetOneData(dataKey.wins)
 		else
-			if resourceType == Keys.ItemType.wins and count > 0 then
-				local gamePasses = playerIns:GetOneData(dataKey.gamePasses) or {}
-				if gamePasses.winsX2 then
-					local effectCfg = EcoPresets.GamePassEffects and EcoPresets.GamePassEffects.winsX2
-					local mult = (effectCfg and effectCfg.mult) or 2
-					count = count * mult
-				end
-			end
 			playerIns:AddOneData(resourceType, count)
 
 			if resourceType == "wins" then
@@ -608,6 +653,7 @@ function EcoSystem:GetLoadoutState(sender, player)
 		end
 
 		local loadoutData = normalizeLoadoutData(playerIns)
+		local gamePasses = playerIns:GetOneData(dataKey.gamePasses)
 		return {
 			equippedCoin = loadoutData.equippedCoin,
 			equippedDeskSetup = loadoutData.equippedDeskSetup,
@@ -619,7 +665,8 @@ function EcoSystem:GetLoadoutState(sender, player)
 			derivedStats = EcoPresets.BuildLoadoutBonuses(
 				loadoutData.equippedCoin,
 				loadoutData.equippedDeskSetup,
-				loadoutData.equippedChair
+				loadoutData.equippedChair,
+				gamePasses
 			),
 		}
 	else
@@ -632,6 +679,7 @@ function EcoSystem:GetLoadoutBonuses(sender, player)
 		if sender ~= SENDER then
 			return {
 				coinMultiplier = 1,
+				premiumCoinMultiplier = 1,
 				luckBonus = 0,
 			}
 		end
@@ -640,15 +688,18 @@ function EcoSystem:GetLoadoutBonuses(sender, player)
 		if not playerIns then
 			return {
 				coinMultiplier = 1,
+				premiumCoinMultiplier = 1,
 				luckBonus = 0,
 			}
 		end
 
 		local loadoutData = normalizeLoadoutData(playerIns)
+		local gamePasses = playerIns:GetOneData(dataKey.gamePasses)
 		return EcoPresets.BuildLoadoutBonuses(
 			loadoutData.equippedCoin,
 			loadoutData.equippedDeskSetup,
-			loadoutData.equippedChair
+			loadoutData.equippedChair,
+			gamePasses
 		)
 	else
 		local loadoutState = ClientData:GetOneData("loadoutState") or {}
@@ -807,6 +858,80 @@ function EcoSystem:SyncLoadoutState(sender, player, args)
 	EcoUi.SyncLoadoutState(args)
 end
 
+function EcoSystem:GrantFlipACoinProduct(sender, player, args)
+	if not IsServer then
+		return false
+	end
+	if sender ~= SENDER then
+		return false
+	end
+	if typeof(args) ~= "table" or typeof(args.productInfo) ~= "table" then
+		return false
+	end
+
+	local playerIns = PlayerServerClass.GetIns(player)
+	if not playerIns then
+		return false
+	end
+
+	local productInfo = args.productInfo
+	local productKey = args.productKey
+	local grantType = productInfo.grantType
+	if grantType == "cash" then
+		self:AddResource(SENDER, player, {
+			resourceType = dataKey.wins,
+			count = productInfo.count,
+			reason = "robuxProduct",
+		})
+		refreshPlayerAfterPremiumChange(player, {
+			purchasedItem = productKey,
+			equippedCategory = "boost",
+		})
+		return true
+	end
+
+	if grantType == "rebirthPoints" then
+		playerIns:AddOneData(dataKey.fateShards, productInfo.count)
+		refreshPlayerAfterPremiumChange(player, {
+			purchasedItem = productKey,
+			equippedCategory = "boost",
+		})
+		return true
+	end
+
+	if grantType == "loadoutBundle" then
+		local unlocked = applyLoadoutUnlocks(playerIns, productInfo.unlocks)
+		if unlocked then
+			refreshDecoration(player, "desk")
+			refreshDecoration(player, "chair")
+			SystemMgr.systems.AnalyticsSystem:LogShopItemPurchased(SENDER, player, {
+				category = "boost",
+				itemId = productKey,
+				rarity = "Robux",
+				cost = productInfo.price or 0,
+			})
+			refreshPlayerAfterPremiumChange(player, {
+				purchasedItem = productKey,
+				equippedCategory = "boost",
+			})
+		elseif (productInfo.fallbackCash or 0) > 0 then
+			self:AddResource(SENDER, player, {
+				resourceType = dataKey.wins,
+				count = productInfo.fallbackCash,
+				reason = "robuxDuplicateBundle",
+			})
+			refreshPlayerAfterPremiumChange(player, {
+				purchasedItem = productKey,
+				equippedCategory = "boost",
+			})
+		end
+		return true
+	end
+
+	warn(`[EcoSystem] Unsupported FlipACoin product grant type: {tostring(grantType)}`)
+	return false
+end
+
 function EcoSystem:GiveItem(sender, player, args: { itemType: string, count: number, name: string, reason: string })
 	if IsServer then
 		if sender ~= SENDER then
@@ -932,12 +1057,21 @@ function EcoSystem:BuyGamePass(sender, player, args)
 			return
 		end
 		local gamePassName = args.gamePassName
+		local effect = EcoPresets.GamePassEffects[gamePassName]
+		local playerIns = PlayerServerClass.GetIns(player)
+		if playerIns and effect and effect.unlocks then
+			applyLoadoutUnlocks(playerIns, effect.unlocks)
+		end
 
 		self.Client:BuyGamePass(player, args)
 
 		if gamePassName == "vip" then
 			SystemMgr.systems.PlayerSystem:UpdatePlayerHeadGui(player)
 		end
+		refreshPlayerAfterPremiumChange(player, {
+			gamePassPurchased = gamePassName,
+			equippedCategory = "boost",
+		})
 	else
 		ClientData:SetOneData(dataKey.gamePasses, args.gamePasses)
 		EcoUi.BuyGamePass(args)

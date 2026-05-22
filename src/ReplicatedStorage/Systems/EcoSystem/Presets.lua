@@ -16,6 +16,9 @@ EcoPresets.ShopCategoryAliases = table.freeze({
 	desksetups = "desk",
 	chair = "chair",
 	chairs = "chair",
+	boost = "boost",
+	boosts = "boost",
+	robux = "boost",
 })
 
 EcoPresets.LoadoutDefaults = table.freeze({
@@ -298,6 +301,67 @@ EcoPresets.GrowthShopItems = {
 }
 
 EcoPresets.Products = {
+	flipACoin = {
+		cashPackSmall = {
+			order = 1,
+			productName = "Cash Pouch",
+			productId = 0,
+			price = 29,
+			grantType = "cash",
+			count = 2_500,
+			description = "2,500 Cash",
+		},
+		cashPackMedium = {
+			order = 2,
+			productName = "Cash Stack",
+			productId = 0,
+			price = 99,
+			grantType = "cash",
+			count = 15_000,
+			description = "15,000 Cash",
+		},
+		cashPackLarge = {
+			order = 3,
+			productName = "Cash Vault",
+			productId = 0,
+			price = 399,
+			grantType = "cash",
+			count = 80_000,
+			description = "80,000 Cash",
+		},
+		rebirthShardSmall = {
+			order = 4,
+			productName = "Rebirth Points x10",
+			productId = 0,
+			price = 99,
+			grantType = "rebirthPoints",
+			count = 10,
+			description = "10 Rebirth Points",
+		},
+		rebirthShardLarge = {
+			order = 5,
+			productName = "Rebirth Points x60",
+			productId = 0,
+			price = 399,
+			grantType = "rebirthPoints",
+			count = 60,
+			description = "60 Rebirth Points",
+		},
+		apexLoadoutBundle = {
+			order = 6,
+			productName = "Apex Loadout Bundle",
+			productId = 0,
+			price = 599,
+			grantType = "loadoutBundle",
+			description = "Unlock Coin9, Velvet Casino, and Chair 11",
+			fallbackCash = 25_000,
+			unlocks = {
+				coin = { "coin9" },
+				desk = { "4" },
+				chair = { "11" },
+			},
+		},
+	},
 	cardPacks = {
 		cardPack1 = {
 			name = "Skull Pack",
@@ -718,75 +782,54 @@ EcoPresets.GamePasses = {
 		order = 1,
 		gradient = "Shiny",
 		title = "VIP",
-		gamePassId = 1664464620,
+		gamePassId = 0,
 		price = 199,
-		description = "+20% forge quality!",
+		description = "+10% Cash, +1% Luck, and VIP loadout unlocks",
 	},
 	winsX2 = {
 		order = 2,
 		gradient = "Gold",
-		title = "Coin X2",
-		gamePassId = 1664528540,
+		title = "2x Cash",
+		gamePassId = 0,
 		price = 299,
-		description = "Get double coins when collecting!",
+		description = "Double Cash from flip rewards",
 	},
-	damageX2 = {
+	luckyCharm = {
 		order = 3,
 		gradient = "Green",
-		title = "Damage X2",
-		gamePassId = 1663753943,
+		title = "Lucky Charm",
+		gamePassId = 0,
 		price = 149,
-		description = "Deal double damage.",
+		description = "+4% Heads chance",
 	},
-	attackSpeedX2 = {
+	quickFlip = {
 		order = 4,
 		gradient = "Purple",
-		title = "Attack Speed X2",
-		gamePassId = 1664294722,
+		title = "Quick Flip",
+		gamePassId = 0,
 		price = 99,
-		description = "Swing your weapon faster.",
-	},
-	digLucky = {
-		hideInShop = true,
-		order = 5,
-		gradient = "Green",
-		title = "Dig Lucky",
-		gamePassId = 1663386197,
-		price = 29,
-		description = "Better loots when digging.",
-	},
-	enchantLucky = {
-		hideInShop = true,
-		order = 6,
-		gradient = "Purple",
-		title = "Enchant Lucky",
-		gamePassId = 1664446641,
-		price = 29,
-		description = "Enchant lucky.",
+		description = "Flip 15% faster",
 	},
 }
 
 EcoPresets.GamePassEffects = {
 	vip = {
-		forgeQualityMult = 1.2,
-		forgeQualityMax = 1.5,
+		coinMultiplier = 1.1,
+		luckBonus = 0.01,
+		unlocks = {
+			coin = { "coin6" },
+			desk = { "3" },
+			chair = { "7" },
+		},
 	},
 	winsX2 = {
-		mult = 2,
+		coinMultiplier = 2,
 	},
-	damageX2 = {
-		mult = 2,
+	luckyCharm = {
+		luckBonus = 0.04,
 	},
-	attackSpeedX2 = {
-		mult = 2,
-	},
-	digLucky = {
-		rareTwoMultiplier = 2,
-	},
-	enchantLucky = {
-		baseRollMin = 0.05,
-		baseRollMax = 0.2,
-		rollMinBonus = 0.2,
+	quickFlip = {
+		flipIntervalMultiplier = 0.85,
 	},
 }
 
@@ -842,7 +885,12 @@ function EcoPresets.GetShopItem(category, itemId)
 		return nil
 	end
 
-	for _, item in ipairs(EcoPresets.GrowthShopItems[resolvedCategory]) do
+	local categoryItems = EcoPresets.GrowthShopItems[resolvedCategory]
+	if not categoryItems then
+		return nil
+	end
+
+	for _, item in ipairs(categoryItems) do
 		if item.id == itemId then
 			return item
 		end
@@ -856,10 +904,12 @@ function EcoPresets.GetShopItemDisplayName(category, itemId)
 	return (item and item.displayName) or itemId
 end
 
-function EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDeskSetup, equippedChair)
+function EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDeskSetup, equippedChair, gamePasses)
 	local bonuses = {
 		coinMultiplier = 1,
+		premiumCoinMultiplier = 1,
 		luckBonus = 0,
+		flipIntervalMultiplier = 1,
 	}
 	local equippedItems = {
 		EcoPresets.GetShopItem("coin", equippedCoin),
@@ -871,6 +921,18 @@ function EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDeskSetup, equippe
 		if item and item.stats then
 			bonuses.coinMultiplier *= item.stats.coinMultiplier or 1
 			bonuses.luckBonus += item.stats.luckBonus or 0
+		end
+	end
+
+	if typeof(gamePasses) == "table" then
+		for gamePassName, isOwned in pairs(gamePasses) do
+			local effect = isOwned and EcoPresets.GamePassEffects[gamePassName]
+			if effect then
+				bonuses.coinMultiplier *= effect.coinMultiplier or 1
+				bonuses.premiumCoinMultiplier *= effect.coinMultiplier or 1
+				bonuses.luckBonus += effect.luckBonus or 0
+				bonuses.flipIntervalMultiplier *= effect.flipIntervalMultiplier or 1
+			end
 		end
 	end
 

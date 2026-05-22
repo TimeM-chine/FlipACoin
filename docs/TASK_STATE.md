@@ -1,6 +1,6 @@
 # TASK_STATE
 
-最后更新：2026-05-19
+最后更新：2026-05-20
 
 > 目的：记录当前正在做什么、下一步是什么、关键决策、待验证项与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`；不要把本文件变成长篇历史日志。
 
@@ -37,6 +37,10 @@
 ## Known Follow-Ups
 
 - Studio / device QA：按 `docs/ROBLOX_PLATFORM_IMPROVEMENT.md` 覆盖手机 portrait / landscape、平板、桌面键鼠、手柄和双客户端同桌，确认 HUD 响应式布局、安全区、growth panels、Topbar 入口与装扮刷新。
+- Studio Play：填入真实 Developer Product / Game Pass id 后，确认 Boosts 入口能弹出 Robux 购买 prompt；购买 Cash / Rebirth Points / Apex bundle / VIP / 2x Cash / Lucky Charm / Quick Flip 后刷新 HUD、Shop、Inventory、Rebirth 和座位表现。
+- Creator Dashboard：创建 `cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle` 六个 Developer Products 和 `vip / winsX2 / luckyCharm / quickFlip` 四个 Game Pass，并把 id 填回 `EcoSystem/Presets.lua`。
+- Studio Play：新档默认 Cash 为 `9`，入座后不能立即买 `Value` 升级；完成 `3` 次 Flip 后即使全 Tails 也能到 `12` Cash，并进入首次升级引导 / 升级按钮 pulse。
+- Studio Play 双客户端：确认他人 Heads / Tails 落地 pulse 更明显、Heads streak ring 按 streak 扩大、高 streak / milestone 有短 Highlight；`streak1` / `streak2` 资产缺失时 fallback pulse 不阻塞落地回调。
 - Studio Play：确认 `coin1` through `coin9` 资产能按装备显示，新档默认 `Coin1`，旧 Coin id 存档能 reconcile 到 `coin1`。
 - Studio Play：确认启动后 HUD 从 `Seat --` 切到分配座位并保持稳定，立刻点击 `FLIP` 不会被客户端旧 seat state 错拦。
 - Studio Play：确认不同 Coin 自己/他人 flip 视觉正常，落点在桌面上方，不沉入桌面。
@@ -53,6 +57,16 @@
 - 可评估极简决策点：高 streak 后出现 `Cash Out` / `Double` / bonus choice，但不要破坏“一键 Flip”的主循环。
 
 ## Done
+
+### 2026-05-20 FlipACoin monetization implementation
+
+- Outcome: `EcoSystem/Presets.lua` 新增 FlipACoin 专用 Developer Product 和 Game Pass 占位配置；`EcoSystem` receipt 可发 Cash、Rebirth Points、Apex 外观礼包并同步成长状态；gamepass ownership 会写入 `gamePasses`，VIP 解锁外观，`winsX2 / luckyCharm / quickFlip` 合入 flip 奖励、概率和间隔加成，且 `winsX2` 覆盖 Heads 奖励与 Tails 保底 Cash；`EcoSystem/ui.lua` 复用 Shop 卡片并新增 TopbarPlus `Boosts` 入口，未配置 id 时显示 `Set ID` 且禁用购买；同步更新 `PROJECT_LOGIC.md`。
+- Validation: `git diff --check` 通过；新增付费 key / Marketplace prompt / `winsX2` 二次倍率引用扫描通过；`stylua --check` 因 Aftman 未在仓库 / 用户 `aftman.toml` 注册 stylua 无法运行；本机未发现 `luau` / `selene`；Studio MCP 当前只连接 `⛏️Ding-Dong Dig & Forge!⛏️`，未改 Studio UI 资产，也未做 Play / 购买 prompt 验收。
+
+### 2026-05-20 Onboarding economy and social effects polish
+
+- Outcome: 新档默认 `wins` 从 `30` 调整为 `9`，首局引导文案对齐为“Flip 3 次赚到第一次升级”；`ObservedFlip` 继续复用现有 payload，但会标记 milestone，`EffectSystem` 为观察者 Heads / Tails 使用更强落地 pulse，为 Heads streak 追加按 streak 放大的 ring，高 streak / milestone 创建短生命周期 `Highlight`；`PlayStreakMilestone()` 在 VFX 资产缺失或类型无效时 fallback 到程序化 pulse + highlight，已有 VFX 仍优先播放，camera shake 仍只由 milestone 配置触发。
+- Validation: `git diff --check` 通过；`wins = 9` / onboarding 文案 / observed visual options / `EffectSystem` 新 preset 与 fallback 引用扫描通过；`stylua --check` 因 Aftman 未在仓库 / 用户 `aftman.toml` 注册 stylua 无法运行；本机未发现 `luau` / `luau-analyze` / `selene`；本轮按用户说明未打开 Studio，单客户端 / 双客户端观感留待 Studio Play 验收。
 
 ### 2026-05-19 Analytics service instrumentation
 

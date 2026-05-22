@@ -116,8 +116,9 @@ function Presets.GetHeadsReward(runData, bonusStats)
 	return math.round(FlipConfig.BaseReward * Presets.GetValueMultiplier(runData) * comboMultiplier * coinMultiplier)
 end
 
-function Presets.GetTailsReward()
-	return FlipConfig.BaseTailsReward or 0
+function Presets.GetTailsReward(bonusStats)
+	local premiumCoinMultiplier = bonusStats and bonusStats.premiumCoinMultiplier or 1
+	return math.round((FlipConfig.BaseTailsReward or 0) * premiumCoinMultiplier)
 end
 
 function Presets.GetNextCosts(runData)
@@ -142,6 +143,7 @@ function Presets.BuildDerivedStats(runData, bonusStats)
 		comboStep = Presets.GetComboStep(runData),
 		valueMultiplier = Presets.GetValueMultiplier(runData),
 		coinMultiplier = bonusStats and bonusStats.coinMultiplier or 1,
+		premiumCoinMultiplier = bonusStats and bonusStats.premiumCoinMultiplier or 1,
 		luckBonus = bonusStats and bonusStats.luckBonus or 0,
 	}
 end
