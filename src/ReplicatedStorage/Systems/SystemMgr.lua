@@ -68,6 +68,7 @@ local systems = {
 	-- DoorSystem = require(Replicated.Systems.DoorSystem),
 	EcoSystem = require(Replicated.Systems.EcoSystem),
 	EffectSystem = require(Replicated.Systems.EffectSystem),
+	FakePlayerSystem = require(Replicated.Systems.FakePlayerSystem),
 	-- EventSystem = require(Replicated.Systems.EventSystem),
 	-- FreeRewardSystem = require(Replicated.Systems.FreeRewardSystem),
 	-- GiftSystem = require(Replicated.Systems.GiftSystem),

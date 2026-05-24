@@ -46,6 +46,7 @@ end
 
 local legacyUiNames = {
 	Buttons = { "TopBar", "RightBottom", "InventoryButton" },
+	Elements = { "cash", "candy" },
 }
 for containerName, childNames in pairs(legacyUiNames) do
 	local container = PlayerGui.Main:FindFirstChild(containerName)
@@ -66,19 +67,19 @@ end
 --     warn("vsLabel not found")
 -- end
 
-if UserInputService.TouchEnabled then
-	for _, des in PlayerGui.Main:GetDescendants() do
-		if des:IsA("UIStroke") then
-			des.Thickness = 1
-		end
-	end
+-- if UserInputService.TouchEnabled then
+-- 	for _, des in PlayerGui.Main:GetDescendants() do
+-- 		if des:IsA("UIStroke") then
+-- 			des.Thickness = 1
+-- 		end
+-- 	end
 
-	PlayerGui.Main.DescendantAdded:Connect(function(descendant)
-		if descendant:IsA("UIStroke") then
-			descendant.Thickness = 1
-		end
-	end)
-end
+-- 	PlayerGui.Main.DescendantAdded:Connect(function(descendant)
+-- 		if descendant:IsA("UIStroke") then
+-- 			descendant.Thickness = 1
+-- 		end
+-- 	end)
+-- end
 
 if UserInputService.GamepadEnabled then
 	for _, des in PlayerGui.Main:GetDescendants() do
@@ -131,10 +132,15 @@ repeat
 	s = pcall(StarterGui.SetCore, StarterGui, "ResetButtonCallback", false)
 until s
 
-local fakeGui = PlayerGui:WaitForChild("TouchGuiFake", 10)
-if UserInputService.TouchEnabled and fakeGui then
+if UserInputService.TouchEnabled then
 	local touchGui = PlayerGui:FindFirstChild("TouchGui")
-	touchGui.TouchControlFrame.JumpButton.Position = fakeGui.TouchControlFrame.JumpButton.Position
-	touchGui.TouchControlFrame.JumpButton.Size = fakeGui.TouchControlFrame.JumpButton.Size
-	touchGui.TouchControlFrame.JumpButton.Visible = false
+	if touchGui and touchGui:IsA("ScreenGui") then
+		touchGui.Enabled = false
+	end
+
+	PlayerGui.ChildAdded:Connect(function(child)
+		if child.Name == "TouchGui" and child:IsA("ScreenGui") then
+			child.Enabled = false
+		end
+	end)
 end

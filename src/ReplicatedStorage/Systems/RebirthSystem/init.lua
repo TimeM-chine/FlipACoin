@@ -171,12 +171,13 @@ function RebirthSystem:GetRebirthState(sender, player, args)
 
 		local rebirthTree = normalizeRebirthTree(playerIns)
 		local cash = playerIns:GetOneData(dataKey.wins)
+		local rebirthCount = playerIns:GetOneData(dataKey.rebirth)
 		local rebirthPoints = playerIns:GetOneData(dataKey.fateShards)
 		local pointGain = RebirthPresets.GetFlipACoinPointGain(cash)
 
 		return {
 			cash = cash,
-			rebirth = playerIns:GetOneData(dataKey.rebirth),
+			rebirth = rebirthCount,
 			rebirthPoints = rebirthPoints,
 			fateShards = rebirthPoints,
 			pointGain = pointGain,
@@ -186,7 +187,7 @@ function RebirthSystem:GetRebirthState(sender, player, args)
 			rebirthCashAfterReset = RebirthPresets.FlipACoin.Rebirth.CashAfterReset,
 			rebirthTree = table.clone(rebirthTree),
 			rebirthUpgrades = buildRebirthUpgrades(rebirthTree),
-			runDataAfterReset = RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree),
+			runDataAfterReset = RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree, rebirthCount + 1),
 		}
 	else
 		return ClientData:GetOneData("rebirthState")
@@ -200,16 +201,18 @@ function RebirthSystem:BuildRunBaseline(sender, player, args)
 		end
 
 		local rebirthTree = args and args.rebirthTree
+		local rebirthCount = args and args.rebirthCount or 0
 		if not rebirthTree and player then
 			local playerIns = PlayerServerClass.GetIns(player)
 			if playerIns then
 				rebirthTree = normalizeRebirthTree(playerIns)
+				rebirthCount = playerIns:GetOneData(dataKey.rebirth)
 			end
 		end
 
-		return RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree)
+		return RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree, rebirthCount)
 	else
-		return RebirthPresets.BuildFlipACoinRunBaseline(args and args.rebirthTree)
+		return RebirthPresets.BuildFlipACoinRunBaseline(args and args.rebirthTree, args and args.rebirthCount)
 	end
 end
 
@@ -221,14 +224,16 @@ function RebirthSystem:ApplyRunBaseline(sender, player, args)
 
 		local runData = args and args.runData
 		local rebirthTree = args and args.rebirthTree
+		local rebirthCount = args and args.rebirthCount or 0
 		if not rebirthTree and player then
 			local playerIns = PlayerServerClass.GetIns(player)
 			if playerIns then
 				rebirthTree = normalizeRebirthTree(playerIns)
+				rebirthCount = playerIns:GetOneData(dataKey.rebirth)
 			end
 		end
 
-		return RebirthPresets.ApplyFlipACoinRunBaseline(runData, rebirthTree)
+		return RebirthPresets.ApplyFlipACoinRunBaseline(runData, rebirthTree, rebirthCount)
 	else
 		return false
 	end
@@ -259,10 +264,11 @@ function RebirthSystem:RequestRebirth(sender, player)
 		end
 
 		local rebirthTree = normalizeRebirthTree(playerIns)
-		local resetRunData = RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree)
+		local newRebirthLevel = playerIns:GetOneData(dataKey.rebirth) + 1
+		local resetRunData = RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree, newRebirthLevel)
 		playerIns:SetOneData(dataKey.wins, RebirthPresets.FlipACoin.Rebirth.CashAfterReset)
 		playerIns:SetOneData(dataKey.fateShards, playerIns:GetOneData(dataKey.fateShards) + pointGain)
-		playerIns:SetOneData(dataKey.rebirth, playerIns:GetOneData(dataKey.rebirth) + 1)
+		playerIns:SetOneData(dataKey.rebirth, newRebirthLevel)
 		playerIns:SetOneData(dataKey.runData, resetRunData)
 
 		SystemMgr.systems.AnalyticsSystem:LogRebirth(SENDER, player, {
@@ -326,7 +332,7 @@ function RebirthSystem:RequestRebirthUpgrade(sender, player, args)
 		playerIns:SetOneData(dataKey.rebirthTree, rebirthTree)
 
 		local runData = playerIns:GetOneData(dataKey.runData)
-		if RebirthPresets.ApplyFlipACoinRunBaseline(runData, rebirthTree) then
+		if RebirthPresets.ApplyFlipACoinRunBaseline(runData, rebirthTree, playerIns:GetOneData(dataKey.rebirth)) then
 			playerIns:SetOneData(dataKey.runData, runData)
 		end
 

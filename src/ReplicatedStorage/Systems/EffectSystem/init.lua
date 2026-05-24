@@ -422,6 +422,8 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 			end
 		end)
 	end)
+
+	return visual
 end
 
 function EffectSystem:RefreshPersistentSeatCoins(sender, player, args)

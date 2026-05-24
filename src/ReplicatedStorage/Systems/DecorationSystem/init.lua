@@ -33,6 +33,8 @@ local DecorationSystem: Types.System = {
 		"RefreshAllDecorations",
 		"ClearPlayerDecoration",
 		"TweenAllDecorations",
+		"RefreshFakeActorDecoration",
+		"ClearFakeActorDecoration",
 	},
 	players = {},
 	IsLoaded = false,
@@ -60,6 +62,7 @@ function DecorationSystem:Init()
 
 	if IsServer then
 		self._playerDecorations = {}
+		self._fakeActorDecorations = {}
 		migrateWorkspaceTableDecoration()
 		task.defer(function()
 			self:RefreshAllDecorations(SENDER)
@@ -211,6 +214,31 @@ function DecorationSystem:TweenAllDecorations(sender)
 			tweenModelPivot(record.models.chair, getChairCFrame(assignment))
 		end
 	end
+
+	self._fakeActorDecorations = self._fakeActorDecorations or {}
+	for fakeId, record in pairs(self._fakeActorDecorations) do
+		local fakeActor = GetSystemMgr().systems.FakePlayerSystem:GetFakeActor(SENDER, fakeId)
+		if not fakeActor or not fakeActor.isActive then
+			continue
+		end
+
+		local assignment = GetSystemMgr().systems.TableSeatSystem:GetFakeActorSeatAssignment(fakeActor)
+		if not assignment then
+			continue
+		end
+
+		record.rawSeatId = assignment.rawSeatId
+		record.tableModel = assignment.tableModel
+		if record.models and record.models.decoration then
+			tweenModelPivot(
+				record.models.decoration,
+				getSettledDecorationCFrame(record.models.decoration, getDecorationCFrame(assignment), assignment.tableModel)
+			)
+		end
+		if record.models and record.models.chair then
+			tweenModelPivot(record.models.chair, getChairCFrame(assignment))
+		end
+	end
 end
 
 function DecorationSystem:ClearPlayerDecoration(sender, player)
@@ -236,6 +264,97 @@ function DecorationSystem:ClearPlayerDecoration(sender, player)
 		end
 	end
 	self._playerDecorations[player.UserId] = nil
+end
+
+function DecorationSystem:RefreshFakeActorDecoration(sender, fakeActor)
+	if not IsServer then
+		return
+	end
+	if sender ~= SENDER then
+		return
+	end
+	if typeof(fakeActor) ~= "table" or fakeActor.isFake ~= true or not fakeActor.isActive then
+		return
+	end
+
+	self._fakeActorDecorations = self._fakeActorDecorations or {}
+	self:ClearFakeActorDecoration(SENDER, fakeActor)
+
+	local assignment = GetSystemMgr().systems.TableSeatSystem:GetFakeActorSeatAssignment(fakeActor)
+	if not assignment then
+		return
+	end
+
+	local runtimeFolder = getRuntimeFolder(assignment.tableModel)
+	local record = {
+		models = {},
+		rawSeatId = assignment.rawSeatId,
+		tableModel = assignment.tableModel,
+	}
+
+	local deskSetupId = fakeActor.equippedDeskSetup or EcoPresets.LoadoutDefaults.equippedDeskSetup
+	local assetModel = getDecorationAsset(deskSetupId)
+	if assetModel then
+		local decorationName = `{assignment.rawSeatId}FakeDecoration`
+		local existingDecoration = runtimeFolder:FindFirstChild(decorationName)
+		if existingDecoration then
+			existingDecoration:Destroy()
+		end
+
+		local decorationModel = assetModel:Clone()
+		decorationModel.Name = decorationName
+		prepareDecorationModel(decorationModel)
+		decorationModel:PivotTo(getDecorationCFrame(assignment))
+		decorationModel:PivotTo(getSettledDecorationCFrame(decorationModel, decorationModel:GetPivot(), assignment.tableModel))
+		decorationModel.Parent = runtimeFolder
+		record.models.decoration = decorationModel
+	else
+		warn(`[DecorationSystem] Missing fake table decoration model asset for desk setup: {deskSetupId}`)
+	end
+
+	local chairId = fakeActor.equippedChair or EcoPresets.LoadoutDefaults.equippedChair
+	local chairAsset = getChairAsset(chairId)
+	if chairAsset then
+		local chairName = `{assignment.rawSeatId}FakeChair`
+		local existingChair = runtimeFolder:FindFirstChild(chairName)
+		if existingChair then
+			existingChair:Destroy()
+		end
+
+		local chairModel = chairAsset:Clone()
+		chairModel.Name = chairName
+		prepareDecorationModel(chairModel)
+		chairModel:PivotTo(getChairCFrame(assignment))
+		chairModel.Parent = runtimeFolder
+		record.models.chair = chairModel
+	else
+		warn(`[DecorationSystem] Missing fake chair model asset for chair: {chairId}`)
+	end
+
+	self._fakeActorDecorations[fakeActor.fakeId] = record
+end
+
+function DecorationSystem:ClearFakeActorDecoration(sender, fakeActor)
+	if not IsServer then
+		return
+	end
+	if sender ~= SENDER then
+		return
+	end
+
+	self._fakeActorDecorations = self._fakeActorDecorations or {}
+	local fakeId = typeof(fakeActor) == "table" and fakeActor.fakeId or fakeActor
+	local record = fakeId and self._fakeActorDecorations[fakeId]
+	if not record then
+		return
+	end
+
+	for _, model in pairs(record.models or {}) do
+		if model and model.Parent then
+			model:Destroy()
+		end
+	end
+	self._fakeActorDecorations[fakeId] = nil
 end
 
 ---- [[ Server Only ]] ----

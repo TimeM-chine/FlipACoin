@@ -1,12 +1,12 @@
 # TASK_STATE
 
-最后更新：2026-05-20
+最后更新：2026-05-24
 
 > 目的：记录当前正在做什么、下一步是什么、关键决策、待验证项与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`；不要把本文件变成长篇历史日志。
 
 ## Active
 
-当前没有 active 任务。
+当前没有进行中的实现任务。
 
 ## Current Baseline
 
@@ -41,11 +41,11 @@
 - Creator Dashboard：创建 `cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle` 六个 Developer Products 和 `vip / winsX2 / luckyCharm / quickFlip` 四个 Game Pass，并把 id 填回 `EcoSystem/Presets.lua`。
 - Studio Play：新档默认 Cash 为 `9`，入座后不能立即买 `Value` 升级；完成 `3` 次 Flip 后即使全 Tails 也能到 `12` Cash，并进入首次升级引导 / 升级按钮 pulse。
 - Studio Play 双客户端：确认他人 Heads / Tails 落地 pulse 更明显、Heads streak ring 按 streak 扩大、高 streak / milestone 有短 Highlight；`streak1` / `streak2` 资产缺失时 fallback pulse 不阻塞落地回调。
-- Studio Play：确认 `coin1` through `coin9` 资产能按装备显示，新档默认 `Coin1`，旧 Coin id 存档能 reconcile 到 `coin1`。
+- Studio Play：确认 `coin1` through `coin10` 资产能按装备显示，新档默认 `Copper R Coin`，旧 Coin id 存档能 reconcile 到 `coin1`。
 - Studio Play：确认启动后 HUD 从 `Seat --` 切到分配座位并保持稳定，立刻点击 `FLIP` 不会被客户端旧 seat state 错拦。
 - Studio Play：确认不同 Coin 自己/他人 flip 视觉正常，落点在桌面上方，不沉入桌面。
 - Studio Play：确认 Desk Setup 购买 / 装备后按座位刷新，模型坐在桌面上，离座 / 离服能清理。
-- Studio 资产整理：如需永久 source-backed decoration 资产，把 live `Workspace.TableDecoration` 移到 `ReplicatedStorage.Systems.DecorationSystem.Assets.TableDecoration`，并按 `Folding Table` / `Green Felt` / `Arcade Desk` / `Velvet Casino` 拆分命名。
+- Studio 资产整理：如需永久 source-backed decoration 资产，把 live `Workspace.TableDecoration` 移到 `ReplicatedStorage.Systems.DecorationSystem.Assets.TableDecoration`，并按 `Tall Candle` / `Barrel Stein` / `Balance Scale` / `Quill Pot` / `Cosmic Globe` / `Miner Trophy` / `Crimson Hourglass` / `Amethyst Hourglass` 拆分命名。
 - Studio Play：最终看一遍桌面版 Rebirth / Shop / Inventory 视觉比例、tab 状态、打开关闭流程；MCP synthetic click 对这些按钮不可靠。
 
 ## Backlog / Ideas
@@ -57,6 +57,56 @@
 - 可评估极简决策点：高 streak 后出现 `Cash Out` / `Double` / bonus choice，但不要破坏“一键 Flip”的主循环。
 
 ## Done
+
+### 2026-05-24 Fake flip first-rebirth conflict fix
+
+- Outcome: 修复 fake actor 共享 `CoinFlipSystem` actor 结算时误走真实玩家 `getPlayerState()` 的冲突；`actor.isFake and nil or ...` 因 `nil` falsey 会继续取 `actor.player`，导致假玩家 flip 报 `attempt to index nil with 'UserId'`，现改为显式 Luau if expression，fake flip 不再访问真实 Player state，首次 rebirth 隐形加成仍只作用于真实玩家。
+- Validation: `git diff --check -- src\ReplicatedStorage\Systems\CoinFlipSystem\init.lua docs\TASK_STATE.md` 通过；Studio Play 单客户端等待约 `12` 秒，fake rig 生成并占座，控制台未再出现 `CoinFlipSystem:62` 或 scheduled fake flip 报错。未执行多客户端验证。
+
+### 2026-05-24 Fake player behavior tuning
+
+- Outcome: 假玩家人数目标刷新从几十秒改为 `10` 到 `20` 分钟级别，移除短 tick 随机离座；fake actor 改为高频随机检查 Flip，接近真实玩家持续 Flip 的节奏，并通过独立随机动作时间降低同时 Flip 的概率。非 Flip 行为改为短促摇头 / 点头，不再持续看向真实玩家；客户端收到假玩家 `ObservedFlip` 时会在本机临时驱动 fake Rig 头部看向该座位硬币视觉。`PROJECT_LOGIC.md` 已同步行为节奏和客户端表现规则。
+- Validation: `git diff --check` 通过；`rojo build default.project.json --output $env:TEMP\flip_fake_behavior_check.rbxl` 通过；源码扫描确认 fake 行为仍由 `ScheduleModule` 驱动，新增代码未引入 `while task.wait()`，旧 `LookAtRealPlayerChance / RandomLeaveChance / getRandomRealPlayer` 路径已移除；Studio Play 单客户端 sanity 确认 `FakePlayersRuntime` 生成 `FakePlayer2`，假玩家坐在 `Seat02`，座位硬币视觉存在，控制台未出现 fake 相关错误。未执行多客户端观感验证。
+
+### 2026-05-24 First rebirth tuning
+
+- Outcome: 新增 0 rebirth 真实玩家首局隐形正面率保护：Cash 未达首个 rebirth 门槛时实际结算获得 `+7%` 隐形加成，连续 Tails 后每次再加 `+4%`，保护后实际正面率封顶 `45%`，但 HUD 仍显示不含隐形保护的正常 Chance；rebirth baseline 现在按 `min(rebirth, 3)` 自动给起始 Bias，并继续叠加 `Lucky Start`；fake player 创建时随机获得 `0` 到 `5` 级表演用 `biasLevel`，不接入真实 rebirth 规则。`PROJECT_LOGIC.md` 已同步。
+- Validation: `git diff --check -- src\ReplicatedStorage\configs\GameConfig.lua src\ReplicatedStorage\Systems\CoinFlipSystem\Presets.lua src\ReplicatedStorage\Systems\CoinFlipSystem\init.lua src\ReplicatedStorage\Systems\RebirthSystem\Presets.lua src\ReplicatedStorage\Systems\RebirthSystem\init.lua src\ReplicatedStorage\Systems\FakePlayerSystem\Presets.lua src\ReplicatedStorage\Systems\FakePlayerSystem\init.lua docs\PROJECT_LOGIC.md docs\TASK_STATE.md` 通过，仅有既有 LF-to-CRLF 工作区提示；源码扫描确认 `BuildDerivedStats()` 仍使用可见 `GetHeadsChance()`，实际 roll 使用 `GetRollHeadsChance()`，fake actor 的随机 `biasLevel` 范围为 `0` 到 `5`；`stylua --check` / `selene` 因 Aftman 未在仓库或用户 `aftman.toml` 注册对应工具被拒绝运行。
+
+### 2026-05-24 Head streak display
+
+- Outcome: 真实玩家和假玩家头顶 Billboard 第一行从座位号改为当前 `Streak N`；装备 Coin 名称保留在下一行，避免连胜大于 `0` 时两行重复显示 streak。`PROJECT_LOGIC.md` 已同步头顶展示规则。
+- Validation: `git diff --check -- src\ReplicatedStorage\Systems\PlayerSystem\init.lua src\ReplicatedStorage\Systems\FakePlayerSystem\init.lua docs\PROJECT_LOGIC.md docs\TASK_STATE.md` 通过，仅有既有 LF-to-CRLF 工作区提示；源码扫描确认头顶 `vip.Text` 只写入 `Streak {streak}`，未发现继续把 `seatId or "Spectating"` 写到头顶第一行。
+
+### 2026-05-24 Fake player system
+
+- Outcome: 新增并注册 `FakePlayerSystem`，服务端在真实玩家数为 `1` 到 `2` 时维护 `1` 到 `3` 个假玩家；假玩家从 `PlayerSystem.Assets.Rig` 克隆模型，随机套用 `PlayerPresets.FakeUserIds / FakeNames`、Coin、Desk Setup 和 Chair，占用桌面座位并拥有头顶信息、装饰、视线动作和随机离座/补位行为。`TableSeatSystem` 支持 fake actor 占座、座位快照和真实玩家需要座位时释放假玩家；`CoinFlipSystem` 抽出 actor flip 结算，真实玩家和假玩家共享结果概率、奖励、streak、ObservedFlip 和公告表现，但假玩家只更新内存状态；`DecorationSystem` 支持 fake actor 桌搭和椅子刷新/清理。`PROJECT_LOGIC.md` 已同步系统注册、低人数补位规则、fake 不写存档/analytics/leaderstats 和运行时资源约定。
+- Validation: `git diff --check` 通过；`rojo build default.project.json --output $env:TEMP\flip_fake_player_check.rbxl` 通过；源码扫描确认新增 fake 路径未使用 `while task.wait()` 死循环，fake flip 不写 profile / leaderstats / analytics，`SetOneData`、`AddResource` 和 `LogCoinFlipResolved` 仍只在真实玩家分支。`stylua` / `selene` 未在仓库或用户 `aftman.toml` 注册，`luau` 命令不可用；Roblox Studio MCP 未发现已连接 Studio 实例，因此未执行 Play / 多客户端视觉验证。
+
+### 2026-05-24 Coin display names
+
+- Outcome: `EcoSystem/Presets.lua` 的 Coin 配置按用户图从左到右命名为 `Copper R Coin`、`Steel R Coin`、`Golden R Coin`、`Crimson Ring Coin`、`Amethyst R Coin`、`Rose Gear Coin`、`Sunburst R Coin`、`Emerald Cut Coin`、`Sapphire Halo Coin`、`Ancient Ruby Coin`；新增 `coin10` 商品条目并把 Apex bundle 改为解锁 `coin10`；`PROJECT_LOGIC.md` 已同步 Coin 资产范围为 `coin1` 到 `coin10`。
+- Validation: `git diff --check -- src\ReplicatedStorage\Systems\EcoSystem\Presets.lua docs\PROJECT_LOGIC.md docs\TASK_STATE.md` 通过，仅有既有 LF-to-CRLF 工作区提示；配置扫描确认 `coin1` 到 `coin10` 和 Apex bundle `coin10` 解锁存在；按仓库规则未运行 Rojo build。
+
+### 2026-05-24 Decoration and chair display names
+
+- Outcome: `EcoSystem/Presets.lua` 的 Desk Setup 从 4 个扩展为图 1 从左到右的 8 个 table decoration 名称，Chair 11 个 `displayName` 按图 2 从左到右改为外形命名；Apex bundle 改为解锁最高级 `Amethyst Hourglass / Royal Chaise`；`PROJECT_LOGIC.md` 和 task-state follow-up 已同步桌搭 id 范围与名称。
+- Validation: `git diff --check -- src\ReplicatedStorage\Systems\EcoSystem\Presets.lua docs\PROJECT_LOGIC.md docs\TASK_STATE.md` 通过，仅有既有 LF-to-CRLF 工作区提示；旧桌搭名与椅子编号占位名扫描无源码 / 项目逻辑残留；按仓库规则未运行 Rojo build。
+
+### 2026-05-24 HUD wallet cleanup and Auto state color
+
+- Outcome: `AutoButton` 开启时同步把文字和 `UIStroke` 改为绿色，关闭时恢复纯白；玩法 HUD 不再显示或更新右上 `Elements.cash / candy`，只保留左下 Cash 显示；当前打开的 Studio `StarterGui` 默认 Auto off 状态也已设为白色。
+- Validation: `git diff --check -- src\ReplicatedStorage\Systems\CoinFlipSystem\ui.lua src\StarterGui\Main\uiClient.client.lua docs\PROJECT_LOGIC.md docs\TASK_STATE.md` 通过，仅有既有 LF-to-CRLF 工作区提示；Studio edit-time 确认 `AutoButton` off 文字 / 描边为白色，`Elements.cash / candy` 保持隐藏；Studio Play 单客户端 sanity 确认运行态 `Auto:Off` 为白色且右上 `cash / candy` 隐藏；按仓库规则未运行 Rojo build。
+
+### 2026-05-23 Disable mobile TouchGui
+
+- Outcome: `uiClient.client.lua` 在触屏设备上禁用 Roblox 默认 `TouchGui`，同时监听后续自动生成的 `TouchGui` 并禁用；移除旧的 `TouchGuiFake` / `JumpButton` 尺寸位置调整路径；同步更新 `PROJECT_LOGIC.md`。
+- Validation: `git diff --check -- src\StarterGui\Main\uiClient.client.lua docs\PROJECT_LOGIC.md docs\TASK_STATE.md` 通过，仅有既有 LF-to-CRLF 工作区提示；按仓库规则未运行 Rojo build，未做移动端真机验证。
+
+### 2026-05-23 Disable mobile UI redistribution
+
+- Outcome: 临时注释 `CoinFlipSystem/ui.lua` 的 mobile HUD profile，使移动端沿用桌面 / narrow HUD 布局，不再触发 portrait 统计折叠；临时注释 `uiController.OpenFrame()` 中 Shop / Inventory / Rebirth 的移动端 growth panel 重排和 viewport 绑定调用；同步更新 `PROJECT_LOGIC.md`。
+- Validation: `git diff --check -- src\ReplicatedStorage\Systems\CoinFlipSystem\ui.lua src\StarterGui\Main\uiController.lua docs\PROJECT_LOGIC.md docs\TASK_STATE.md` 通过，仅有既有 LF-to-CRLF 工作区提示；按仓库规则未运行 Rojo build，未做 Studio / 真机观感验证。
 
 ### 2026-05-20 FlipACoin monetization implementation
 

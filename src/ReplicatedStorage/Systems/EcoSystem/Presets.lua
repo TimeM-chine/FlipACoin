@@ -31,7 +31,7 @@ EcoPresets.GrowthShopItems = {
 	coin = table.freeze({
 		{
 			id = "coin1",
-			displayName = "Coin1",
+			displayName = "Copper R Coin",
 			rarity = "Common",
 			role = "Starter",
 			cost = 0,
@@ -42,7 +42,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "coin2",
-			displayName = "Coin2",
+			displayName = "Steel R Coin",
 			rarity = "Uncommon",
 			role = "Luck",
 			cost = 180,
@@ -53,7 +53,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "coin3",
-			displayName = "Coin3",
+			displayName = "Golden R Coin",
 			rarity = "Rare",
 			role = "Streak",
 			cost = 520,
@@ -64,7 +64,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "coin4",
-			displayName = "Coin4",
+			displayName = "Crimson Ring Coin",
 			rarity = "Epic",
 			role = "Cash",
 			cost = 1400,
@@ -75,7 +75,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "coin5",
-			displayName = "Coin5",
+			displayName = "Amethyst R Coin",
 			rarity = "Epic",
 			role = "Value",
 			cost = 3200,
@@ -86,7 +86,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "coin6",
-			displayName = "Coin6",
+			displayName = "Rose Gear Coin",
 			rarity = "Legendary",
 			role = "Premium",
 			cost = 6800,
@@ -97,7 +97,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "coin7",
-			displayName = "Coin7",
+			displayName = "Sunburst R Coin",
 			rarity = "Legendary",
 			role = "Jackpot",
 			cost = 12800,
@@ -108,7 +108,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "coin8",
-			displayName = "Coin8",
+			displayName = "Emerald Cut Coin",
 			rarity = "Mythic",
 			role = "Fortune",
 			cost = 24000,
@@ -119,20 +119,31 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "coin9",
-			displayName = "Coin9",
+			displayName = "Sapphire Halo Coin",
 			rarity = "Mythic",
-			role = "Apex",
+			role = "Halo",
 			cost = 50000,
 			stats = {
 				coinMultiplier = 3.2,
 				luckBonus = 0.09,
 			},
 		},
+		{
+			id = "coin10",
+			displayName = "Ancient Ruby Coin",
+			rarity = "Mythic",
+			role = "Apex",
+			cost = 90000,
+			stats = {
+				coinMultiplier = 3.8,
+				luckBonus = 0.11,
+			},
+		},
 	}),
 	desk = table.freeze({
 		{
 			id = "1",
-			displayName = "Folding Table",
+			displayName = "Tall Candle",
 			rarity = "Common",
 			role = "Starter",
 			cost = 0,
@@ -143,7 +154,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "2",
-			displayName = "Green Felt",
+			displayName = "Barrel Stein",
 			rarity = "Uncommon",
 			role = "Steady",
 			cost = 260,
@@ -154,7 +165,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "3",
-			displayName = "Arcade Desk",
+			displayName = "Balance Scale",
 			rarity = "Rare",
 			role = "Fast Cash",
 			cost = 760,
@@ -165,7 +176,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "4",
-			displayName = "Velvet Casino",
+			displayName = "Quill Pot",
 			rarity = "Epic",
 			role = "Premium",
 			cost = 1800,
@@ -174,11 +185,55 @@ EcoPresets.GrowthShopItems = {
 				luckBonus = 0.02,
 			},
 		},
+		{
+			id = "5",
+			displayName = "Cosmic Globe",
+			rarity = "Epic",
+			role = "Fortune",
+			cost = 4200,
+			stats = {
+				coinMultiplier = 1.42,
+				luckBonus = 0.026,
+			},
+		},
+		{
+			id = "6",
+			displayName = "Miner Trophy",
+			rarity = "Legendary",
+			role = "Jackpot",
+			cost = 8600,
+			stats = {
+				coinMultiplier = 1.56,
+				luckBonus = 0.034,
+			},
+		},
+		{
+			id = "7",
+			displayName = "Crimson Hourglass",
+			rarity = "Legendary",
+			role = "Momentum",
+			cost = 15600,
+			stats = {
+				coinMultiplier = 1.72,
+				luckBonus = 0.044,
+			},
+		},
+		{
+			id = "8",
+			displayName = "Amethyst Hourglass",
+			rarity = "Mythic",
+			role = "Apex",
+			cost = 30000,
+			stats = {
+				coinMultiplier = 1.90,
+				luckBonus = 0.058,
+			},
+		},
 	}),
 	chair = table.freeze({
 		{
 			id = "1",
-			displayName = "Chair 1",
+			displayName = "Round Stool",
 			rarity = "Common",
 			role = "Starter",
 			cost = 0,
@@ -189,7 +244,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "2",
-			displayName = "Chair 2",
+			displayName = "Wooden Dining Chair",
 			rarity = "Common",
 			role = "Comfort",
 			cost = 420,
@@ -200,7 +255,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "3",
-			displayName = "Chair 3",
+			displayName = "Folding Chair",
 			rarity = "Uncommon",
 			role = "Steady",
 			cost = 900,
@@ -211,7 +266,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "4",
-			displayName = "Chair 4",
+			displayName = "Glass Cube Chair",
 			rarity = "Uncommon",
 			role = "Focus",
 			cost = 1800,
@@ -222,7 +277,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "5",
-			displayName = "Chair 5",
+			displayName = "Blue Club Chair",
 			rarity = "Rare",
 			role = "Boost",
 			cost = 3600,
@@ -233,7 +288,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "6",
-			displayName = "Chair 6",
+			displayName = "Pink Scallop Chair",
 			rarity = "Rare",
 			role = "Value",
 			cost = 6800,
@@ -244,7 +299,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "7",
-			displayName = "Chair 7",
+			displayName = "Crown Stick Throne",
 			rarity = "Epic",
 			role = "Lucky",
 			cost = 11000,
@@ -255,7 +310,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "8",
-			displayName = "Chair 8",
+			displayName = "Heart Vanity Chair",
 			rarity = "Epic",
 			role = "Fortune",
 			cost = 17000,
@@ -266,7 +321,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "9",
-			displayName = "Chair 9",
+			displayName = "Creature Armchair",
 			rarity = "Legendary",
 			role = "Premium",
 			cost = 26000,
@@ -277,7 +332,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "10",
-			displayName = "Chair 10",
+			displayName = "Gothic Web Chair",
 			rarity = "Legendary",
 			role = "Jackpot",
 			cost = 38000,
@@ -288,7 +343,7 @@ EcoPresets.GrowthShopItems = {
 		},
 		{
 			id = "11",
-			displayName = "Chair 11",
+			displayName = "Royal Chaise",
 			rarity = "Mythic",
 			role = "Apex",
 			cost = 55000,
@@ -353,11 +408,11 @@ EcoPresets.Products = {
 			productId = 0,
 			price = 599,
 			grantType = "loadoutBundle",
-			description = "Unlock Coin9, Velvet Casino, and Chair 11",
+			description = "Unlock Ancient Ruby Coin, Amethyst Hourglass, and Royal Chaise",
 			fallbackCash = 25_000,
 			unlocks = {
-				coin = { "coin9" },
-				desk = { "4" },
+				coin = { "coin10" },
+				desk = { "8" },
 				chair = { "11" },
 			},
 		},

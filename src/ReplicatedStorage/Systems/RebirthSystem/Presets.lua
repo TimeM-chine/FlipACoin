@@ -1880,6 +1880,8 @@ RebirthPresets.FlipACoin = {
 		CashPerPoint = 250,
 		MaxPointGain = 8,
 		CashAfterReset = 30,
+		BiasLevelsPerRebirth = 1,
+		MaxRebirthBiasLevel = 3,
 	},
 	Upgrades = {
 		polishedStart = {
@@ -1954,9 +1956,13 @@ function RebirthPresets.GetFlipACoinPointGain(cash)
 	return math.clamp(math.floor(cash / config.CashPerPoint), 1, config.MaxPointGain)
 end
 
-function RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree)
+function RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree, rebirthCount)
 	local baseline = table.clone(RebirthPresets.RunDataDefaults)
 	rebirthTree = rebirthTree or {}
+	baseline.biasLevel += math.min(
+		rebirthCount or 0,
+		RebirthPresets.FlipACoin.Rebirth.MaxRebirthBiasLevel
+	) * RebirthPresets.FlipACoin.Rebirth.BiasLevelsPerRebirth
 
 	for _, upgradeKey in ipairs(RebirthPresets.FlipACoin.UpgradeOrder) do
 		local config = RebirthPresets.GetFlipACoinUpgradeConfig(upgradeKey)
@@ -1969,8 +1975,8 @@ function RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree)
 	return baseline
 end
 
-function RebirthPresets.ApplyFlipACoinRunBaseline(runData, rebirthTree)
-	local baseline = RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree)
+function RebirthPresets.ApplyFlipACoinRunBaseline(runData, rebirthTree, rebirthCount)
+	local baseline = RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree, rebirthCount)
 	local changed = false
 
 	for _, upgradeKey in ipairs(RebirthPresets.RunUpgradeOrder) do

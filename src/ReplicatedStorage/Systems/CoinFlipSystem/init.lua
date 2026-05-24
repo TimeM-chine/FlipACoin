@@ -5,8 +5,10 @@ local RunService = game:GetService("RunService")
 
 ---- requires ----
 local Keys = require(Replicated.configs.Keys)
+local EcoPresets = require(Replicated.Systems.EcoSystem.Presets)
 local Onboarding = require(script.Modules.Onboarding)
 local Presets = require(script.Presets)
+local RebirthPresets = require(Replicated.Systems.RebirthSystem.Presets)
 local Types = require(Replicated.configs.Types)
 
 ---- common variables ----
@@ -24,6 +26,7 @@ setmetatable(CoinFlipUi, Types.mt)
 local CoinFlipSystem: Types.System = {
 	whiteList = {
 		"HandleGuideSit",
+		"RequestFakeFlip",
 		"SyncPlayerState",
 	},
 	players = {},
@@ -60,6 +63,7 @@ local function getPlayerState(self, player)
 	if not playerState then
 		playerState = {
 			nextFlipAt = 0,
+			firstRebirthTailsStreak = 0,
 		}
 		self.players[player.UserId] = playerState
 	end
@@ -70,12 +74,14 @@ end
 local function normalizeRunData(playerIns)
 	local runData = playerIns:GetOneData(dataKey.runData)
 	local rebirthTree = playerIns:GetOneData(dataKey.rebirthTree)
+	local rebirthCount = playerIns:GetOneData(dataKey.rebirth)
 	local rebirthSystem = GetSystemMgr().systems.RebirthSystem
 	local needsUpdate = false
 
 	if typeof(runData) ~= "table" then
 		runData = rebirthSystem:BuildRunBaseline(SENDER, nil, {
 			rebirthTree = rebirthTree,
+			rebirthCount = rebirthCount,
 		})
 		needsUpdate = true
 	else
@@ -88,11 +94,28 @@ local function normalizeRunData(playerIns)
 		needsUpdate = rebirthSystem:ApplyRunBaseline(SENDER, nil, {
 			runData = runData,
 			rebirthTree = rebirthTree,
+			rebirthCount = rebirthCount,
 		}) or needsUpdate
 	end
 
 	if needsUpdate then
 		playerIns:SetOneData(dataKey.runData, runData)
+	end
+
+	return runData
+end
+
+local function normalizeFakeRunData(fakeActor)
+	local runData = fakeActor.runData
+	if typeof(runData) ~= "table" then
+		runData = table.clone(Presets.RunDataDefaults)
+		fakeActor.runData = runData
+	else
+		for key, defaultValue in pairs(Presets.RunDataDefaults) do
+			if typeof(runData[key]) ~= typeof(defaultValue) then
+				runData[key] = defaultValue
+			end
+		end
 	end
 
 	return runData
@@ -231,6 +254,101 @@ local function emitObservedFlip(self, player, args)
 	end
 end
 
+local function getFirstRebirthAssistBonus(playerIns, playerState)
+	if playerIns:GetOneData(dataKey.rebirth) ~= 0 then
+		playerState.firstRebirthTailsStreak = 0
+		return 0
+	end
+
+	return Presets.GetFirstRebirthAssistBonus(
+		playerIns:GetOneData(dataKey.wins),
+		RebirthPresets.FlipACoin.Rebirth.MinCash,
+		playerState.firstRebirthTailsStreak
+	)
+end
+
+local function resolveActorFlip(self, actor)
+	local runData = actor.isFake and normalizeFakeRunData(actor) or normalizeRunData(actor.playerIns)
+	local bonusStats = actor.bonusStats
+	local playerState = if actor.isFake then nil else getPlayerState(self, actor.player)
+	local hiddenChanceBonus = playerState and getFirstRebirthAssistBonus(actor.playerIns, playerState) or 0
+	local isHeads = math.random() < Presets.GetRollHeadsChance(runData, bonusStats, hiddenChanceBonus)
+	local reward = 0
+
+	runData.flipsThisRun += 1
+	if isHeads then
+		if playerState then
+			playerState.firstRebirthTailsStreak = 0
+		end
+		runData.currentStreak += 1
+		runData.headsThisRun += 1
+		reward = Presets.GetHeadsReward(runData, bonusStats)
+		runData.cashEarnedThisRun += reward
+		runData.bestStreakThisRun = math.max(runData.bestStreakThisRun, runData.currentStreak)
+	else
+		if playerState then
+			if hiddenChanceBonus > 0 then
+				playerState.firstRebirthTailsStreak += 1
+			else
+				playerState.firstRebirthTailsStreak = 0
+			end
+		end
+		reward = Presets.GetTailsReward(bonusStats)
+		if reward > 0 then
+			runData.cashEarnedThisRun += reward
+		end
+		runData.currentStreak = 0
+	end
+
+	if not actor.isFake then
+		local playerIns = actor.playerIns
+		playerIns:SetOneData(dataKey.lifetimeFlips, playerIns:GetOneData(dataKey.lifetimeFlips) + 1)
+		if reward > 0 then
+			SystemMgr.systems.EcoSystem:AddResource(SENDER, actor.player, {
+				resourceType = dataKey.wins,
+				count = reward,
+				reason = "flip",
+			})
+			playerIns:SetOneData(dataKey.lifetimeCashEarned, playerIns:GetOneData(dataKey.lifetimeCashEarned) + reward)
+		end
+		if isHeads then
+			playerIns:SetOneData(dataKey.lifetimeHeads, playerIns:GetOneData(dataKey.lifetimeHeads) + 1)
+			playerIns:SetOneData(
+				dataKey.bestStreak,
+				math.max(playerIns:GetOneData(dataKey.bestStreak), runData.bestStreakThisRun)
+			)
+		end
+		playerIns:SetOneData(dataKey.runData, runData)
+	end
+
+	local observedPayload = {
+		userId = actor.userId,
+		seatId = actor.seatId,
+		result = isHeads and "Heads" or "Tails",
+		reward = reward,
+		streak = runData.currentStreak,
+		bestStreakThisRun = runData.bestStreakThisRun,
+		equippedCoin = actor.equippedCoin,
+		isFake = actor.isFake == true,
+		fakeId = actor.fakeId,
+	}
+	local streakMilestone =
+		SystemMgr.systems.AnnouncementSystem:BuildStreakMilestonePayload(SENDER, actor.announcementActor, observedPayload)
+	if streakMilestone then
+		observedPayload.streakMilestone = streakMilestone
+	end
+
+	emitObservedFlip(self, actor.player, observedPayload)
+	SystemMgr.systems.AnnouncementSystem:HandleFlipResolved(SENDER, actor.announcementActor, observedPayload)
+
+	return {
+		runData = runData,
+		reward = reward,
+		streakMilestone = streakMilestone,
+		observedPayload = observedPayload,
+	}
+end
+
 function CoinFlipSystem:Init()
 	GetSystemMgr()
 end
@@ -317,47 +435,21 @@ function CoinFlipSystem:RequestFlip(sender, player)
 	end
 
 	local seatId = seatSystem:GetPlayerSeatId(player)
-	local runData = normalizeRunData(playerIns)
 	local bonusStats = SystemMgr.systems.EcoSystem:GetLoadoutBonuses(SENDER, player)
-	local isHeads = math.random() < Presets.GetHeadsChance(runData, bonusStats)
-	local reward = 0
-	playerIns:SetOneData(dataKey.lifetimeFlips, playerIns:GetOneData(dataKey.lifetimeFlips) + 1)
-	runData.flipsThisRun += 1
-
-	if isHeads then
-		runData.currentStreak += 1
-		runData.headsThisRun += 1
-		reward = Presets.GetHeadsReward(runData, bonusStats)
-		runData.cashEarnedThisRun += reward
-		runData.bestStreakThisRun = math.max(runData.bestStreakThisRun, runData.currentStreak)
-
-		SystemMgr.systems.EcoSystem:AddResource(SENDER, player, {
-			resourceType = dataKey.wins,
-			count = reward,
-			reason = "flip",
-		})
-		playerIns:SetOneData(dataKey.lifetimeHeads, playerIns:GetOneData(dataKey.lifetimeHeads) + 1)
-		playerIns:SetOneData(dataKey.lifetimeCashEarned, playerIns:GetOneData(dataKey.lifetimeCashEarned) + reward)
-		playerIns:SetOneData(
-			dataKey.bestStreak,
-			math.max(playerIns:GetOneData(dataKey.bestStreak), runData.bestStreakThisRun)
-		)
-	else
-		reward = Presets.GetTailsReward(bonusStats)
-		if reward > 0 then
-			runData.cashEarnedThisRun += reward
-			SystemMgr.systems.EcoSystem:AddResource(SENDER, player, {
-				resourceType = dataKey.wins,
-				count = reward,
-				reason = "flip",
-			})
-			playerIns:SetOneData(dataKey.lifetimeCashEarned, playerIns:GetOneData(dataKey.lifetimeCashEarned) + reward)
-		end
-		runData.currentStreak = 0
-	end
-
-	playerState.nextFlipAt = now + Presets.GetFlipInterval(runData, bonusStats)
-	playerIns:SetOneData(dataKey.runData, runData)
+	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin)
+	local resolvedFlip = resolveActorFlip(self, {
+		player = player,
+		playerIns = playerIns,
+		announcementActor = player,
+		userId = player.UserId,
+		seatId = seatId,
+		equippedCoin = equippedCoin,
+		bonusStats = bonusStats,
+		isFake = false,
+	})
+	local runData = resolvedFlip.runData
+	local observedPayload = resolvedFlip.observedPayload
+	playerState.nextFlipAt = observedPayload and (now + Presets.GetFlipInterval(runData, bonusStats)) or playerState.nextFlipAt
 	applyOnboardingAction(self, player, "flip", {
 		flipCount = runData.flipsThisRun,
 	})
@@ -369,33 +461,62 @@ function CoinFlipSystem:RequestFlip(sender, player)
 	refreshCashDisplays(player)
 	seatSystem:RefreshAudienceState(SENDER)
 
-	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin)
-	local observedPayload = {
-		userId = player.UserId,
-		seatId = seatId,
-		result = isHeads and "Heads" or "Tails",
-		reward = reward,
-		streak = runData.currentStreak,
-		bestStreakThisRun = runData.bestStreakThisRun,
-		equippedCoin = equippedCoin,
-	}
-	local streakMilestone =
-		SystemMgr.systems.AnnouncementSystem:BuildStreakMilestonePayload(SENDER, player, observedPayload)
-	if streakMilestone then
-		observedPayload.streakMilestone = streakMilestone
-	end
-
-	emitObservedFlip(self, player, observedPayload)
-	SystemMgr.systems.AnnouncementSystem:HandleFlipResolved(SENDER, player, observedPayload)
 	SystemMgr.systems.AnalyticsSystem:LogCoinFlipResolved(SENDER, player, observedPayload)
 
 	syncPlayerState(self, player, {
 		result = observedPayload.result,
-		reward = reward,
+		reward = resolvedFlip.reward,
 		streak = runData.currentStreak,
 		equippedCoin = equippedCoin,
-		streakMilestone = streakMilestone,
+		streakMilestone = resolvedFlip.streakMilestone,
 	}, true)
+end
+
+function CoinFlipSystem:RequestFakeFlip(sender, fakeActor)
+	if not IsServer then
+		return nil
+	end
+	if sender ~= SENDER then
+		return nil
+	end
+	if typeof(fakeActor) ~= "table" or fakeActor.isFake ~= true or not fakeActor.isActive then
+		return nil
+	end
+	if typeof(fakeActor.seatId) ~= "string" then
+		return nil
+	end
+
+	local now = os.clock()
+	if typeof(fakeActor.nextFlipAt) == "number" and fakeActor.nextFlipAt > now then
+		return nil
+	end
+
+	local bonusStats = EcoPresets.BuildLoadoutBonuses(
+		fakeActor.equippedCoin,
+		fakeActor.equippedDeskSetup,
+		fakeActor.equippedChair,
+		nil
+	)
+	local resolvedFlip = resolveActorFlip(self, {
+		announcementActor = fakeActor,
+		userId = fakeActor.userId,
+		seatId = fakeActor.seatId,
+		equippedCoin = fakeActor.equippedCoin,
+		equippedDeskSetup = fakeActor.equippedDeskSetup,
+		equippedChair = fakeActor.equippedChair,
+		bonusStats = bonusStats,
+		isFake = true,
+		fakeId = fakeActor.fakeId,
+		runData = fakeActor.runData,
+		cash = fakeActor.cash,
+	})
+
+	fakeActor.runData = resolvedFlip.runData
+	fakeActor.cash = (fakeActor.cash or 0) + resolvedFlip.reward
+	fakeActor.nextFlipAt = now + Presets.GetFlipInterval(resolvedFlip.runData, bonusStats)
+	SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
+
+	return resolvedFlip
 end
 
 function CoinFlipSystem:BuyUpgrade(sender, player, args)

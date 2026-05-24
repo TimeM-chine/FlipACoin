@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FlipACoin完整UI设计</title>
+  <style>
+    /*全局CSS变量定义*/
+    :root {
+      --safe-area: 4%;
+      --bg-dark: #0a0a0c;
+      --panel-bg: rgba(10, 10, 15, 0.85);
+      --border-light: rgba(255, 255, 255, 0.15);
+      --text-main: #ffffff;
+      --text-muted: #a0a0a5;
+      --gold-primary: #ffd700;
+      --gold-dark: #b8860b;
+      --red-primary: #e63946;
+      --red-dark: #8b0000;
+      --green-primary: #2a9d8f;
+      --purple-primary: #9d4edd;
+      --shadow-heavy: 0 10px 30px rgba(0, 0, 0, 0.8);
+      --font-title: Impact, "Arial Black", sans-serif;
+      --font-body: Arial, Helvetica, sans-serif;
+    }
+
+    /*重置默认样式*/
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    /*基础页面样式*/
+    body {
+      background-color: #111;
+      color: var(--text-main);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      overflow: hidden; /*阻止滚动模拟游戏全屏体验*/
+      display: flex;
+      flex-direction: column;
+    }
+
+    /*顶部导航栏容器*/
+    .top-bar {
+      position: absolute;
+      top: var(--safe-area);
+      left: var(--safe-area);
+      right: var(--safe-area);
+      display: flex;
+      justify-content: space-between;
+      z-index: 10;
+      pointer-events: none; /*让空白区域透传点击*/
+    }
+
+    /*左侧系统菜单组*/
+    .menu-group {
+      display: flex;
+      gap: 10px;
+      pointer-events: auto;
+    }
+
+    /*圆形功能按钮*/
+    .btn-circle {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: var(--panel-bg);
+      border: 2px solid var(--border-light);
+      color: var(--text-main);
+      font-family: var(--font-title);
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      text-shadow: 1px 1px 2px #000;
+      transition: transform 0.1s, border-color 0.1s;
+    }
+
+    .btn-circle:hover {
+      transform: scale(1.1);
+      border-color: var(--gold-primary);
+    }
+
+    /*右侧钱包区域*/
+    .wallet-group {
+      display: flex;
+      gap: 15px;
+      pointer-events: auto;
+    }
+
+    /*资源展示条*/
+    .resource-bar {
+      background: var(--panel-bg);
+      border: 2px solid var(--border-light);
+      border-radius: 8px;
+      padding: 5px 15px 5px 5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-title);
+      font-size: 22px;
+      color: var(--gold-primary);
+      text-shadow: 1px 1px 2px #000;
+    }
+
+    /*资源图标占位*/
+    .icon-cash {
+      width: 24px;
+      height: 24px;
+      background: var(--red-primary);
+      border: 2px solid #fff;
+      border-radius: 50%;
+    }
+
+    .icon-shard {
+      width: 24px;
+      height: 24px;
+      background: var(--purple-primary);
+      clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    }
+
+    /*主HUD底部容器*/
+    .bottom-hud {
+      position: absolute;
+      bottom: var(--safe-area);
+      left: var(--safe-area);
+      right: var(--safe-area);
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: end;
+      gap: 20px;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    /*左侧面板:显示现金和连胜*/
+    .panel-left {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: auto;
+    }
+
+    /*信息数据块*/
+    .stat-box {
+      background: var(--panel-bg);
+      border: 2px solid var(--border-light);
+      border-radius: 10px;
+      padding: 10px 15px;
+      min-width: 160px;
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .stat-value {
+      font-family: var(--font-title);
+      font-size: 32px;
+      color: var(--text-main);
+      line-height: 1.1;
+      text-shadow: 2px 2px 4px #000;
+    }
+
+    /*中间面板:操作核心区*/
+    .panel-center {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+      pointer-events: auto;
+    }
+
+    /*座位与结果提示文本*/
+    .center-hint {
+      font-family: var(--font-title);
+      font-size: 24px;
+      color: var(--gold-primary);
+      text-shadow: 2px 2px 0px #000;
+      text-align: center;
+    }
+
+    /*巨大的抛硬币按钮*/
+    .btn-flip {
+      background: linear-gradient(180deg, var(--gold-primary), var(--gold-dark));
+      border: 4px solid #fff;
+      border-radius: 16px;
+      color: #000;
+      font-family: var(--font-title);
+      font-size: 64px;
+      padding: 10px 60px;
+      cursor: pointer;
+      box-shadow: 0 8px 0px var(--gold-dark), var(--shadow-heavy);
+      transition: transform 0.1s, box-shadow 0.1s;
+      text-shadow: 1px 1px 0px rgba(255,255,255,0.5);
+    }
+
+    .btn-flip:active {
+      transform: translateY(8px);
+      box-shadow: 0 0px 0px var(--gold-dark), var(--shadow-heavy);
+    }
+
+    /*自动抛硬币切换按钮*/
+    .btn-auto {
+      background: var(--panel-bg);
+      border: 2px solid var(--border-light);
+      color: var(--text-muted);
+      border-radius: 20px;
+      padding: 6px 20px;
+      font-family: var(--font-title);
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .btn-auto.on {
+      color: var(--green-primary);
+      border-color: var(--green-primary);
+    }
+
+    /*右侧面板:概率速度及四项升级*/
+    .panel-right {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      pointer-events: auto;
+      justify-self: end;
+    }
+
+    /*小型升级按钮样式*/
+    .upgrade-box {
+      background: var(--panel-bg);
+      border: 2px solid var(--border-light);
+      border-radius: 8px;
+      padding: 8px 12px;
+      min-width: 120px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .upgrade-box:hover {
+      background: rgba(255,255,255,0.1);
+      border-color: var(--gold-primary);
+    }
+
+    .upgrade-box.readonly {
+      cursor: default;
+    }
+    .upgrade-box.readonly:hover {
+      background: var(--panel-bg);
+      border-color: var(--border-light);
+    }
+
+    /*弹窗遮罩层*/
+    .modal-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 50;
+      display: none; /*默认隐藏*/
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(5px);
+    }
+
+    /*弹窗主内容区*/
+    .modal-content {
+      background: var(--bg-dark);
+      border: 2px solid var(--border-light);
+      border-radius: 16px;
+      width: 90%;
+      max-width: 1000px;
+      height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-heavy);
+      overflow: hidden;
+    }
+
+    /*弹窗标题栏*/
+    .modal-header {
+      padding: 20px;
+      border-bottom: 2px solid var(--border-light);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255,255,255,0.05);
+    }
+
+    .modal-title {
+      font-family: var(--font-title);
+      font-size: 36px;
+      color: var(--gold-primary);
+      text-shadow: 2px 2px 4px #000;
+    }
+
+    /*关闭按钮*/
+    .btn-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 36px;
+      cursor: pointer;
+    }
+
+    .btn-close:hover {
+      color: var(--red-primary);
+    }
+
+    /*弹窗内部布局容器*/
+    .modal-body {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /*左侧垂直标签页*/
+    .modal-tabs {
+      width: 200px;
+      border-right: 2px solid var(--border-light);
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+      gap: 10px;
+    }
+
+    .tab-item {
+      padding: 15px;
+      background: rgba(255,255,255,0.05);
+      border: 2px solid transparent;
+      border-radius: 8px;
+      color: var(--text-main);
+      font-family: var(--font-title);
+      font-size: 18px;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .tab-item.active {
+      background: var(--red-dark);
+      border-color: var(--red-primary);
+      color: var(--gold-primary);
+    }
+
+    /*右侧内容滚动区*/
+    .modal-scroll-area {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    /*商城物品网格*/
+    .item-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 20px;
+    }
+
+    /*单个物品卡片*/
+    .item-card {
+      background: rgba(0,0,0,0.5);
+      border: 2px solid var(--border-light);
+      border-radius: 12px;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      transition: transform 0.2s;
+    }
+
+    .item-card:hover {
+      transform: translateY(-5px);
+      border-color: var(--gold-primary);
+    }
+
+    .item-icon {
+      width: 80px;
+      height: 80px;
+      background: radial-gradient(circle, var(--gold-primary), var(--gold-dark));
+      border-radius: 50%;
+      box-shadow: 0 0 15px rgba(255,215,0,0.3);
+    }
+
+    .item-name {
+      font-family: var(--font-title);
+      font-size: 20px;
+    }
+
+    .btn-buy {
+      width: 100%;
+      padding: 8px;
+      background: var(--green-primary);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-family: var(--font-title);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .btn-equip {
+      background: var(--text-muted);
+    }
+
+    /*响应式设计:在移动端垂直排列并缩小元素*/
+    @media (max-width: 768px) {
+      .bottom-hud {
+        grid-template-columns: 1fr;
+        justify-items: center;
+        gap: 15px;
+      }
+      .panel-left, .panel-right {
+        flex-direction: row;
+        width: 100%;
+        justify-content: space-between;
+      }
+      .panel-right {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .btn-flip {
+        font-size: 42px;
+        padding: 10px 40px;
+      }
+      .modal-body {
+        flex-direction: column;
+      }
+      .modal-tabs {
+        width: 100%;
+        flex-direction: row;
+        overflow-x: auto;
+        border-right: none;
+        border-bottom: 2px solid var(--border-light);
+      }
+      .tab-item {
+        flex: 1;
+        min-width: 100px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!--背景模拟游戏桌面场景-->
+  <div style="position: absolute; inset: 0; background: radial-gradient(circle at 50% 60%, #3a2518 0%, #111 60%); z-index: 0;"></div>
+
+  <!--顶部状态栏-->
+  <header class="top-bar">
+    <div class="menu-group">
+      <!--点击打开商城弹窗-->
+      <button class="btn-circle" onclick="openModal('Shop')">🛒</button>
+      <button class="btn-circle" onclick="openModal('Rebirth')">🌟</button>
+      <button class="btn-circle">⚙️</button>
+    </div>
+    <div class="wallet-group">
+      <div class="resource-bar">
+        <div class="icon-cash"></div>
+        <span id="txt-cash">14,250</span>
+      </div>
+      <div class="resource-bar">
+        <div class="icon-shard"></div>
+        <span id="txt-shards">12</span>
+      </div>
+    </div>
+  </header>
+
+  <!--游戏主HUD界面-->
+  <main class="bottom-hud">
+    <!--左侧面板:展示现金和连胜-->
+    <section class="panel-left">
+      <div class="stat-box">
+        <div class="stat-label">Cash</div>
+        <div class="stat-value" style="color:var(--gold-primary);">$14.2K</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Streak</div>
+        <div class="stat-value">x3</div>
+      </div>
+    </section>
+
+    <!--中心面板:核心操作区-->
+    <section class="panel-center">
+      <div class="center-hint">Seat 01</div>
+      <button class="btn-flip">FLIP</button>
+      <button class="btn-auto" onclick="toggleAuto(this)">Auto: Off</button>
+    </section>
+
+    <!--右侧面板:概率与四项局内升级-->
+    <section class="panel-right">
+      <div class="upgrade-box readonly">
+        <div class="stat-label">Chance</div>
+        <div class="stat-value" style="font-size:24px;">50%</div>
+      </div>
+      <div class="upgrade-box readonly">
+        <div class="stat-label">Speed</div>
+        <div class="stat-value" style="font-size:24px;">1.5s</div>
+      </div>
+      <div class="upgrade-box">
+        <div class="stat-label">Value (Lv.2)</div>
+        <div class="stat-value" style="font-size:24px;">$150</div>
+      </div>
+      <div class="upgrade-box">
+        <div class="stat-label">Combo (Lv.1)</div>
+        <div class="stat-value" style="font-size:24px;">$300</div>
+      </div>
+      <div class="upgrade-box">
+        <div class="stat-label">Speed (Lv.0)</div>
+        <div class="stat-value" style="font-size:24px;">$500</div>
+      </div>
+      <div class="upgrade-box">
+        <div class="stat-label">Bias (Lv.0)</div>
+        <div class="stat-value" style="font-size:24px;">$1K</div>
+      </div>
+    </section>
+  </main>
+
+  <!--统一弹窗容器结构-->
+  <div class="modal-overlay" id="mainModal">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2 class="modal-title" id="modalTitle">Shop</h2>
+        <button class="btn-close" onclick="closeModal()">×</button>
+      </header>
+      <div class="modal-body">
+        <!--左侧分类页签-->
+        <nav class="modal-tabs">
+          <button class="tab-item active">Coins</button>
+          <button class="tab-item">Desk Setup</button>
+          <button class="tab-item">Chairs</button>
+          <button class="tab-item">Boosts</button>
+        </nav>
+        <!--右侧滚动物品区域-->
+        <section class="modal-scroll-area">
+          <div class="item-grid">
+            <!--商品卡片结构-->
+            <article class="item-card">
+              <div class="item-icon"></div>
+              <h3 class="item-name">Classic Coin</h3>
+              <button class="btn-buy btn-equip">Equipped</button>
+            </article>
+            <article class="item-card">
+              <div class="item-icon" style="background: radial-gradient(circle, #e0e0e0, #888);"></div>
+              <h3 class="item-name">Silver Coin</h3>
+              <button class="btn-buy"><div class="icon-cash" style="width:16px;height:16px;"></div> 5,000</button>
+            </article>
+            <article class="item-card">
+              <div class="item-icon" style="background: radial-gradient(circle, #ff9a9e, #e63946);"></div>
+              <h3 class="item-name">Ruby Coin</h3>
+              <button class="btn-buy"><div class="icon-cash" style="width:16px;height:16px;"></div> 25,000</button>
+            </article>
+            <article class="item-card">
+              <div class="item-icon" style="background: radial-gradient(circle, #48cae4, #0077b6);"></div>
+              <h3 class="item-name">Diamond Coin</h3>
+              <button class="btn-buy"><div class="icon-cash" style="width:16px;height:16px;"></div> 100K</button>
+            </article>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!--简单的交互脚本用于演示UI状态切换-->
+  <script>
+    // 切换自动抛硬币状态的函数
+    function toggleAuto(btn) {
+      if (btn.classList.contains('on')) {
+        btn.classList.remove('on');
+        btn.innerText = 'Auto: Off';
+      } else {
+        btn.classList.add('on');
+        btn.innerText = 'Auto: On';
+      }
+    }
+
+    // 打开指定弹窗并修改标题
+    function openModal(title) {
+      document.getElementById('modalTitle').innerText = title;
+      document.getElementById('mainModal').style.display = 'flex';
+    }
+
+    // 关闭弹窗功能
+    function closeModal() {
+      document.getElementById('mainModal').style.display = 'none';
+    }
+  </script>
+</body>
+</html>

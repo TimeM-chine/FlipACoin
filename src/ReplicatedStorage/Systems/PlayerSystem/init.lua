@@ -275,11 +275,10 @@ function PlayerSystem:UpdatePlayerHeadGui(player: Player)
 	local cash = playerIns:GetOneData(dataKey.wins) or 0
 
 	onPlayerHead.vip.Visible = true
-	onPlayerHead.vip.Text = seatId or "Spectating"
+	onPlayerHead.vip.Text = `Streak {streak}`
 	onPlayerHead.cardPackOpened.Visible = true
 	if onboarding.isComplete then
-		onPlayerHead.cardPackOpened.Text = isSeated and (streak > 0 and `Streak {streak}` or equippedCoinName)
-			or equippedCoinName
+		onPlayerHead.cardPackOpened.Text = equippedCoinName
 		onPlayerHead.cash.Visible = not isSeated
 		onPlayerHead.cash.Text = `$ {Util.FormatNumber(cash, true)}`
 	else

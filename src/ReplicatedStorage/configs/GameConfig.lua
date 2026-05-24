@@ -119,6 +119,11 @@ GameConfig.FlipACoin = {
 	ComboStepPerLevel = 0.04,
 	SpeedDecay = 0.95,
 	BiasStep = 0.025,
+	FirstRebirthAssist = {
+		BaseBonus = 0.07,
+		TailsBonusStep = 0.04,
+		MaxHeadsChance = 0.45,
+	},
 	UpgradeConfigs = {
 		valueLevel = {
 			displayName = "Value",

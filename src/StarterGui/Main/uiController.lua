@@ -251,8 +251,9 @@ function controller.OpenFrame(name)
 		frameCache.Visible = false
 	end
 	frameCache = frame
-	applyResponsiveGrowthFrameLayout(frame)
-	bindResponsiveGrowthFrameLayout()
+	-- Mobile growth panel redistribution is temporarily disabled while mobile layout is being reworked.
+	-- applyResponsiveGrowthFrameLayout(frame)
+	-- bindResponsiveGrowthFrameLayout()
 	MaskFrame.ZIndex = 0
 	MaskFrame.BackgroundTransparency = 0.48
 	MaskFrame.Visible = true

@@ -94,6 +94,28 @@ function Presets.GetHeadsChance(runData, bonusStats)
 	)
 end
 
+function Presets.GetFirstRebirthAssistBonus(cash, rebirthMinCash, consecutiveTails)
+	local config = FlipConfig.FirstRebirthAssist
+	if not config or cash >= rebirthMinCash then
+		return 0
+	end
+
+	return (config.BaseBonus or 0) + (config.TailsBonusStep or 0) * math.max(consecutiveTails or 0, 0)
+end
+
+function Presets.GetRollHeadsChance(runData, bonusStats, hiddenChanceBonus)
+	local visibleChance = Presets.GetHeadsChance(runData, bonusStats)
+	local config = FlipConfig.FirstRebirthAssist
+	if not config or (hiddenChanceBonus or 0) <= 0 then
+		return visibleChance
+	end
+
+	return math.min(
+		FlipConfig.MaxHeadsChance,
+		math.max(visibleChance, math.min(config.MaxHeadsChance, visibleChance + hiddenChanceBonus))
+	)
+end
+
 function Presets.GetFlipInterval(runData, bonusStats)
 	local flipIntervalMultiplier = bonusStats and bonusStats.flipIntervalMultiplier or 1
 	return math.max(

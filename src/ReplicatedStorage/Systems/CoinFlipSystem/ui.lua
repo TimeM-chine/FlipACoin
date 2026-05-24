@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
 local Replicated = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -83,6 +84,7 @@ local AutoButton = CenterPanel:WaitForChild("AutoButton")
 if not AutoButton or not AutoButton:IsA("GuiButton") then
 	error("CoinFlipHUD is missing AutoButton")
 end
+local AutoButtonStroke = AutoButton:WaitForChild("UIStroke")
 
 local SpectatorFeed = Elements:FindFirstChild("CoinFlipSpectatorFeed")
 local TableOverview = Elements:FindFirstChild("CoinFlipTableOverview")
@@ -136,6 +138,16 @@ local currentRunSnapshot = {
 	derivedStats = {},
 }
 local FlipInputActionName = "COIN_FLIP_REQUEST"
+local AUTO_BUTTON_ON_COLOR = Color3.fromRGB(92, 255, 132)
+local AUTO_BUTTON_OFF_COLOR = Color3.fromRGB(255, 255, 255)
+local FAKE_COIN_LOOK_DURATION = 1.02
+local FAKE_COIN_LOOK_RESTORE_DURATION = 0.18
+local FAKE_COIN_LOOK_PITCH_LIMIT = math.rad(35)
+local FAKE_COIN_LOOK_YAW_LIMIT = math.rad(50)
+local FAKE_COIN_LOOK_NECK_PITCH_WEIGHT = 0.7
+local FAKE_COIN_LOOK_NECK_YAW_WEIGHT = 0.72
+local FAKE_COIN_LOOK_WAIST_YAW_WEIGHT = 0.2
+local fakeCoinLookTokens = {}
 
 local function getRecommendedUpgradeKey()
 	local runData = currentRunSnapshot.runData or {}
@@ -287,9 +299,11 @@ local function resolveHudLayoutProfile()
 	local layout = Presets.UiLayout
 	local hudLayout = layout.Hud
 	local viewportSize = getViewportSize()
-	local aspectRatio = viewportSize.X / viewportSize.Y
-	local isMobile = UserInputService.TouchEnabled
-		and (viewportSize.X <= layout.MobileMaxWidth or aspectRatio <= layout.MobileMaxAspect)
+	local isMobile = false
+	-- Mobile HUD redistribution is temporarily disabled while mobile layout is being reworked.
+	-- local aspectRatio = viewportSize.X / viewportSize.Y
+	-- local isMobile = UserInputService.TouchEnabled
+	-- 	and (viewportSize.X <= layout.MobileMaxWidth or aspectRatio <= layout.MobileMaxAspect)
 
 	if not isMobile then
 		local size = hudLayout.DesktopSize
@@ -398,8 +412,8 @@ local function applyGameplayVisibility(isVisible)
 	AutoButton.Visible = showHud
 	AutoButton.Active = showHud
 	AutoButton.AutoButtonColor = showHud
-	LegacyCashText.Visible = showHud
-	LegacyRebirthText.Visible = showHud
+	LegacyCashText.Visible = false
+	LegacyRebirthText.Visible = false
 
 	if TopBar and TopBar:IsA("GuiObject") then
 		TopBar.Visible = false
@@ -417,6 +431,9 @@ end
 
 local function updateAutoButtonText()
 	AutoButton.Text = autoFlipEnabled and "Auto:On" or "Auto:Off"
+	local color = autoFlipEnabled and AUTO_BUTTON_ON_COLOR or AUTO_BUTTON_OFF_COLOR
+	AutoButton.TextColor3 = color
+	AutoButtonStroke.Color = color
 end
 
 local function setAutoFlipEnabled(isEnabled)
@@ -657,6 +674,7 @@ function CoinFlipUi.Init()
 	initialized = true
 
 	setVisible(false)
+	updateAutoButtonText()
 	hideOnboardingPanel()
 	ensureLeaveButton()
 	applyResponsiveLayout()
@@ -718,13 +736,6 @@ function CoinFlipUi.SyncRunState(args)
 		ClientData:SetOneData(dataKey.rebirthTree, args.rebirthState.rebirthTree)
 	end
 	CashValue.Text = `$ {Util.FormatNumber(cash, true)}`
-	LegacyCashText.Text = Util.FormatNumber(cash, true)
-	LegacyRebirthText.Text = Util.FormatNumber(
-		(args.rebirthState and (args.rebirthState.rebirthPoints or args.rebirthState.fateShards))
-			or ClientData:GetOneData(dataKey.fateShards)
-			or 0,
-		true
-	)
 	ChanceValue.Text = `{math.round((args.derivedStats.headsChance or 0) * 1000) / 10}%`
 	StreakValue.Text = tostring(args.runData.currentStreak or 0)
 	SpeedValue.Text = `{math.round((args.derivedStats.flipInterval or 0) * 100) / 100}s`
@@ -810,12 +821,115 @@ function CoinFlipUi.UpdateOnboarding(_)
 	end
 end
 
+local function findFakeActorModel(fakeId)
+	local tableModel = Workspace:FindFirstChild("CoinFlipTable")
+	local assetsFolder = tableModel and tableModel:FindFirstChild("Assets")
+	local runtimeFolder = assetsFolder and assetsFolder:FindFirstChild("FakePlayersRuntime")
+	local model = runtimeFolder and runtimeFolder:FindFirstChild(fakeId)
+	if model and model:IsA("Model") then
+		return model
+	end
+
+	model = Workspace:FindFirstChild(fakeId, true)
+	if model and model:IsA("Model") then
+		return model
+	end
+
+	return nil
+end
+
+local function getFakeHeadPoseMotor(model, motorName)
+	local motor = model:FindFirstChild(motorName, true)
+	if motor and motor:IsA("Motor6D") then
+		return motor
+	end
+
+	return nil
+end
+
+local function restoreFakeCoinLookMotor(motor, baseC0)
+	if not motor or not motor.Parent then
+		return
+	end
+
+	TweenService:Create(motor, TweenInfo.new(FAKE_COIN_LOOK_RESTORE_DURATION, Enum.EasingStyle.Quad), {
+		C0 = baseC0,
+	}):Play()
+end
+
+local function playFakeActorCoinLook(fakeId, focusPart)
+	if typeof(fakeId) ~= "string" or not focusPart or not focusPart:IsA("BasePart") then
+		return
+	end
+
+	local model = findFakeActorModel(fakeId)
+	local root = model and model:FindFirstChild("HumanoidRootPart")
+	if not model or not root or not root:IsA("BasePart") then
+		return
+	end
+
+	local neck = getFakeHeadPoseMotor(model, "Neck")
+	if not neck then
+		return
+	end
+	local waist = getFakeHeadPoseMotor(model, "Waist")
+	local neckBaseC0 = neck.C0
+	local waistBaseC0 = waist and waist.C0 or nil
+	local token = (fakeCoinLookTokens[fakeId] or 0) + 1
+	fakeCoinLookTokens[fakeId] = token
+	local startedAt = os.clock()
+	local connection
+
+	connection = RunService.RenderStepped:Connect(function()
+		if fakeCoinLookTokens[fakeId] ~= token then
+			connection:Disconnect()
+			return
+		end
+		if not model:IsDescendantOf(Workspace) or not focusPart:IsDescendantOf(Workspace) then
+			fakeCoinLookTokens[fakeId] = nil
+			connection:Disconnect()
+			restoreFakeCoinLookMotor(neck, neckBaseC0)
+			if waist and waistBaseC0 then
+				restoreFakeCoinLookMotor(waist, waistBaseC0)
+			end
+			return
+		end
+
+		local alpha = (os.clock() - startedAt) / FAKE_COIN_LOOK_DURATION
+		if alpha >= 1 then
+			fakeCoinLookTokens[fakeId] = nil
+			connection:Disconnect()
+			restoreFakeCoinLookMotor(neck, neckBaseC0)
+			if waist and waistBaseC0 then
+				restoreFakeCoinLookMotor(waist, waistBaseC0)
+			end
+			return
+		end
+
+		local target = root.CFrame:PointToObjectSpace(focusPart.Position)
+		local horizontalMagnitude = math.max(Vector2.new(target.X, target.Z).Magnitude, 0.1)
+		local pitch = math.clamp(math.atan2(target.Y, horizontalMagnitude), -FAKE_COIN_LOOK_PITCH_LIMIT, FAKE_COIN_LOOK_PITCH_LIMIT)
+		local yaw = math.clamp(math.atan2(-target.X, -target.Z), -FAKE_COIN_LOOK_YAW_LIMIT, FAKE_COIN_LOOK_YAW_LIMIT)
+		local blend = math.clamp(alpha / 0.12, 0, 1)
+
+		neck.C0 = neckBaseC0
+			* CFrame.Angles(
+				pitch * FAKE_COIN_LOOK_NECK_PITCH_WEIGHT * blend,
+				yaw * FAKE_COIN_LOOK_NECK_YAW_WEIGHT * blend,
+				0
+			)
+		if waist and waistBaseC0 then
+			waist.C0 = waistBaseC0 * CFrame.Angles(0, yaw * FAKE_COIN_LOOK_WAIST_YAW_WEIGHT * blend, 0)
+		end
+	end)
+end
+
 function CoinFlipUi.ObservedFlip(args)
 	if args.userId == LocalPlayer.UserId then
 		return
 	end
 
-	EffectSystem:PlayCoinFlipVisual(nil, nil, {
+	local visual = EffectSystem:PlayCoinFlipVisual(nil, nil, {
 		seatId = args.seatId,
 		result = args.result,
 		coinId = args.equippedCoin,
@@ -829,6 +943,9 @@ function CoinFlipUi.ObservedFlip(args)
 			EffectSystem:PlayStreakMilestone(nil, nil, args.streakMilestone)
 		end,
 	})
+	if args.isFake then
+		playFakeActorCoinLook(args.fakeId, visual and visual.focusPart)
+	end
 end
 
 return CoinFlipUi

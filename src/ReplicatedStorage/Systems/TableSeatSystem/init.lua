@@ -42,6 +42,7 @@ local TableSeatSystem: Types.System = {
 	whiteList = {
 		"GetPlayerSeatId",
 		"GetPlayerSeatAssignment",
+		"GetFakeActorSeatAssignment",
 		"GetSeatRecordByDisplayId",
 		"GetTablePlayers",
 		"IsPlayerSeated",
@@ -49,6 +50,9 @@ local TableSeatSystem: Types.System = {
 		"GetClientSeatState",
 		"GetAudiencePlayers",
 		"GetSeatTargetCFrame",
+		"AssignFakeActor",
+		"ClearFakeActor",
+		"ReleaseOneFakeSeat",
 	},
 	players = {},
 	tasks = {},
@@ -80,6 +84,33 @@ local function getSeatRecord(self, seatKey)
 	return self._seats and self._seats[seatKey] or nil
 end
 
+local function isRealPlayer(actor)
+	return typeof(actor) == "Instance" and actor:IsA("Player")
+end
+
+local function isFakeActor(actor)
+	return typeof(actor) == "table" and actor.isFake == true
+end
+
+local function isActiveSeatOwner(actor)
+	if isRealPlayer(actor) then
+		return actor:IsDescendantOf(Players)
+	end
+
+	return isFakeActor(actor) and actor.isActive == true
+end
+
+local function getActorUserId(actor)
+	if isRealPlayer(actor) then
+		return actor.UserId
+	end
+	if isFakeActor(actor) then
+		return actor.userId
+	end
+
+	return nil
+end
+
 local function getSeatDisplayId(self, seatKey)
 	local seatRecord = getSeatRecord(self, seatKey)
 	return seatRecord and seatRecord.displaySeatId or nil
@@ -88,6 +119,18 @@ end
 local function getPlayerSeatRecord(self, player)
 	local seatKey = self._playerSeats and self._playerSeats[player.UserId]
 	return getSeatRecord(self, seatKey)
+end
+
+local function getActorSeatRecord(self, actor)
+	if isRealPlayer(actor) then
+		return getPlayerSeatRecord(self, actor)
+	end
+	if isFakeActor(actor) then
+		local seatKey = self._fakeActorSeats and self._fakeActorSeats[actor.fakeId]
+		return getSeatRecord(self, seatKey)
+	end
+
+	return nil
 end
 
 local function resolveSeatKey(self, seatIdentifier)
@@ -179,7 +222,7 @@ local function applyDynamicSeatLayout(self)
 	local activeSeatKeys = {}
 	for _, seatKey in ipairs(self._seatOrder or {}) do
 		local occupant = self._seatOwners[seatKey]
-		if occupant and occupant:IsDescendantOf(Players) then
+		if isActiveSeatOwner(occupant) then
 			table.insert(activeSeatKeys, seatKey)
 		end
 	end
@@ -350,7 +393,7 @@ local function refreshPromptAttributes(self, seatKey)
 
 	seatRecord.prompt:SetAttribute("SeatId", seatRecord.displaySeatId or seatRecord.rawSeatId)
 	seatRecord.prompt:SetAttribute("SeatKey", seatKey)
-	seatRecord.prompt:SetAttribute("Occupied", self._seatOwners[seatKey] ~= nil)
+	seatRecord.prompt:SetAttribute("Occupied", isActiveSeatOwner(self._seatOwners[seatKey]))
 end
 
 local function refreshLocalPromptVisibility(self)
@@ -409,8 +452,10 @@ local function broadcastSeatStates(self)
 	end
 
 	for _, occupant in pairs(self._seatOwners) do
-		if occupant and occupant:IsDescendantOf(Players) then
+		if isRealPlayer(occupant) and occupant:IsDescendantOf(Players) then
 			systemMgr.systems.PlayerSystem:UpdatePlayerHeadGui(occupant)
+		elseif isFakeActor(occupant) and occupant.isActive then
+			systemMgr.systems.FakePlayerSystem:UpdateFakeActorHead(SENDER, occupant)
 		end
 	end
 end
@@ -471,6 +516,7 @@ function TableSeatSystem:_EnsureSeatCatalog()
 	self._seatDisplayLookup = self._seatDisplayLookup or {}
 	self._seatOwners = self._seatOwners or {}
 	self._playerSeats = self._playerSeats or {}
+	self._fakeActorSeats = self._fakeActorSeats or {}
 	self._lastActivity = self._lastActivity or {}
 
 	local tableModels = {}
@@ -581,7 +627,16 @@ function TableSeatSystem:_EnsureSeatCatalog()
 				self._seatOccupantConnections[seat] = seat:GetPropertyChangedSignal("Occupant"):Connect(function()
 					local humanoid = seat.Occupant
 					if humanoid then
+						local existingOwner = self._seatOwners[seatKey]
+						if isFakeActor(existingOwner) and existingOwner.model == humanoid.Parent then
+							return
+						end
+
 						local occupantPlayer = Players:GetPlayerFromCharacter(humanoid.Parent)
+						if not occupantPlayer then
+							return
+						end
+
 						if occupantPlayer and self._seatOwners[seatKey] ~= occupantPlayer then
 							local previousSeat = self._playerSeats[occupantPlayer.UserId]
 							if previousSeat and previousSeat ~= seatKey then
@@ -602,7 +657,10 @@ function TableSeatSystem:_EnsureSeatCatalog()
 					end
 
 					local seatedPlayer = self._seatOwners[seatKey]
-					if seatedPlayer and seatedPlayer:IsDescendantOf(Players) then
+					if isFakeActor(seatedPlayer) then
+						return
+					end
+					if isRealPlayer(seatedPlayer) and seatedPlayer:IsDescendantOf(Players) then
 						local seatedHumanoid = seatedPlayer.Character and seatedPlayer.Character:FindFirstChildOfClass("Humanoid")
 						if seatedHumanoid and seatedHumanoid.Health > 0 then
 							task.defer(function()
@@ -640,7 +698,7 @@ function TableSeatSystem:_FindOpenSeatKey(player)
 	if currentSeatKey then
 		local currentRecord = self._seats[currentSeatKey]
 		local currentOwner = self._seatOwners[currentSeatKey]
-		if currentRecord and (not currentOwner or currentOwner == player or not currentOwner:IsDescendantOf(Players)) then
+		if currentRecord and (not isActiveSeatOwner(currentOwner) or currentOwner == player) then
 			return currentSeatKey
 		end
 	end
@@ -648,7 +706,7 @@ function TableSeatSystem:_FindOpenSeatKey(player)
 	for _, seatKey in ipairs(self._seatOrder or {}) do
 		local seatRecord = self._seats[seatKey]
 		local owner = self._seatOwners[seatKey]
-		if seatRecord and (not owner or not owner:IsDescendantOf(Players)) then
+		if seatRecord and not isActiveSeatOwner(owner) then
 			return seatKey
 		end
 	end
@@ -680,6 +738,9 @@ function TableSeatSystem:_TryAssignWaitingPlayers()
 		end
 
 		if not self:_FindOpenSeatKey(player) then
+			if self:ReleaseOneFakeSeat(SENDER, { reason = "waitingPlayerNeedsSeat" }) then
+				continue
+			end
 			return
 		end
 
@@ -741,6 +802,12 @@ function TableSeatSystem:_QueueAutoSeat(player)
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local seatKey = self:_FindOpenSeatKey(player)
+		if not seatKey then
+			self:ReleaseOneFakeSeat(SENDER, {
+				reason = "realPlayerNeedsSeat",
+			})
+			seatKey = self:_FindOpenSeatKey(player)
+		end
 
 		if humanoid and seatKey and isPlayerActuallySeated(seatKey, humanoid) then
 			clearWaitingForSeat()
@@ -820,7 +887,31 @@ function TableSeatSystem:_BuildSeatDisplayEntry(seatKey, occupant)
 		isOccupied = false,
 	}
 
-	if not occupant or not occupant:IsDescendantOf(Players) then
+	if not isActiveSeatOwner(occupant) then
+		return entry
+	end
+
+	if isFakeActor(occupant) then
+		local streak = occupant.runData and occupant.runData.currentStreak or 0
+		local equippedCoin = occupant.equippedCoin or EcoPresets.LoadoutDefaults.equippedCoin
+		local equippedCoinName = EcoPresets.GetShopItemDisplayName("coin", equippedCoin)
+		local cash = occupant.cash or 0
+		local statusText, statusColor = getSeatBillboardTone(streak)
+
+		entry.userId = occupant.userId
+		entry.fakeId = occupant.fakeId
+		entry.isFake = true
+		entry.displayName = occupant.displayName
+		entry.coinName = equippedCoinName
+		entry.equippedCoin = equippedCoin
+		entry.streak = streak
+		entry.cash = cash
+		entry.cashText = `$ {Util.FormatNumber(cash, true)}`
+		entry.statusText = statusText
+		entry.statusColor = statusColor
+		entry.detailText = `Streak {streak} | {equippedCoinName}`
+		entry.isOccupied = true
+
 		return entry
 	end
 
@@ -860,9 +951,12 @@ function TableSeatSystem:_BuildSeatDisplaySnapshot()
 
 	for _, seatKey in ipairs(self._seatOrder or {}) do
 		local occupant = self._seatOwners[seatKey]
-		if occupant and occupant:IsDescendantOf(Players) then
-			occupiedSeats[getSeatDisplayId(self, seatKey) or seatKey] = occupant.UserId
-			table.insert(tablePlayerUserIds, occupant.UserId)
+		if isActiveSeatOwner(occupant) then
+			local userId = getActorUserId(occupant)
+			occupiedSeats[getSeatDisplayId(self, seatKey) or seatKey] = userId
+			if isRealPlayer(occupant) then
+				table.insert(tablePlayerUserIds, userId)
+			end
 		end
 
 		local entry = self:_BuildSeatDisplayEntry(seatKey, occupant)
@@ -896,6 +990,14 @@ function TableSeatSystem:Init()
 					refreshPromptAttributes(self, seatId)
 				end
 			end
+			for fakeId, seatId in pairs(self._fakeActorSeats or {}) do
+				local fakeActor = self._seatOwners[seatId]
+				if not isFakeActor(fakeActor) or fakeActor.fakeId ~= fakeId or not fakeActor.isActive then
+					self._seatOwners[seatId] = nil
+					self._fakeActorSeats[fakeId] = nil
+					refreshPromptAttributes(self, seatId)
+				end
+			end
 		end)
 	else
 		refreshLocalPromptVisibility(self)
@@ -909,6 +1011,22 @@ end
 
 function TableSeatSystem:GetPlayerSeatAssignment(player)
 	local seatRecord = getPlayerSeatRecord(self, player)
+	if not seatRecord then
+		return nil
+	end
+
+	return {
+		seatId = seatRecord.displaySeatId,
+		rawSeatId = seatRecord.rawSeatId,
+		tableId = seatRecord.tableId,
+		tableLabel = seatRecord.tableLabel,
+		seat = seatRecord.seat,
+		tableModel = seatRecord.tableModel,
+	}
+end
+
+function TableSeatSystem:GetFakeActorSeatAssignment(fakeActor)
+	local seatRecord = getActorSeatRecord(self, fakeActor)
 	if not seatRecord then
 		return nil
 	end
@@ -939,7 +1057,7 @@ function TableSeatSystem:GetTablePlayers(seatId)
 	local tablePlayers = {}
 	for _, orderedSeatId in ipairs(self._seatOrder or {}) do
 		local player = self._seatOwners[orderedSeatId]
-		if player and player:IsDescendantOf(Players) then
+		if isRealPlayer(player) and player:IsDescendantOf(Players) then
 			table.insert(tablePlayers, player)
 		end
 	end
@@ -981,6 +1099,130 @@ function TableSeatSystem:RefreshAudienceState(sender)
 	end
 
 	broadcastSeatStates(self)
+end
+
+function TableSeatSystem:AssignFakeActor(sender, fakeActor)
+	if not IsServer then
+		return nil
+	end
+	if sender ~= SENDER then
+		return nil
+	end
+	if not isFakeActor(fakeActor) then
+		return nil
+	end
+
+	self:_EnsureSeatCatalog()
+	self._fakeActorSeats = self._fakeActorSeats or {}
+
+	local seatKey = self._fakeActorSeats[fakeActor.fakeId]
+	if seatKey and not getSeatRecord(self, seatKey) then
+		self._fakeActorSeats[fakeActor.fakeId] = nil
+		seatKey = nil
+	end
+	if not seatKey then
+		for _, candidateSeatKey in ipairs(self._seatOrder or {}) do
+			local candidateSeatRecord = getSeatRecord(self, candidateSeatKey)
+			if
+				candidateSeatRecord
+				and not isActiveSeatOwner(self._seatOwners[candidateSeatKey])
+				and not candidateSeatRecord.seat.Occupant
+			then
+				seatKey = candidateSeatKey
+				break
+			end
+		end
+	end
+	if not seatKey then
+		return nil
+	end
+
+	local seatRecord = getSeatRecord(self, seatKey)
+	if not seatRecord then
+		return nil
+	end
+	if self._seatOwners[seatKey] ~= fakeActor and isActiveSeatOwner(self._seatOwners[seatKey]) then
+		return nil
+	end
+	if seatRecord.seat.Occupant then
+		return nil
+	end
+
+	local model = fakeActor.model
+	local humanoid = model and model:FindFirstChildOfClass("Humanoid")
+	if model and model:IsA("Model") then
+		model:PivotTo(seatRecord.seat.CFrame * CFrame.new(0, 2, 0))
+	end
+	if humanoid and humanoid.Health > 0 then
+		seatRecord.seat:Sit(humanoid)
+	end
+
+	self._seatOwners[seatKey] = fakeActor
+	self._fakeActorSeats[fakeActor.fakeId] = seatKey
+	fakeActor.seatId = seatRecord.displaySeatId
+	fakeActor.rawSeatId = seatRecord.rawSeatId
+	fakeActor.tableModel = seatRecord.tableModel
+	fakeActor.seat = seatRecord.seat
+	fakeActor.isActive = true
+
+	refreshPromptAttributes(self, seatKey)
+	GetSystemMgr().systems.DecorationSystem:RefreshFakeActorDecoration(SENDER, fakeActor)
+	GetSystemMgr().systems.FakePlayerSystem:UpdateFakeActorHead(SENDER, fakeActor)
+	broadcastSeatStates(self)
+
+	return self:GetFakeActorSeatAssignment(fakeActor)
+end
+
+function TableSeatSystem:ClearFakeActor(sender, fakeActor)
+	if not IsServer then
+		return
+	end
+	if sender ~= SENDER then
+		return
+	end
+	if not isFakeActor(fakeActor) then
+		return
+	end
+
+	self:_EnsureSeatCatalog()
+	self._fakeActorSeats = self._fakeActorSeats or {}
+	local seatKey = self._fakeActorSeats[fakeActor.fakeId]
+	if not seatKey then
+		return
+	end
+
+	local seatRecord = getSeatRecord(self, seatKey)
+	if self._seatOwners[seatKey] == fakeActor then
+		self._seatOwners[seatKey] = nil
+	end
+	self._fakeActorSeats[fakeActor.fakeId] = nil
+	if seatRecord and seatRecord.seat then
+		local humanoid = fakeActor.model and fakeActor.model:FindFirstChildOfClass("Humanoid")
+		if humanoid and seatRecord.seat.Occupant == humanoid then
+			humanoid.Sit = false
+		end
+	end
+
+	GetSystemMgr().systems.DecorationSystem:ClearFakeActorDecoration(SENDER, fakeActor)
+	fakeActor.seatId = nil
+	fakeActor.rawSeatId = nil
+	fakeActor.tableModel = nil
+	fakeActor.seat = nil
+
+	refreshPromptAttributes(self, seatKey)
+	self:_TryAssignWaitingPlayers()
+	broadcastSeatStates(self)
+end
+
+function TableSeatSystem:ReleaseOneFakeSeat(sender, args)
+	if not IsServer then
+		return false
+	end
+	if sender ~= SENDER then
+		return false
+	end
+
+	return GetSystemMgr().systems.FakePlayerSystem:ReleaseOneFakeActor(SENDER, args)
 end
 
 function TableSeatSystem:PlayerAdded(sender, player, args)
@@ -1070,7 +1312,7 @@ function TableSeatSystem:RequestSit(sender, player, args)
 	local occupant = self._seatOwners[seatKey]
 	local currentSeatKey = self._playerSeats[player.UserId]
 	local wasAlreadyAssigned = currentSeatKey == seatKey and occupant == player
-	if occupant and occupant ~= player and occupant:IsDescendantOf(Players) then
+	if occupant and occupant ~= player and isActiveSeatOwner(occupant) then
 		return false
 	end
 	if seatOccupant and seatOccupant ~= humanoid then
