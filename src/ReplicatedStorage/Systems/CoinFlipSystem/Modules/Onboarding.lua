@@ -15,7 +15,6 @@ Onboarding.StepOrder = table.freeze({
 		title = "Get seated at the table",
 		analyticsStep = 2,
 		analyticsName = "coinflip_auto_seated",
-		toastText = "Seat ready. Flip 3 times to earn your first upgrade.",
 	},
 	{
 		key = "firstFlip",
@@ -23,7 +22,6 @@ Onboarding.StepOrder = table.freeze({
 		title = "Make your first flip",
 		analyticsStep = 3,
 		analyticsName = "coinflip_first_flip",
-		toastText = "Good. Keep flipping until you can buy Value.",
 	},
 	{
 		key = "flipThree",
@@ -31,7 +29,6 @@ Onboarding.StepOrder = table.freeze({
 		title = "Flip 3 times",
 		analyticsStep = 4,
 		analyticsName = "coinflip_flip_three",
-		toastText = "Great. You have enough Cash for the first upgrade.",
 	},
 	{
 		key = "buyUpgrade",
@@ -39,7 +36,6 @@ Onboarding.StepOrder = table.freeze({
 		title = "Buy your first upgrade",
 		analyticsStep = 5,
 		analyticsName = "coinflip_buy_upgrade",
-		toastText = "Upgrade bought. Flip again and try to build a streak.",
 	},
 	{
 		key = "tryStreak",
@@ -47,7 +43,6 @@ Onboarding.StepOrder = table.freeze({
 		title = "Try for a Heads streak",
 		analyticsStep = 6,
 		analyticsName = "coinflip_try_streak",
-		toastText = "Guide complete. Chase bigger streaks now.",
 	},
 })
 

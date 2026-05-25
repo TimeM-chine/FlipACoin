@@ -64,6 +64,7 @@ local function getPlayerState(self, player)
 		playerState = {
 			nextFlipAt = 0,
 			firstRebirthTailsStreak = 0,
+			stateVersion = 0,
 		}
 		self.players[player.UserId] = playerState
 	end
@@ -157,6 +158,12 @@ local function buildClientState(player)
 	}
 end
 
+local function stampClientState(self, player, payload)
+	local playerState = getPlayerState(self, player)
+	playerState.stateVersion = (playerState.stateVersion or 0) + 1
+	payload.stateVersion = playerState.stateVersion
+end
+
 local function syncPlayerState(self, player, extraArgs, useFlipResolved)
 	local payload = buildClientState(player)
 	if not payload then
@@ -168,6 +175,7 @@ local function syncPlayerState(self, player, extraArgs, useFlipResolved)
 			payload[key] = value
 		end
 	end
+	stampClientState(self, player, payload)
 
 	if useFlipResolved then
 		self.Client:FlipResolved(player, payload)
@@ -224,15 +232,6 @@ local function applyOnboardingAction(self, player, action, context, shouldPushIm
 
 	for _, milestone in ipairs(milestones) do
 		playerIns:LogOnboarding(milestone.analyticsStep, milestone.analyticsName)
-	end
-
-	local latestMilestone = milestones[#milestones]
-	if latestMilestone and latestMilestone.toastText then
-		SystemMgr.systems.GuiSystem:SetNotification(SENDER, player, {
-			text = latestMilestone.toastText,
-			lastTime = 2.8,
-			textColor = Color3.fromRGB(255, 231, 163),
-		})
 	end
 
 	SystemMgr.systems.PlayerSystem:UpdatePlayerHeadGui(player)
@@ -360,8 +359,12 @@ function CoinFlipSystem:PlayerAdded(sender, player, args)
 		end
 
 		getPlayerState(self, player)
+		local state = buildClientState(player)
+		if state then
+			stampClientState(self, player, state)
+		end
 		self.Client:PlayerAdded(player, {
-			state = buildClientState(player),
+			state = state,
 		})
 		for _, delaySeconds in ipairs({ 0.5, 1.5, 3 }) do
 			task.delay(delaySeconds, function()

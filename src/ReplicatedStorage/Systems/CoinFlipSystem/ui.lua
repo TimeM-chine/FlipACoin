@@ -137,6 +137,7 @@ local currentRunSnapshot = {
 	nextCosts = {},
 	derivedStats = {},
 }
+local latestRunStateVersion = 0
 local FlipInputActionName = "COIN_FLIP_REQUEST"
 local AUTO_BUTTON_ON_COLOR = Color3.fromRGB(92, 255, 132)
 local AUTO_BUTTON_OFF_COLOR = Color3.fromRGB(255, 255, 255)
@@ -174,34 +175,6 @@ local function isGrowthFrameOpen()
 	return false
 end
 
-local function buildFailureFollowUpText()
-	local seatState = currentSeatState or {}
-	local suggestedUpgrade = getRecommendedUpgradeKey()
-
-	if not seatState.isSeated then
-		return "Next: wait for your seat and start again."
-	end
-
-	if suggestedUpgrade then
-		return `Next: buy {UpgradeTitles[suggestedUpgrade]} or flip again.`
-	end
-
-	return "Next: flip again and rebuild your streak."
-end
-
-local function maybeShowFailureFollowUpNotification(text)
-	if typeof(text) ~= "string" or text == "" then
-		return
-	end
-
-	uiController.SetNotification({
-		text = text,
-		lastTime = 2.4,
-		soundName = "notification",
-		textColor = Color3.fromRGB(255, 223, 153),
-	})
-end
-
 local function pulseRecommendedUpgrade(onboarding)
 	if not onboarding or onboarding.currentStep ~= "buyUpgrade" then
 		lastUpgradePromptKey = nil
@@ -214,19 +187,11 @@ local function pulseRecommendedUpgrade(onboarding)
 	end
 
 	local button = UpgradeMap[upgradeKey]
-	local title = UpgradeTitles[upgradeKey] or "Upgrade"
 	lastUpgradePromptKey = upgradeKey
 	upgradePromptToken += 1
 	local token = upgradePromptToken
 	local originalColor = button.BackgroundColor3
 	local originalTitleColor = button.Title.TextColor3
-
-	uiController.SetNotification({
-		text = `Upgrade {title} to make your next Heads stronger.`,
-		lastTime = 2.6,
-		soundName = "notification",
-		textColor = Color3.fromRGB(255, 231, 163),
-	})
 
 	TweenService:Create(button, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		BackgroundColor3 = Color3.fromRGB(255, 197, 73),
@@ -702,6 +667,14 @@ function CoinFlipUi.Init()
 end
 
 function CoinFlipUi.SyncRunState(args)
+	local stateVersion = args.stateVersion
+	if typeof(stateVersion) == "number" then
+		if stateVersion < latestRunStateVersion then
+			return false
+		end
+		latestRunStateVersion = stateVersion
+	end
+
 	local seatState = args.seatState or {}
 	local payloadIsSeated = seatState.isSeated == true or seatState.seatId ~= nil
 	if payloadIsSeated then
@@ -754,6 +727,8 @@ function CoinFlipUi.SyncRunState(args)
 	if isSeated and ResultLabel.Text == "Waiting for seat assignment..." then
 		updateResultText(getReadyPrompt(), "Neutral")
 	end
+
+	return true
 end
 
 function CoinFlipUi.FlipResolved(args)
@@ -768,7 +743,6 @@ function CoinFlipUi.FlipResolved(args)
 			currentFlipInProgress = false
 			CoinFlipUi.SyncRunState(args)
 			applyGameplayVisibility(currentSeatId ~= nil)
-			local failureFollowUpText = buildFailureFollowUpText()
 
 			if args.result == "Heads" then
 				updateResultText(`Heads! +$ {Util.FormatNumber(args.reward or 0, true)}`, "Heads")
@@ -778,10 +752,8 @@ function CoinFlipUi.FlipResolved(args)
 			elseif (args.reward or 0) > 0 then
 				updateResultText(`Tails! +$ {Util.FormatNumber(args.reward, true)}`, "Tails")
 				playSfx("cashReward")
-				maybeShowFailureFollowUpNotification(failureFollowUpText)
 			else
 				updateResultText("Tails! Streak reset.", "Tails")
-				maybeShowFailureFollowUpNotification(failureFollowUpText)
 			end
 
 			EffectSystem:PlayStreakMilestone(nil, nil, args.streakMilestone)

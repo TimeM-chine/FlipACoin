@@ -516,7 +516,7 @@ FlipACoin
   - flip `3` 次赚到第一次升级
   - 购买首次升级
   - 购买后再 Flip 一次以理解 streak 目标，不再把随机达成 `2 streak` 作为引导完成门槛
-- 首次升级引导只使用已有 HUD 升级按钮做短 pulse 和通知提示，不恢复旧大引导浮层
+- 首次升级引导只使用已有 HUD 升级按钮做短 pulse，不再发教学 / 建议类 toast，也不恢复旧大引导浮层
 - 桌面沉浸视角当前由 `StarterPlayerScripts/Modules/FirstPersonCamera.lua` 负责：
   - 平时是头部第一人称：镜头贴到 `Head.Position`，保留默认相机输入，所以玩家可自由转头
   - 镜头相对 `HumanoidRootPart` 的左右转向被限制在 `-90° ~ 90°`，避免玩家坐在桌边时回头穿帮

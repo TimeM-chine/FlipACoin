@@ -58,6 +58,16 @@
 
 ## Done
 
+### 2026-05-24 UpgradeButtons state ordering fix
+
+- Outcome: 修复 `CoinFlipHUD.Content.RightPanel.UpgradeButtons` 升级后偶尔回退旧等级的问题；`CoinFlipSystem` 服务端给每次 HUD 状态同步加递增 `stateVersion`，客户端 `SyncRunState()` 会跳过低于当前版本的旧 payload，避免 flip 落地回调延迟应用旧 `runData` 覆盖已购买升级后的按钮等级。
+- Validation: `git diff --check -- src/ReplicatedStorage/Systems/CoinFlipSystem/init.lua src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua docs/TASK_STATE.md` 通过；源码扫描确认 `stateVersion` 只由服务端 `stampClientState()` 写入，客户端用 `latestRunStateVersion` 拒绝旧同步。按仓库规则未运行 `rojo build`，未执行 Studio Play。
+
+### 2026-05-24 CoinFlip guidance notification cleanup
+
+- Outcome: 移除 CoinFlip 主循环内的教学 / 建议类 toast：Tails 后不再弹 `Next: buy Value or flip again` 或重建 streak 提示，首次可升级时只保留 HUD 升级按钮 pulse，不再弹升级建议文字；服务端 onboarding 仍保留状态、头顶文案和漏斗埋点，但不再通过 `GuiSystem:SetNotification()` 发阶段 toast。`PROJECT_LOGIC.md` 已同步。
+- Validation: 教学 / 建议通知关键词扫描无命中；`SetNotification` 在 `CoinFlipSystem` 内无命中；`git diff --check -- src\ReplicatedStorage\Systems\CoinFlipSystem\ui.lua src\ReplicatedStorage\Systems\CoinFlipSystem\init.lua src\ReplicatedStorage\Systems\CoinFlipSystem\Modules\Onboarding.lua docs\PROJECT_LOGIC.md docs\TASK_STATE.md` 通过。未执行 Studio Play。
+
 ### 2026-05-24 Fake flip first-rebirth conflict fix
 
 - Outcome: 修复 fake actor 共享 `CoinFlipSystem` actor 结算时误走真实玩家 `getPlayerState()` 的冲突；`actor.isFake and nil or ...` 因 `nil` falsey 会继续取 `actor.player`，导致假玩家 flip 报 `attempt to index nil with 'UserId'`，现改为显式 Luau if expression，fake flip 不再访问真实 Player state，首次 rebirth 隐形加成仍只作用于真实玩家。
