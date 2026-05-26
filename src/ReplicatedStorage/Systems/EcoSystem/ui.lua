@@ -1,6 +1,5 @@
 local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
-local SoundService = game:GetService("SoundService")
 local GuiService = game:GetService("GuiService")
 local MarketplaceService = game:GetService("MarketplaceService")
 
@@ -31,19 +30,25 @@ local ShopTabs = ShopBody:WaitForChild("Tabs")
 local ShopBoostTab = ShopTabs:FindFirstChild("BoostTab") or ShopTabs:FindFirstChild("RobuxTab")
 local ShopItems = ShopBody:WaitForChild("Items")
 local ShopPreview = ShopBody:WaitForChild("Preview")
-local ShopPageControls = ShopBody:WaitForChild("PageControls")
 local ShopItemCards = {
 	ShopItems:WaitForChild("Item1"),
 	ShopItems:WaitForChild("Item2"),
 	ShopItems:WaitForChild("Item3"),
 	ShopItems:WaitForChild("Item4"),
+	ShopItems:WaitForChild("Item5"),
+	ShopItems:WaitForChild("Item6"),
+	ShopItems:WaitForChild("Item7"),
+	ShopItems:WaitForChild("Item8"),
+	ShopItems:WaitForChild("Item9"),
+	ShopItems:WaitForChild("Item10"),
+	ShopItems:WaitForChild("Item11"),
+	ShopItems:WaitForChild("Item12"),
 }
 
 local InventoryBody = InventoryFrame:WaitForChild("Body")
 local InventoryTabs = InventoryBody:WaitForChild("Tabs")
 local InventoryItems = InventoryBody:WaitForChild("Items")
 local InventoryLoadout = InventoryBody:WaitForChild("Loadout")
-local InventoryPageControls = InventoryBody:WaitForChild("PageControls")
 local InventoryItemCards = {
 	InventoryItems:WaitForChild("Item1"),
 	InventoryItems:WaitForChild("Item2"),
@@ -51,6 +56,12 @@ local InventoryItemCards = {
 	InventoryItems:WaitForChild("Item4"),
 	InventoryItems:WaitForChild("Item5"),
 	InventoryItems:WaitForChild("Item6"),
+	InventoryItems:WaitForChild("Item7"),
+	InventoryItems:WaitForChild("Item8"),
+	InventoryItems:WaitForChild("Item9"),
+	InventoryItems:WaitForChild("Item10"),
+	InventoryItems:WaitForChild("Item11"),
+	InventoryItems:WaitForChild("Item12"),
 }
 
 local EcoUi = {}
@@ -60,17 +71,6 @@ local currentLoadoutState = {}
 local currentGamePasses = {}
 local selectedShopCategory = "coin"
 local selectedInventoryCategory = "coin"
-local selectedShopPageByCategory = {
-	coin = 1,
-	desk = 1,
-	chair = 1,
-	boost = 1,
-}
-local selectedInventoryPageByCategory = {
-	coin = 1,
-	desk = 1,
-	chair = 1,
-}
 local selectedTabBackgroundColor = Color3.fromRGB(198, 158, 68)
 local idleTabBackgroundColor = PANEL_COLOR
 local selectedTabTextColor = Color3.fromRGB(36, 32, 26)
@@ -145,16 +145,6 @@ local function getOrderedBoostItems()
 	return items
 end
 
-local function getBoostPageCount(pageSize)
-	return math.max(1, math.ceil(#getOrderedBoostItems() / pageSize))
-end
-
-local function getPagedBoostItem(pageIndex, pageSize, slotIndex)
-	local items = getOrderedBoostItems()
-	local itemIndex = (pageIndex - 1) * pageSize + slotIndex
-	return items[itemIndex]
-end
-
 local function formatMultiplier(multiplier)
 	return `x{math.round((multiplier or 1) * 100) / 100}`
 end
@@ -185,13 +175,9 @@ local function playSfx(soundName)
 		return
 	end
 
-	local sfxGroup = SoundService:FindFirstChild("SFX")
-	local sound = sfxGroup and sfxGroup:FindFirstChild(soundName)
-	if not sound or not sound:IsA("Sound") or sound.SoundId == "" then
-		return
-	end
-
-	sound:Play()
+	SystemMgr.systems.MusicSystem:PlayLocalSfx({
+		musicName = soundName,
+	})
 end
 
 local function updateTabButton(button, isSelected)
@@ -201,53 +187,10 @@ local function updateTabButton(button, isSelected)
 	button.TextColor3 = isSelected and selectedTabTextColor or idleTabTextColor
 end
 
-local function getPageCount(category, pageSize)
-	if category == "boost" then
-		return getBoostPageCount(pageSize)
+local function resetScrollPosition(scrollingFrame)
+	if scrollingFrame:IsA("ScrollingFrame") then
+		scrollingFrame.CanvasPosition = Vector2.zero
 	end
-
-	local items = EcoPresets.GrowthShopItems[category] or {}
-	return math.max(1, math.ceil(#items / pageSize))
-end
-
-local function getOwnedPageCount(category, pageSize)
-	local ownedItems = getOwnedItems(category)
-	local ownedCount = 0
-	for _, item in ipairs(EcoPresets.GrowthShopItems[category] or {}) do
-		if ownedItems[item.id] then
-			ownedCount += 1
-		end
-	end
-
-	return math.max(1, math.ceil(ownedCount / pageSize))
-end
-
-local function clampPage(category, pageByCategory, pageSize)
-	local pageCount = getPageCount(category, pageSize)
-	pageByCategory[category] = math.clamp(pageByCategory[category] or 1, 1, pageCount)
-	return pageByCategory[category], pageCount
-end
-
-local function clampOwnedPage(category, pageByCategory, pageSize)
-	local pageCount = getOwnedPageCount(category, pageSize)
-	pageByCategory[category] = math.clamp(pageByCategory[category] or 1, 1, pageCount)
-	return pageByCategory[category], pageCount
-end
-
-local function getPagedItem(category, pageIndex, pageSize, slotIndex)
-	if category == "boost" then
-		return getPagedBoostItem(pageIndex, pageSize, slotIndex)
-	end
-
-	local items = EcoPresets.GrowthShopItems[category] or {}
-	local itemIndex = (pageIndex - 1) * pageSize + slotIndex
-	return items[itemIndex]
-end
-
-local function updatePageControls(pageControls, pageIndex, pageCount)
-	pageControls.PageLabel.Text = `{pageIndex}/{pageCount}`
-	setButtonText(pageControls.PrevButton, "<", pageIndex > 1)
-	setButtonText(pageControls.NextButton, ">", pageIndex < pageCount)
 end
 
 local function setTopbarIconSelected(icon, isSelected)
@@ -305,12 +248,12 @@ local function updateShopPanel()
 
 	local ownedItems = getOwnedItems(selectedShopCategory)
 	local equippedItem = getEquippedItem(selectedShopCategory)
-	local pageIndex, pageCount = clampPage(selectedShopCategory, selectedShopPageByCategory, #ShopItemCards)
-	updatePageControls(ShopPageControls, pageIndex, pageCount)
+	local items = selectedShopCategory == "boost" and getOrderedBoostItems()
+		or (EcoPresets.GrowthShopItems[selectedShopCategory] or {})
 	table.clear(shopRenderedItems)
 
 	for index, card in ipairs(ShopItemCards) do
-		local item = getPagedItem(selectedShopCategory, pageIndex, #ShopItemCards, index)
+		local item = items[index]
 		shopRenderedItems[index] = item
 		card.Visible = item ~= nil
 		if item then
@@ -355,8 +298,6 @@ local function updateInventoryPanel()
 	local ownedItems = getOwnedItems(selectedInventoryCategory)
 	local equippedItem = getEquippedItem(selectedInventoryCategory)
 	local visibleIndex = 0
-	local pageIndex, pageCount = clampOwnedPage(selectedInventoryCategory, selectedInventoryPageByCategory, #InventoryItemCards)
-	updatePageControls(InventoryPageControls, pageIndex, pageCount)
 	table.clear(inventoryRenderedItems)
 
 	for _, card in ipairs(InventoryItemCards) do
@@ -364,7 +305,6 @@ local function updateInventoryPanel()
 	end
 
 	if selectedInventoryCategory == "other" then
-		updatePageControls(InventoryPageControls, 1, 1)
 		local card = InventoryItemCards[1]
 		card.Visible = true
 		setTextIfPresent(card, "Name", "Coming Soon")
@@ -377,11 +317,7 @@ local function updateInventoryPanel()
 	for _, item in ipairs(EcoPresets.GrowthShopItems[selectedInventoryCategory] or {}) do
 		if ownedItems[item.id] then
 			visibleIndex += 1
-			if visibleIndex <= (pageIndex - 1) * #InventoryItemCards then
-				continue
-			end
-
-			local cardIndex = visibleIndex - (pageIndex - 1) * #InventoryItemCards
+			local cardIndex = visibleIndex
 			local card = InventoryItemCards[cardIndex]
 			if not card then
 				break
@@ -442,13 +378,18 @@ local function bindTopbarIcons()
 		if selectedShopCategory == "boost" then
 			selectedShopCategory = "coin"
 		end
+		resetScrollPosition(ShopItems)
 		updatePanels()
 	end)
 	boostsTopbarIcon = createTopbarFrameIcon("Boosts", "R$", 21, ShopFrame, function()
 		selectedShopCategory = "boost"
+		resetScrollPosition(ShopItems)
 		updatePanels()
 	end)
-	inventoryTopbarIcon = createTopbarFrameIcon("Inventory", "B", 22, InventoryFrame, updatePanels)
+	inventoryTopbarIcon = createTopbarFrameIcon("Inventory", "B", 22, InventoryFrame, function()
+		resetScrollPosition(InventoryItems)
+		updatePanels()
+	end)
 end
 
 local function bindButtons()
@@ -456,10 +397,12 @@ local function bindButtons()
 		if selectedShopCategory == "boost" then
 			selectedShopCategory = "coin"
 		end
+		resetScrollPosition(ShopItems)
 		updatePanels()
 		uiController.OpenFrame("Shop")
 	end)
 	uiController.SetButtonHoverAndClick(CoinFlipMenu.InventoryButton, function()
+		resetScrollPosition(InventoryItems)
 		updatePanels()
 		uiController.OpenFrame("Inventory")
 	end)
@@ -473,30 +416,26 @@ local function bindButtons()
 
 	uiController.SetButtonHoverAndClick(ShopTabs.CoinTab, function()
 		selectedShopCategory = "coin"
+		resetScrollPosition(ShopItems)
 		updatePanels()
 	end)
 	uiController.SetButtonHoverAndClick(ShopTabs.DeskTab, function()
 		selectedShopCategory = "desk"
+		resetScrollPosition(ShopItems)
 		updatePanels()
 	end)
 	uiController.SetButtonHoverAndClick(ShopTabs.ChairTab, function()
 		selectedShopCategory = "chair"
+		resetScrollPosition(ShopItems)
 		updatePanels()
 	end)
 	if ShopBoostTab and ShopBoostTab:IsA("TextButton") then
 		uiController.SetButtonHoverAndClick(ShopBoostTab, function()
 			selectedShopCategory = "boost"
+			resetScrollPosition(ShopItems)
 			updatePanels()
 		end)
 	end
-	uiController.SetButtonHoverAndClick(ShopPageControls.PrevButton, function()
-		selectedShopPageByCategory[selectedShopCategory] = (selectedShopPageByCategory[selectedShopCategory] or 1) - 1
-		updateShopPanel()
-	end)
-	uiController.SetButtonHoverAndClick(ShopPageControls.NextButton, function()
-		selectedShopPageByCategory[selectedShopCategory] = (selectedShopPageByCategory[selectedShopCategory] or 1) + 1
-		updateShopPanel()
-	end)
 	for index, card in ipairs(ShopItemCards) do
 		local boundIndex = index
 		uiController.SetButtonHoverAndClick(card.BuyButton, function()
@@ -529,28 +468,22 @@ local function bindButtons()
 
 	uiController.SetButtonHoverAndClick(InventoryTabs.CoinTab, function()
 		selectedInventoryCategory = "coin"
+		resetScrollPosition(InventoryItems)
 		updateInventoryPanel()
 	end)
 	uiController.SetButtonHoverAndClick(InventoryTabs.DeskTab, function()
 		selectedInventoryCategory = "desk"
+		resetScrollPosition(InventoryItems)
 		updateInventoryPanel()
 	end)
 	uiController.SetButtonHoverAndClick(InventoryTabs.ChairTab, function()
 		selectedInventoryCategory = "chair"
+		resetScrollPosition(InventoryItems)
 		updateInventoryPanel()
 	end)
 	uiController.SetButtonHoverAndClick(InventoryTabs.OtherTab, function()
 		selectedInventoryCategory = "other"
-		updateInventoryPanel()
-	end)
-	uiController.SetButtonHoverAndClick(InventoryPageControls.PrevButton, function()
-		selectedInventoryPageByCategory[selectedInventoryCategory] =
-			(selectedInventoryPageByCategory[selectedInventoryCategory] or 1) - 1
-		updateInventoryPanel()
-	end)
-	uiController.SetButtonHoverAndClick(InventoryPageControls.NextButton, function()
-		selectedInventoryPageByCategory[selectedInventoryCategory] =
-			(selectedInventoryPageByCategory[selectedInventoryCategory] or 1) + 1
+		resetScrollPosition(InventoryItems)
 		updateInventoryPanel()
 	end)
 	for index, card in ipairs(InventoryItemCards) do

@@ -11,7 +11,6 @@ local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
-local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
@@ -1162,51 +1161,17 @@ function playHighlightFlash(target, options)
 	Debris:AddItem(highlight, duration + 0.12)
 end
 
-function getSfxSound(soundName)
-	if typeof(soundName) ~= "string" or soundName == "" then
-		return nil
-	end
-
-	local sfxGroup = SoundService:FindFirstChild("SFX")
-	local sound = sfxGroup and sfxGroup:FindFirstChild(soundName)
-	if not sound or not sound:IsA("Sound") or sound.SoundId == "" then
-		return nil
-	end
-
-	return sound
-end
-
 function playSfx(soundName)
-	local sound = getSfxSound(soundName)
-	if not sound then
-		return nil
-	end
-
-	local clone = sound:Clone()
-	clone.Looped = false
-	clone.Parent = sound.Parent
-	clone:Play()
-	Debris:AddItem(clone, math.max(clone.TimeLength, 3) + 0.2)
-	return clone
+	return GetSystemMgr().systems.MusicSystem:PlayLocalSfx({
+		musicName = soundName,
+	})
 end
 
 function playTimedSfx(soundName, duration)
-	local sound = getSfxSound(soundName)
-	if not sound then
-		return
-	end
-
-	local clone = sound:Clone()
-	clone.Looped = true
-	clone.Parent = sound.Parent
-	clone:Play()
-	Debris:AddItem(clone, duration + 0.3)
-
-	task.delay(duration, function()
-		if clone.Parent then
-			clone:Stop()
-		end
-	end)
+	return GetSystemMgr().systems.MusicSystem:PlayTimedLocalSfx({
+		musicName = soundName,
+		duration = duration,
+	})
 end
 
 function playStreakMilestoneVfx(seatId, vfxName, lifeTime)

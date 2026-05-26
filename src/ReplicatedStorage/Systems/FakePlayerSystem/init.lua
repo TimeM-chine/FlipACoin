@@ -61,6 +61,8 @@ function FakePlayerSystem:Init()
 	self._nextFakeIndex = 0
 	self._desiredFakeCount = 0
 	self._nextDesiredRefreshAt = 0
+	self._directorRunning = false
+	self._pendingFakeCreates = 0
 	self._directorScheduleId = ScheduleModule.AddSchedule(Presets.DirectorInterval, function()
 		self:RunDirector(SENDER)
 	end)
@@ -118,35 +120,52 @@ function FakePlayerSystem:RunDirector(sender)
 	if sender ~= SENDER then
 		return
 	end
-
-	self.fakeActors = self.fakeActors or {}
-	local realPlayerCount = #Players:GetPlayers()
-	local now = os.clock()
-	local desiredCount = 0
-	if realPlayerCount > 0 and realPlayerCount <= Presets.LowPopulationMaxRealPlayers then
-		if now >= (self._nextDesiredRefreshAt or 0) then
-			self._desiredFakeCount = math.random(Presets.MinFakePlayers, Presets.MaxFakePlayers)
-			self._nextDesiredRefreshAt = now
-				+ math.random(Presets.DesiredCountRefreshMin, Presets.DesiredCountRefreshMax)
-		end
-		desiredCount = self._desiredFakeCount or Presets.MinFakePlayers
+	if self._directorRunning then
+		return
 	end
 
-	while self:GetActiveFakeCount() > desiredCount do
-		if not self:ReleaseOneFakeActor(SENDER, { reason = "populationChanged" }) then
-			break
+	self._directorRunning = true
+	local success, result = pcall(function()
+		self.fakeActors = self.fakeActors or {}
+		local realPlayerCount = #Players:GetPlayers()
+		local now = os.clock()
+		local desiredCount = 0
+		if realPlayerCount > 0 and realPlayerCount <= Presets.LowPopulationMaxRealPlayers then
+			if now >= (self._nextDesiredRefreshAt or 0) then
+				self._desiredFakeCount = math.random(Presets.MinFakePlayers, Presets.MaxFakePlayers)
+				self._nextDesiredRefreshAt = now
+					+ math.random(Presets.DesiredCountRefreshMin, Presets.DesiredCountRefreshMax)
+			end
+			desiredCount = self._desiredFakeCount or Presets.MinFakePlayers
 		end
-	end
-	while self:GetActiveFakeCount() < desiredCount do
-		if not self:CreateFakeActor() then
-			break
-		end
-	end
 
-	for _, fakeActor in pairs(self.fakeActors) do
-		if fakeActor.isActive then
-			self:StepFakeActor(fakeActor, now)
+		local didMutateSeats = false
+		while self:GetActiveFakeCount() > desiredCount do
+			if not self:ReleaseOneFakeActor(SENDER, { reason = "populationChanged", suppressBroadcast = true }) then
+				break
+			end
+			didMutateSeats = true
 		end
+		while self:GetActiveFakeCount() + (self._pendingFakeCreates or 0) < desiredCount do
+			if not self:CreateFakeActor({ suppressBroadcast = true }) then
+				break
+			end
+			didMutateSeats = true
+		end
+
+		if didMutateSeats then
+			GetSystemMgr().systems.TableSeatSystem:RefreshAudienceState(SENDER)
+		end
+
+		for _, fakeActor in pairs(self.fakeActors) do
+			if fakeActor.isActive then
+				self:StepFakeActor(fakeActor, now)
+			end
+		end
+	end)
+	self._directorRunning = false
+	if not success then
+		error(result)
 	end
 end
 
@@ -169,77 +188,89 @@ function FakePlayerSystem:ReleaseOneFakeActor(sender, args)
 	end
 
 	local fakeActor = candidates[math.random(1, #candidates)]
-	self:RemoveFakeActor(fakeActor, args and args.reason)
+	self:RemoveFakeActor(fakeActor, args)
 	return true
 end
 
-function FakePlayerSystem:CreateFakeActor()
+function FakePlayerSystem:CreateFakeActor(args)
 	local rigTemplate = Replicated.Systems.PlayerSystem.Assets:FindFirstChild("Rig")
 	if not rigTemplate or not rigTemplate:IsA("Model") then
 		warn("[FakePlayerSystem] Missing PlayerSystem.Assets.Rig")
 		return nil
 	end
 
-	self._nextFakeIndex += 1
-	local fakeId = `FakePlayer{self._nextFakeIndex}`
-	local userId = Presets.FakeUserIdBase - self._nextFakeIndex
-	local model = rigTemplate:Clone()
-	local displayName = getRandomFakeName()
-	local sourceUserId = getRandomFakeUserId()
-	local equippedCoin = getRandomShopItemId("coin")
-	local equippedDeskSetup = getRandomShopItemId("desk")
-	local equippedChair = getRandomShopItemId("chair")
-	local runData = table.clone(CoinFlipPresets.RunDataDefaults)
-	runData.biasLevel = math.random(Presets.FakeBiasLevelMin, Presets.FakeBiasLevelMax)
-	local now = os.clock()
-	local fakeActor = {
-		isFake = true,
-		isActive = true,
-		fakeId = fakeId,
-		userId = userId,
-		UserId = userId,
-		displayName = displayName,
-		DisplayName = displayName,
-		sourceUserId = sourceUserId,
-		model = model,
-		equippedCoin = equippedCoin,
-		equippedDeskSetup = equippedDeskSetup,
-		equippedChair = equippedChair,
-		runData = runData,
-		cash = math.random(Presets.StartingCashMin, Presets.StartingCashMax),
-		nextActionAt = now + randomFloat(Presets.FirstActionMinDelay, Presets.FirstActionMaxDelay),
-		nextFlipAt = now + randomFloat(Presets.FirstActionMinDelay, Presets.FirstActionMaxDelay),
-	}
+	self._pendingFakeCreates = (self._pendingFakeCreates or 0) + 1
+	local success, result = pcall(function()
+		self._nextFakeIndex += 1
+		local fakeId = `FakePlayer{self._nextFakeIndex}`
+		local userId = Presets.FakeUserIdBase - self._nextFakeIndex
+		local model = rigTemplate:Clone()
+		local displayName = getRandomFakeName()
+		local sourceUserId = getRandomFakeUserId()
+		local equippedCoin = getRandomShopItemId("coin")
+		local equippedDeskSetup = getRandomShopItemId("desk")
+		local equippedChair = getRandomShopItemId("chair")
+		local runData = table.clone(CoinFlipPresets.RunDataDefaults)
+		runData.biasLevel = math.random(Presets.FakeBiasLevelMin, Presets.FakeBiasLevelMax)
+		local now = os.clock()
+		local fakeActor = {
+			isFake = true,
+			isActive = false,
+			fakeId = fakeId,
+			userId = userId,
+			UserId = userId,
+			displayName = displayName,
+			DisplayName = displayName,
+			sourceUserId = sourceUserId,
+			model = model,
+			equippedCoin = equippedCoin,
+			equippedDeskSetup = equippedDeskSetup,
+			equippedChair = equippedChair,
+			runData = runData,
+			cash = math.random(Presets.StartingCashMin, Presets.StartingCashMax),
+			nextActionAt = now + randomFloat(Presets.FirstActionMinDelay, Presets.FirstActionMaxDelay),
+			nextFlipAt = now + randomFloat(Presets.FirstActionMinDelay, Presets.FirstActionMaxDelay),
+		}
 
-	model.Name = fakeId
-	model:SetAttribute("IsFakePlayer", true)
-	model:SetAttribute("FakeId", fakeId)
-	model:SetAttribute("DisplayName", displayName)
-	model.Parent = getRuntimeFolder()
-	applyFakeAppearance(fakeActor)
-	prepareFakeRig(fakeActor)
-	attachHeadGui(fakeActor)
+		model.Name = fakeId
+		model:SetAttribute("IsFakePlayer", true)
+		model:SetAttribute("FakeId", fakeId)
+		model:SetAttribute("DisplayName", displayName)
+		model:PivotTo(CFrame.new(0, 10000, 0))
+		model.Parent = getRuntimeFolder()
+		applyFakeAppearance(fakeActor)
+		prepareFakeRig(fakeActor)
+		attachHeadGui(fakeActor)
 
-	self.fakeActors[fakeId] = fakeActor
-	local assignment = GetSystemMgr().systems.TableSeatSystem:AssignFakeActor(SENDER, fakeActor)
-	if not assignment then
-		self.fakeActors[fakeId] = nil
-		if model.Parent then
-			model:Destroy()
+		local assignment = GetSystemMgr().systems.TableSeatSystem:AssignFakeActor(SENDER, fakeActor, {
+			suppressBroadcast = args and args.suppressBroadcast == true,
+		})
+		if not assignment then
+			if model.Parent then
+				model:Destroy()
+			end
+			return nil
 		end
-		return nil
-	end
 
-	return fakeActor
+		self.fakeActors[fakeId] = fakeActor
+		return fakeActor
+	end)
+	self._pendingFakeCreates -= 1
+	if not success then
+		error(result)
+	end
+	return result
 end
 
-function FakePlayerSystem:RemoveFakeActor(fakeActor)
+function FakePlayerSystem:RemoveFakeActor(fakeActor, args)
 	if not fakeActor or not fakeActor.isActive then
 		return
 	end
 
 	fakeActor.isActive = false
-	GetSystemMgr().systems.TableSeatSystem:ClearFakeActor(SENDER, fakeActor)
+	GetSystemMgr().systems.TableSeatSystem:ClearFakeActor(SENDER, fakeActor, {
+		suppressBroadcast = args and args.suppressBroadcast == true,
+	})
 	if fakeActor.model and fakeActor.model.Parent then
 		fakeActor.model:Destroy()
 	end

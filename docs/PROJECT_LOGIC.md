@@ -1,6 +1,6 @@
 # PROJECT_LOGIC
 
-更新时间：2026-05-24
+更新时间：2026-05-27
 
 ## 1. 这份文档的定位
 
@@ -209,6 +209,8 @@ FlipACoin
 - `DecorationSystem`
 
 没有在这里注册的系统，即使目录还在，也默认不参与运行时主链路。
+
+当前主线不使用 Roblox Team 分队；Studio 中不保留 legacy `red / blue / white` Team 实例，避免默认玩家列表按队伍分组显示。
 
 ### 6.2 当前加载顺序
 
@@ -421,6 +423,7 @@ FlipACoin
 - 假玩家模型从 `ReplicatedStorage.Systems.PlayerSystem.Assets.Rig` 克隆，随机使用 `PlayerPresets.FakeUserIds` 的 avatar description 和 `PlayerPresets.FakeNames` 的显示名
 - 假玩家随机装备 Coin / Desk Setup / Chair，并在创建时随机获得 `0` 到 `5` 级表演用 `biasLevel`；模型放在 `Workspace.CoinFlipTable.Assets.FakePlayersRuntime`
 - 假玩家人数目标只在 `10` 到 `20` 分钟级别随机刷新，真实玩家需要座位时仍会立即让座；不会通过短 tick 频繁进出
+- 假玩家 director 防重入，并在 avatar / rig / head GUI 准备期间用 pending create 计入目标人数；准备期间 rig 会先 parent 到高空 runtime staging 位置再应用 avatar description，避免未 parent rig 丢外观且不触发 `FallenPartsDestroyHeight` 清理，同时不提前入座；开局补位批量抑制 fake 座位广播，全部处理完后只刷新一次座位状态，避免真实玩家随 `1`、`2`、`3` 个 fake 逐个出现而连续重排
 - 假玩家接近真实玩家节奏持续 Flip，只有小概率在 Flip 后暂停几秒；每个 fake 的下一次动作时间独立随机，因此通常错开，少量情况下会一起 Flip
 - 假玩家非 Flip 动作主要模拟真实玩家相机移动：左右短摆表示“摇头”，上下短摆表示“点头”；不再持续盯着真实玩家
 - 假玩家 Flip 调 `CoinFlipSystem:RequestFakeFlip()`，和真实玩家共享 actor 级结算逻辑，但只更新 fake actor 内存状态
@@ -580,7 +583,7 @@ FlipACoin
 - 其他玩家 flip 时只播放桌面表现，不接管相机；观察者看到的 Heads / Tails 落地 pulse 使用更醒目的独立参数，Heads 更大更亮，Tails 更短促偏橙红
 - 观察者看到他人 Heads streak 达到阈值时，会在落地 pulse 外追加第二层 streak ring，并按 streak 增大半径；高 streak 或 milestone 会给对应硬币 / 座位创建短生命周期 `Highlight`
 - `PlayInsideEffects()` 使用 `SettingSystem:GetParticleRateFactor()` 决定粒子倍率
-- `PlayStreakMilestone()` 按 `AnnouncementSystem/Presets.lua` 的 fixed streak 配置，在硬币本地落地回调后播放 `SoundService.SFX` 音效、`EffectSystem.Assets` VFX，并可选触发本地 camera shake；如果 milestone VFX 资产缺失或类型无效，会 fallback 到程序化 streak pulse + `Highlight`
+- `PlayStreakMilestone()` 按 `AnnouncementSystem/Presets.lua` 的 fixed streak 配置，在硬币本地落地回调后通过 `MusicSystem` 播放 SFX、播放 `EffectSystem.Assets` VFX，并可选触发本地 camera shake；如果 milestone VFX 资产缺失或类型无效，会 fallback 到程序化 streak pulse + `Highlight`
 
 ### 7.4d `SettingSystem`
 
@@ -653,6 +656,7 @@ FlipACoin
 当前职责：
 
 - 播放 2D / 3D 音效
+- 提供本地 SFX helper，Flip / Shop / Inventory / Rebirth / notification 等活跃 UI 音效统一经这里读取当前 `SoundService.SFX.Volume`
 - 维护 BGM 淡入淡出
 - 提供 `SetBgmVolume` / `SetSfxVolume`
 
@@ -864,7 +868,7 @@ FlipACoin
 - `RebirthSystem/ui.lua` 绑定 TopbarPlus `Rebirth` 图标、兼容旧 `Buttons.CoinFlipMenu.RebirthButton`，并管理 `Frames.Rebirth`。
 - `EffectSystem` 负责桌面 coin flip 表现，`CoinFlipSystem/ui.lua` 只调用它并等待落地回调。
 - 当前 in-play minimal HUD 是 Studio-authored 资源：TopbarPlus 是顶部入口，`CoinFlipMenu` 只保留兼容且玩法态隐藏，`Elements.cash / candy` 保留为 hidden legacy 节点但不再作为右上钱包显示，`CoinFlipHUD` 是全屏透明承载层，左下显示现金 / 连击，右下显示概率 / 速度 / Value / Bias，底部中心显示 `FLIP`、`Auto:Off / Auto:On` 和短结果提示；`Main.Elements` 只保留 `CoinFlipHUD`、`cash`、`candy`、`ripple`，旧 `Buffs / Rewards / Quests / auto / blockInfo` 和旧 CoinFlip onboarding / spectator / overview 节点已从 Studio 资源中删除。
-- `Frames.Shop / Inventory / Rebirth` 的主结构、布局、圆角、描边和文字约束均在 Studio 中维护；运行时代码只绑定按钮、更新文本 / selected 状态、打开关闭和播放音效。触屏移动端打开面板时通过 `uiController` 套安全区尺寸 / 位置的重排逻辑已临时注释，等待移动端布局重做。
+- `Frames.Shop / Inventory / Rebirth` 的主结构、布局、圆角、描边和文字约束均在 Studio 中维护；Shop / Inventory 的 item 区域是 Studio-authored `ScrollingFrame` 卡片池，不再使用分页控件；运行时代码只绑定按钮、更新文本 / selected 状态、打开关闭、重置滚动位置和播放音效。触屏移动端打开面板时通过 `uiController` 套安全区尺寸 / 位置的重排逻辑已临时注释，等待移动端布局重做。
 - `Frames.Shop / Inventory / Rebirth` 打开时会走 `uiController.OpenFrame()` 的轻遮罩，并由 `CoinFlipSystem/ui.lua` 隐藏 gameplay HUD，关闭后再恢复。
 - 当前游戏具备基础触屏支持；`uiClient.client.lua` 会在触屏设备上禁用 Roblox 默认 `TouchGui`，因为当前玩法不需要移动 / 跳跃；触屏端仍隐藏 keyboard / gamepad 输入提示并把 ready 文案改为 `Tap FLIP`。`CoinFlipSystem/ui.lua` 的 mobile HUD profile 和 portrait 下折叠 Chance / Speed 的逻辑已临时注释，移动端先沿用桌面 / narrow HUD 布局。`uiController.OpenFrame()` 的移动端 growth panel 重排与 viewport 刷新绑定也已临时注释；TopbarPlus 入口点击面积、growth panel 内容挤压和整体观感仍需 Studio / 真机 QA。
 - 旧 `Stats` / `Actions` 容器如果仍存在，只是隐藏兼容遗留，不是当前主 HUD 数据源。

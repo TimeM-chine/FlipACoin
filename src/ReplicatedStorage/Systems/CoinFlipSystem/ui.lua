@@ -2,7 +2,6 @@ local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
@@ -219,13 +218,9 @@ local function playSfx(soundName)
 		return
 	end
 
-	local sfxGroup = SoundService:FindFirstChild("SFX")
-	local sound = sfxGroup and sfxGroup:FindFirstChild(soundName)
-	if not sound or not sound:IsA("Sound") or sound.SoundId == "" then
-		return
-	end
-
-	sound:Play()
+	SystemMgr.systems.MusicSystem:PlayLocalSfx({
+		musicName = soundName,
+	})
 end
 
 local function getReadyPrompt()

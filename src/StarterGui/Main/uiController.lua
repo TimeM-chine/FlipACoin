@@ -10,7 +10,6 @@ local Debris = game:GetService("Debris")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local SoundService = game:GetService("SoundService")
 local StarterGui = game:GetService("StarterGui")
 local TweenService = game:GetService("TweenService")
 local CAS = game:GetService("ContextActionService")
@@ -36,6 +35,7 @@ local coolDown = false
 local coolDownTime = 0.2
 local guideButton = nil
 local guideFrame = nil
+local SystemMgr
 local responsiveGrowthFrameLayouts = {}
 local responsiveGrowthFrameBound = false
 local responsiveViewportConnection
@@ -65,18 +65,22 @@ local controller = {}
 
 local NotificationStorage = {}
 
+local function getSystemMgr()
+	if not SystemMgr then
+		SystemMgr = require(Replicated.Systems.SystemMgr)
+	end
+	return SystemMgr
+end
+
 local function playUiSound(groupName, soundName)
-	local soundGroup = SoundService:FindFirstChild(groupName)
-	if not soundGroup then
+	if typeof(soundName) ~= "string" or soundName == "" then
 		return
 	end
 
-	local sound = soundGroup:FindFirstChild(soundName)
-	if not sound or not sound:IsA("Sound") or sound.SoundId == "" then
-		return
-	end
-
-	sound:Play()
+	getSystemMgr().systems.MusicSystem:PlayLocalSfx({
+		musicGroup = groupName,
+		musicName = soundName,
+	})
 end
 
 local function refreshNotificationLifetime(entry, duration)
@@ -230,10 +234,7 @@ function controller.SetNotification(args: { text: string, soundName: string, las
 		end)
 		refreshNotificationLifetime(newEntry, duration)
 
-		local notificationSound = soundName and SoundService:FindFirstChild(soundName, true)
-		if notificationSound and notificationSound:IsA("Sound") and notificationSound.SoundId ~= "" then
-			notificationSound:Play()
-		end
+		playUiSound("SFX", soundName)
 	end)
 end
 

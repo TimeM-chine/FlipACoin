@@ -30,7 +30,10 @@ local LocalPlayer, sfxVolume
 
 local MusicSystem: Types.System = {
 	Remotes = {},
-	whiteList = {},
+	whiteList = {
+		"PlayLocalSfx",
+		"PlayTimedLocalSfx",
+	},
 	IsLoaded = false,
 }
 MusicSystem.__index = MusicSystem
@@ -113,6 +116,68 @@ end
 
 function MusicSystem:Init()
 	GetSystemMgr()
+end
+
+function MusicSystem:PlayLocalSfx(args: { musicName: string, musicGroup: string?, looped: boolean?, playbackSpeed: number? })
+	if IsServer then
+		return nil
+	end
+	if typeof(args) ~= "table" then
+		return nil
+	end
+
+	local sound = getSoundTemplate(args.musicGroup or "SFX", args.musicName)
+	if not sound then
+		return nil
+	end
+
+	local clone = sound:Clone()
+	clone.Looped = args.looped == true
+	clone.PlaybackSpeed = args.playbackSpeed or sound.PlaybackSpeed
+	clone.Volume = sound.Volume * getSoundGroupVolume(args.musicGroup or "SFX")
+	clone.SoundGroup = nil
+	clone.Parent = sound.Parent
+	clone:Play()
+	if not clone.Looped then
+		Debris:AddItem(clone, math.max(clone.TimeLength, 3) + 0.2)
+	end
+	return clone
+end
+
+function MusicSystem:PlayTimedLocalSfx(args: { musicName: string, musicGroup: string?, duration: number, playbackSpeed: number? })
+	if IsServer then
+		return nil
+	end
+	if typeof(args) ~= "table" then
+		return nil
+	end
+
+	local duration = args.duration or 0
+	if duration <= 0 then
+		return self:PlayLocalSfx({
+			musicName = args.musicName,
+			musicGroup = args.musicGroup,
+			playbackSpeed = args.playbackSpeed,
+		})
+	end
+
+	local clone = self:PlayLocalSfx({
+		musicName = args.musicName,
+		musicGroup = args.musicGroup,
+		looped = true,
+		playbackSpeed = args.playbackSpeed,
+	})
+	if not clone then
+		return nil
+	end
+
+	task.delay(duration, function()
+		if clone.Parent then
+			clone:Stop()
+		end
+	end)
+	Debris:AddItem(clone, duration + 0.3)
+	return clone
 end
 
 function MusicSystem:PlayMusic(
@@ -221,6 +286,29 @@ end
 
 function MusicSystem:SetWeatherSfxVolume(volume)
 	SoundService.weather.Volume = volume
+end
+
+function getSoundTemplate(musicGroup, musicName)
+	if typeof(musicName) ~= "string" or musicName == "" then
+		return nil
+	end
+
+	local soundGroup = SoundService:FindFirstChild(musicGroup)
+	local sound = soundGroup and soundGroup:FindFirstChild(musicName)
+	if not sound or not sound:IsA("Sound") or sound.SoundId == "" then
+		return nil
+	end
+
+	return sound
+end
+
+function getSoundGroupVolume(musicGroup)
+	local soundGroup = SoundService:FindFirstChild(musicGroup)
+	if soundGroup and soundGroup:IsA("SoundGroup") then
+		return soundGroup.Volume
+	end
+
+	return 1
 end
 
 return MusicSystem

@@ -1,6 +1,6 @@
 # TASK_STATE
 
-最后更新：2026-05-24
+最后更新：2026-05-27
 
 > 目的：记录当前正在做什么、下一步是什么、关键决策、待验证项与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`；不要把本文件变成长篇历史日志。
 
@@ -57,6 +57,21 @@
 - 可评估极简决策点：高 streak 后出现 `Cash Out` / `Double` / bonus choice，但不要破坏“一键 Flip”的主循环。
 
 ## Done
+
+### 2026-05-27 Fake player appearance staging regression
+
+- Outcome: 修复 fake 启动稳定性改动引入的外观回归。`CreateFakeActor()` 现在先把 rig pivot 到高空 staging 位置并 parent 到 runtime folder，再调用 `Humanoid:ApplyDescription()`、准备 rig 和头顶 GUI，最后才入座；避免未 parent rig 丢 avatar description，同时不再用低于 `FallenPartsDestroyHeight` 的 staging 位置导致 body parts 被引擎清理。
+- Validation: `git diff --check -- src/ReplicatedStorage/Systems/FakePlayerSystem/init.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过；Studio Play 单客户端等待 `8` 秒后采样 `FakePlayersRuntime`，`FakePlayer1` 保留 `17` 个 body part，并有 `1` 个 Shirt、`1` 个 Pants、`1` 个 Accessory、`HairAccessory = 62724852`，不再是只剩 `Humanoid / BodyColors / Animate` 的默认空外观；控制台未见新 fake 相关错误，仅有既有 StyleRule `CornerRadius` 转换警告。
+
+### 2026-05-27 Fake player startup stability fix
+
+- Outcome: `FakePlayerSystem` 的 director 增加防重入 guard 和 pending create 计数，fake 模型先完成外观 / rig / head GUI 准备，再进入 runtime 并尝试入座；开局补位和 fake 释放会抑制单个 fake 的座位广播，批量处理完后只通过 `TableSeatSystem:RefreshAudienceState()` 刷新一次。`TableSeatSystem:AssignFakeActor()` / `ClearFakeActor()` 保持默认立即广播行为，但支持内部 `suppressBroadcast` 参数供 fake 批处理使用。`PROJECT_LOGIC.md` 已同步。
+- Validation: 源码扫描确认 `RunDirector()` 有 `_directorRunning` guard、fake 创建使用 `_pendingFakeCreates` 计数，批量路径向 fake assign / clear 传入 `suppressBroadcast` 并最终调用 `RefreshAudienceState()`；`git diff --check -- src/ReplicatedStorage/Systems/FakePlayerSystem/init.lua src/ReplicatedStorage/Systems/TableSeatSystem/init.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过。Studio Play 单客户端 8 秒采样确认 fake 稳定为 `FakePlayer1 / FakePlayer2`，占座稳定在 `Seat01:FakePlayer1 / Seat02:FakePlayer2 / Seat03:MagicalHailuo`，玩家 root 坐标保持 `9.80,-20.82,3.69` 不变；控制台未见新 fake / seat 错误，仅有既有 StyleRule `CornerRadius` 转换警告。
+
+### 2026-05-26 Team / SFX / scrolling shop cleanup
+
+- Outcome: Studio 里的 legacy `red / blue / white` Team 实例已移除，运行态玩家保持无队伍且默认玩家列表不再按队伍分组；`MusicSystem` 新增本地 SFX helper，Flip、Shop、Inventory、Rebirth 和 notification 活跃音效改为统一经 `MusicSystem` 播放并读取当前 `SoundService.SFX.Volume`；`Frames.Shop.Body.Items` 与 `Frames.Inventory.Body.Items` 已通过 MCP 改为 Studio-authored `ScrollingFrame`，各补齐 `Item1` 到 `Item12` 卡片池并隐藏分页控件，`EcoSystem/ui.lua` 改为按当前 tab 直接渲染完整列表并在切 tab / 打开入口时重置滚动位置。`PROJECT_LOGIC.md` 已同步。
+- Validation: MCP edit-time 确认 `Teams` 下无 Team 实例、Shop / Inventory `Items` 均为 `ScrollingFrame`、各 12 张卡片且 `PageControls.Visible = false`；源码扫描确认活跃 `EcoSystem/ui.lua` 无 `selectedShopPage / selectedInventoryPage / PageControls / updatePageControls` 分页残留；`git diff --check` 通过；Studio Play 单客户端 sanity 确认玩家 `Neutral = true` 且无 Team、PlayerGui Shop / Inventory 为 `ScrollingFrame`；临时把 `SoundService.SFX.Volume` 设为 `0` 后，通过 `MusicSystem` 播放 `coinSpin / coinLand` 创建的实例音量为 `0`。`luau` 命令不可用，`stylua --check` 因 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua 被拒绝运行；Play 控制台未见新脚本错误，仅有既有 StyleRule `CornerRadius` 转换警告。
 
 ### 2026-05-24 UpgradeButtons state ordering fix
 

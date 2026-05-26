@@ -1,6 +1,5 @@
 local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
-local SoundService = game:GetService("SoundService")
 local GuiService = game:GetService("GuiService")
 
 local SystemMgr = require(Replicated.Systems.SystemMgr)
@@ -52,13 +51,9 @@ local function playSfx(soundName)
 		return
 	end
 
-	local sfxGroup = SoundService:FindFirstChild("SFX")
-	local sound = sfxGroup and sfxGroup:FindFirstChild(soundName)
-	if not sound or not sound:IsA("Sound") or sound.SoundId == "" then
-		return
-	end
-
-	sound:Play()
+	SystemMgr.systems.MusicSystem:PlayLocalSfx({
+		musicName = soundName,
+	})
 end
 
 local function updateRebirthPanel()

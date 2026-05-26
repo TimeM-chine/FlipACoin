@@ -1101,7 +1101,7 @@ function TableSeatSystem:RefreshAudienceState(sender)
 	broadcastSeatStates(self)
 end
 
-function TableSeatSystem:AssignFakeActor(sender, fakeActor)
+function TableSeatSystem:AssignFakeActor(sender, fakeActor, args)
 	if not IsServer then
 		return nil
 	end
@@ -1168,12 +1168,14 @@ function TableSeatSystem:AssignFakeActor(sender, fakeActor)
 	refreshPromptAttributes(self, seatKey)
 	GetSystemMgr().systems.DecorationSystem:RefreshFakeActorDecoration(SENDER, fakeActor)
 	GetSystemMgr().systems.FakePlayerSystem:UpdateFakeActorHead(SENDER, fakeActor)
-	broadcastSeatStates(self)
+	if not (args and args.suppressBroadcast == true) then
+		broadcastSeatStates(self)
+	end
 
 	return self:GetFakeActorSeatAssignment(fakeActor)
 end
 
-function TableSeatSystem:ClearFakeActor(sender, fakeActor)
+function TableSeatSystem:ClearFakeActor(sender, fakeActor, args)
 	if not IsServer then
 		return
 	end
@@ -1211,7 +1213,9 @@ function TableSeatSystem:ClearFakeActor(sender, fakeActor)
 
 	refreshPromptAttributes(self, seatKey)
 	self:_TryAssignWaitingPlayers()
-	broadcastSeatStates(self)
+	if not (args and args.suppressBroadcast == true) then
+		broadcastSeatStates(self)
+	end
 end
 
 function TableSeatSystem:ReleaseOneFakeSeat(sender, args)
