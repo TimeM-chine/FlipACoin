@@ -13,6 +13,7 @@ local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
 
 ---- requires ----
 local Presets = require(script.Presets)
@@ -30,10 +31,14 @@ local LocalPlayer
 local FirstPersonCamera
 local activeCoinFlipVisuals = {}
 local VisualConfig = Presets.CoinFlipVisuals
+local SceneInteractionConfig = Presets.SceneInteractions
 local CoinAssetFolderName = "Coins"
 local missingCoinAssetWarnings = {}
 local cameraShakeToken = 0
 local CameraShakeRenderStepName = "StreakMilestoneCameraShake"
+local sceneInteractionConnection
+local activeDecorationShakes = {}
+local lastTableTapTime = 0
 
 -- 硬币相对世界的“立起”基准；空中翻转绕世界水平轴 `outward×tableNormal`（见 getFlipPositions），再乘基准
 local CoinVisualBaseRot = CFrame.Angles(0, 0, math.rad(90))
@@ -77,6 +82,7 @@ function EffectSystem:Init()
 	if not IsServer then
 		FirstPersonCamera =
 			require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Modules"):WaitForChild("FirstPersonCamera"))
+		setupSceneInteractions()
 	end
 end
 
@@ -1172,6 +1178,262 @@ function playTimedSfx(soundName, duration)
 		musicName = soundName,
 		duration = duration,
 	})
+end
+
+function setupSceneInteractions()
+	if sceneInteractionConnection then
+		sceneInteractionConnection:Disconnect()
+		sceneInteractionConnection = nil
+	end
+
+	sceneInteractionConnection = UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+		if gameProcessedEvent then
+			return
+		end
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+
+		local result = raycastSceneInteraction(input)
+		if not result then
+			return
+		end
+
+		local decorationModel = getClickedDecorationModel(result.Instance)
+		if decorationModel then
+			playDecorationInteraction(decorationModel)
+			return
+		end
+
+		if isTableTopHit(result.Instance) then
+			playTableTapInteraction(result.Position, result.Normal)
+		end
+	end)
+end
+
+function raycastSceneInteraction(input)
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		return nil
+	end
+
+	local pointerPosition = input.UserInputType == Enum.UserInputType.Touch and input.Position
+		or UserInputService:GetMouseLocation()
+	local ray = camera:ViewportPointToRay(pointerPosition.X, pointerPosition.Y)
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	local filterDescendants = {}
+	if LocalPlayer.Character then
+		table.insert(filterDescendants, LocalPlayer.Character)
+	end
+	local tableModel = getTableModel()
+	local coinVisuals = tableModel and tableModel:FindFirstChild("CoinVisuals")
+	if coinVisuals then
+		table.insert(filterDescendants, coinVisuals)
+	end
+	rayParams.FilterDescendantsInstances = filterDescendants
+
+	return Workspace:Raycast(ray.Origin, ray.Direction * SceneInteractionConfig.RaycastDistance, rayParams)
+end
+
+function getClickedDecorationModel(target)
+	local runtimeFolder = getDecorationsRuntimeFolder()
+	if not runtimeFolder or not target:IsDescendantOf(runtimeFolder) then
+		return nil
+	end
+
+	local current = target
+	while current and current ~= runtimeFolder do
+		if current:IsA("Model") and string.match(current.Name, "Decoration$") then
+			return current
+		end
+		current = current.Parent
+	end
+
+	return nil
+end
+
+function getDecorationsRuntimeFolder()
+	local tableModel = getTableModel()
+	local assets = tableModel and tableModel:FindFirstChild("Assets")
+	return assets and assets:FindFirstChild("DecorationsRuntime") or nil
+end
+
+function isTableTopHit(target)
+	local tableModel = getTableModel()
+	local tableTop = tableModel and tableModel:FindFirstChild("TableTop")
+	return tableTop and (target == tableTop or target:IsDescendantOf(tableTop)) or false
+end
+
+function playDecorationInteraction(decorationModel)
+	playDecorationShake(decorationModel)
+	playHighlightFlash(decorationModel, {
+		duration = SceneInteractionConfig.DecorationHighlightDuration,
+		fillColor = SceneInteractionConfig.DecorationHighlightFillColor,
+		outlineColor = SceneInteractionConfig.DecorationHighlightOutlineColor,
+		fillTransparency = SceneInteractionConfig.DecorationHighlightFillTransparency,
+		outlineTransparency = SceneInteractionConfig.DecorationHighlightOutlineTransparency,
+	})
+end
+
+function playDecorationShake(decorationModel)
+	if activeDecorationShakes[decorationModel] then
+		return
+	end
+	if not decorationModel.Parent then
+		return
+	end
+
+	activeDecorationShakes[decorationModel] = true
+	local originalPivot = decorationModel:GetPivot()
+	local tableNormal = getSceneTableNormal()
+	local anchorPoint, tiltAxisX, tiltAxisZ = getDecorationBottomShakeFrame(decorationModel, originalPivot, tableNormal)
+	local startTime = os.clock()
+	local seed = math.random() * math.pi * 2
+	local connection
+	connection = RunService.RenderStepped:Connect(function()
+		if not decorationModel.Parent then
+			activeDecorationShakes[decorationModel] = nil
+			connection:Disconnect()
+			return
+		end
+
+		local alpha = math.clamp((os.clock() - startTime) / SceneInteractionConfig.DecorationShakeDuration, 0, 1)
+		if alpha >= 1 then
+			decorationModel:PivotTo(originalPivot)
+			activeDecorationShakes[decorationModel] = nil
+			connection:Disconnect()
+			return
+		end
+
+		local fade = 1 - alpha
+		local wave = math.sin(alpha * math.pi * SceneInteractionConfig.DecorationShakeOscillations + seed)
+		local counterWave = math.cos(alpha * math.pi * (SceneInteractionConfig.DecorationShakeOscillations + 1) + seed)
+		local xRotation = wave * SceneInteractionConfig.DecorationShakeAngle * fade
+		local zRotation = counterWave * SceneInteractionConfig.DecorationShakeAngle * 0.72 * fade
+		local tiltRotation = CFrame.fromAxisAngle(tiltAxisX, xRotation) * CFrame.fromAxisAngle(tiltAxisZ, zRotation)
+		decorationModel:PivotTo(CFrame.new(anchorPoint) * tiltRotation * CFrame.new(-anchorPoint) * originalPivot)
+	end)
+end
+
+function getSceneTableNormal()
+	local tableModel = getTableModel()
+	local tableTop = tableModel and tableModel:FindFirstChild("TableTop")
+	if tableTop and tableTop:IsA("BasePart") then
+		local normal = getTableSurfaceData(tableTop)
+		return normal.Unit
+	end
+
+	return Vector3.yAxis
+end
+
+function getDecorationBottomShakeFrame(decorationModel, modelCFrame, normal)
+	local n = normal.Unit
+	local xAxis = projectVectorToPlane(modelCFrame.RightVector, n)
+	if xAxis.Magnitude < 0.001 then
+		xAxis = projectVectorToPlane(modelCFrame.LookVector, n)
+	end
+	if xAxis.Magnitude < 0.001 then
+		xAxis = n:Cross(Vector3.xAxis)
+	end
+	if xAxis.Magnitude < 0.001 then
+		xAxis = n:Cross(Vector3.zAxis)
+	end
+	xAxis = xAxis.Unit
+	local zAxis = n:Cross(xAxis).Unit
+
+	local minX = math.huge
+	local maxX = -math.huge
+	local minZ = math.huge
+	local maxZ = -math.huge
+	local minNormal = math.huge
+
+	for _, part in ipairs(getCoinObjectParts(decorationModel)) do
+		local halfSize = part.Size * 0.5
+		for x = -1, 1, 2 do
+			for y = -1, 1, 2 do
+				for z = -1, 1, 2 do
+					local corner = part.CFrame:PointToWorldSpace(Vector3.new(halfSize.X * x, halfSize.Y * y, halfSize.Z * z))
+					local xProjection = corner:Dot(xAxis)
+					local zProjection = corner:Dot(zAxis)
+					minX = math.min(minX, xProjection)
+					maxX = math.max(maxX, xProjection)
+					minZ = math.min(minZ, zProjection)
+					maxZ = math.max(maxZ, zProjection)
+					minNormal = math.min(minNormal, corner:Dot(n))
+				end
+			end
+		end
+	end
+
+	if minNormal == math.huge then
+		return modelCFrame.Position, xAxis, zAxis
+	end
+
+	local anchorPoint = xAxis * ((minX + maxX) * 0.5) + zAxis * ((minZ + maxZ) * 0.5) + n * minNormal
+	return anchorPoint, xAxis, zAxis
+end
+
+function projectVectorToPlane(vector, normal)
+	return vector - normal * vector:Dot(normal)
+end
+
+function playTableTapInteraction(position, normal)
+	local now = os.clock()
+	if now - lastTableTapTime < SceneInteractionConfig.TableTapCooldown then
+		return
+	end
+	lastTableTapTime = now
+
+	playSfx(SceneInteractionConfig.TableTapSoundName)
+	playTableTapRipple(position, normal)
+end
+
+function playTableTapRipple(position, normal)
+	local ripple = Instance.new("Part")
+	ripple.Name = "TableTapRipple"
+	ripple.Shape = Enum.PartType.Cylinder
+	ripple.Anchored = true
+	ripple.CanCollide = false
+	ripple.CanTouch = false
+	ripple.CanQuery = false
+	ripple.CastShadow = false
+	ripple.Material = Enum.Material.Neon
+	ripple.Color = SceneInteractionConfig.TableTapRippleColor
+	ripple.Transparency = SceneInteractionConfig.TableTapRippleTransparency
+	ripple.Size = Vector3.new(
+		SceneInteractionConfig.TableTapRippleThickness,
+		SceneInteractionConfig.TableTapRippleStartSize,
+		SceneInteractionConfig.TableTapRippleStartSize
+	)
+	ripple.CFrame = getCylinderSurfaceCFrame(position + normal.Unit * 0.045, normal)
+	ripple.Parent = getEffectRuntimeParent()
+
+	local tween = TweenService:Create(
+		ripple,
+		TweenInfo.new(SceneInteractionConfig.TableTapRippleDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			Size = Vector3.new(
+				SceneInteractionConfig.TableTapRippleThickness,
+				SceneInteractionConfig.TableTapRippleEndSize,
+				SceneInteractionConfig.TableTapRippleEndSize
+			),
+			Transparency = 1,
+		}
+	)
+	tween:Play()
+	tween.Completed:Once(function()
+		ripple:Destroy()
+	end)
+	Debris:AddItem(ripple, SceneInteractionConfig.TableTapRippleDuration + 0.12)
+end
+
+function getCylinderSurfaceCFrame(position, normal)
+	local xVector = normal.Unit
+	local yReference = math.abs(xVector:Dot(Vector3.yAxis)) > 0.98 and Vector3.xAxis or Vector3.yAxis
+	local zVector = xVector:Cross(yReference).Unit
+	local yVector = zVector:Cross(xVector).Unit
+	return CFrame.fromMatrix(position, xVector, yVector, zVector)
 end
 
 function playStreakMilestoneVfx(seatId, vfxName, lifeTime)

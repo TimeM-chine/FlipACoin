@@ -61,4 +61,24 @@ EffectPresets.CoinFlipVisuals = table.freeze({
 	FlatThicknessLocalSign = -1,
 })
 
+EffectPresets.SceneInteractions = table.freeze({
+	RaycastDistance = 90,
+	DecorationShakeDuration = 0.42,
+	DecorationShakeOscillations = 4.5,
+	DecorationShakeAngle = math.rad(4.5),
+	DecorationHighlightDuration = 0.18,
+	DecorationHighlightFillColor = Color3.fromRGB(255, 230, 132),
+	DecorationHighlightOutlineColor = Color3.fromRGB(255, 255, 226),
+	DecorationHighlightFillTransparency = 0.82,
+	DecorationHighlightOutlineTransparency = 0.36,
+	TableTapSoundName = "tableKnock",
+	TableTapCooldown = 0.08,
+	TableTapRippleColor = Color3.fromRGB(255, 220, 138),
+	TableTapRippleStartSize = 0.28,
+	TableTapRippleEndSize = 1.75,
+	TableTapRippleThickness = 0.025,
+	TableTapRippleDuration = 0.22,
+	TableTapRippleTransparency = 0.28,
+})
+
 return EffectPresets

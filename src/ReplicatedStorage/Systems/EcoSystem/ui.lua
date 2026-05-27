@@ -6,6 +6,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local SystemMgr = require(Replicated.Systems.SystemMgr)
 local ClientData = require(Replicated.Systems.ClientData)
 local Keys = require(Replicated.configs.Keys)
+local Textures = require(Replicated.configs.Textures)
 local EcoPresets = require(script.Parent.Presets)
 local Util = require(Replicated.modules.Util)
 local Icon = require(Replicated.Packages.topbarplus)
@@ -170,6 +171,30 @@ local function setButtonText(button, text, isEnabled)
 	button.Active = isEnabled
 end
 
+local function setCardIcon(card, icon)
+	local holder = card:FindFirstChild("Icon") or card:FindFirstChild("Art")
+	if not holder then
+		return
+	end
+
+	local imageObject = holder:FindFirstChild("Image")
+	if holder:IsA("ImageLabel") or holder:IsA("ImageButton") then
+		imageObject = holder
+	end
+	if imageObject and (imageObject:IsA("ImageLabel") or imageObject:IsA("ImageButton")) then
+		imageObject.Image = icon
+		imageObject.Visible = icon ~= ""
+	end
+end
+
+local function getItemIcon(category, item)
+	if category == "boost" then
+		return Textures.GetFlipACoinItemIcon(item.itemType, item.key)
+	end
+
+	return Textures.GetFlipACoinItemIcon(category, item.id)
+end
+
 local function playSfx(soundName)
 	if typeof(soundName) ~= "string" or soundName == "" then
 		return
@@ -257,6 +282,7 @@ local function updateShopPanel()
 		shopRenderedItems[index] = item
 		card.Visible = item ~= nil
 		if item then
+			setCardIcon(card, getItemIcon(selectedShopCategory, item))
 			if selectedShopCategory == "boost" then
 				local isOwnedPass = item.itemType == "gamePass" and currentGamePasses[item.key] == true
 				setTextIfPresent(card, "Name", item.displayName)
@@ -307,6 +333,7 @@ local function updateInventoryPanel()
 	if selectedInventoryCategory == "other" then
 		local card = InventoryItemCards[1]
 		card.Visible = true
+		setCardIcon(card, Textures.Empty)
 		setTextIfPresent(card, "Name", "Coming Soon")
 		card.Bonus.Text = "Future item types"
 		setButtonText(card.EquipButton, "Locked", false)
@@ -324,6 +351,7 @@ local function updateInventoryPanel()
 			end
 			inventoryRenderedItems[cardIndex] = item
 			card.Visible = true
+			setCardIcon(card, getItemIcon(selectedInventoryCategory, item))
 			setTextIfPresent(card, "Name", item.displayName)
 			card.Bonus.Text = describeItemStats(item.stats)
 			if equippedItem == item.id then

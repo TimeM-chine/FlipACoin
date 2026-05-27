@@ -58,6 +58,26 @@
 
 ## Done
 
+### 2026-05-27 Roblox texture upload script
+
+- Outcome: 确认 Roblox Open Cloud Assets API 支持通过 API key 脚本化创建图片资产，但每个请求创建一个资产，批量上传需要本地脚本循环调用并轮询 operation。新增 `tools/upload_flipacoin_textures.mjs`：默认上传 `Image` 资产，扫描 `textures/`，把 `coin*.png` 映射到 Coin、`TableDecoration*.png` 映射到 Desk Setup、`1.png` 到 `11.png` 映射到 Chair。首轮把 `Decal` 资产上传到了个人账号，Group 游戏无法加载；第二轮上传到 Group 但仍为 `Decal`，`ImageLabel.IsLoaded` 仍为 false；最终用 `assetType = Image` 上传到游戏所属 Group `962619180`，写出 `output/roblox-texture-upload-image-result.json`，并回填 `src/ReplicatedStorage/configs/Textures.lua` 的 `Textures.FlipACoinItems`。Product / GamePass 图标未在本批 `textures/` 中提供，仍保留原临时占位。
+- Validation: `node --check tools/upload_flipacoin_textures.mjs` 通过；`node tools/upload_flipacoin_textures.mjs --dry-run` 找到 `29` 张图片并正确映射，忽略 `.DS_Store`；最终真实上传返回 `29` 个 Group-owned Image `rbxassetid`，manifest 校验数量为 `29`；`Textures.FlipACoinItems.coin` / `desk` / `chair` 均已回填新 id；Studio Play 单客户端打开 Shop / Inventory 后，`Item1` 使用 `rbxassetid://87703843792466` 且 `ImageLabel.IsLoaded = true`；`git diff --check -- src/ReplicatedStorage/configs/Textures.lua output/roblox-texture-upload-image-result.json tools/upload_flipacoin_textures.mjs docs/TASK_STATE.md` 通过。
+
+### 2026-05-27 Desk setup shake pivot correction
+
+- Outcome: `EffectSystem` 的桌搭点击抖动不再围绕 `Model:GetPivot()` 做局部旋转，改为按桌面法线计算模型包围盒底面中心，并围绕该底部接触点做世界空间倾斜；同时移除旧整体平移参数，让底部保持为视觉支点。`PROJECT_LOGIC.md` 已同步。
+- Validation: `git diff --check -- src/ReplicatedStorage/Systems/EffectSystem/init.lua src/ReplicatedStorage/Systems/EffectSystem/Presets.lua docs/TASK_STATE.md` 通过；Studio Play 单客户端启动无新增脚本错误，`DecorationsRuntime` 生成 `Seat01Decoration / Seat02FakeDecoration / Seat03FakeDecoration` 等运行时桌搭；自动截图点击桌搭后未发现启动报错。最终抖动手感仍建议用户在 Studio 里直接点模型确认。
+
+### 2026-05-27 Scene interaction details
+
+- Outcome: `EffectSystem` 客户端新增场景点击射线；点击运行时桌搭模型会在本机短暂抖动并回到原位，同时追加轻量 Highlight；点击 `Workspace.CoinFlipTable.TableTop` 会通过 `MusicSystem` 播放 `SoundService.SFX.tableKnock` 并生成短生命周期桌面 ripple。Studio MCP 已在 `SoundService.SFX` 下创建 `tableKnock` 占位 Sound，当前临时复用 `rbxassetid://131939835329656`，后续替换该实例 `SoundId` 即可。`PROJECT_LOGIC.md` 已同步。
+- Validation: `git diff --check -- src/ReplicatedStorage/Systems/EffectSystem/init.lua src/ReplicatedStorage/Systems/EffectSystem/Presets.lua docs/TASK_STATE.md docs/PROJECT_LOGIC.md` 通过；Studio Play 单客户端启动后确认 `DecorationsRuntime` 生成 `Seat01FakeDecoration / Seat02Decoration`、`TableTop` 存在、`SoundService.SFX.tableKnock` 存在；控制台未见新脚本错误，仅有既有 StyleRule `CornerRadius` 转换警告。`luau` 命令不可用；自动鼠标点击在第一人称鼠标锁定下不适合可靠判定桌搭 / 桌面命中，最终手感留待用户在 Studio 中手动确认。
+
+### 2026-05-27 Shop / Inventory item icons
+
+- Outcome: `Textures.FlipACoinItems` 新增 Coin / Desk Setup / Chair / FlipACoin product / GamePass 临时 icon 配置和 `GetFlipACoinItemIcon()`；`EcoSystem/ui.lua` 渲染 Shop / Inventory 卡片时会写入对应 icon。Studio 中 `Frames.Shop.Body.Items.Item1` 到 `Item12` 的 `Art` 下补齐 `ImageLabel`，`Frames.Inventory.Body.Items.Item1` 到 `Item12` 的 `Icon` 下补齐 `ImageLabel`，后续替换图片链接只需改 `src/ReplicatedStorage/configs/Textures.lua`。`PROJECT_LOGIC.md` 已同步。
+- Validation: `git diff --check -- src/ReplicatedStorage/configs/Textures.lua src/ReplicatedStorage/Systems/EcoSystem/ui.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过；Studio edit-time 确认 Shop / Inventory 各 12 张卡片均有图片节点；Studio Play 单客户端打开 Shop / Inventory 后，`Item1` 均显示 `Copper R Coin` 且图片写入 `rbxassetid://119503428482490`；配置扫描确认 Coin / Desk / Chair / Product / GamePass 均能解析到非空 icon。控制台未见新脚本错误，仅有既有 StyleRule `CornerRadius` 转换警告。
+
 ### 2026-05-27 Fake player appearance staging regression
 
 - Outcome: 修复 fake 启动稳定性改动引入的外观回归。`CreateFakeActor()` 现在先把 rig pivot 到高空 staging 位置并 parent 到 runtime folder，再调用 `Humanoid:ApplyDescription()`、准备 rig 和头顶 GUI，最后才入座；避免未 parent rig 丢 avatar description，同时不再用低于 `FallenPartsDestroyHeight` 的 staging 位置导致 body parts 被引擎清理。

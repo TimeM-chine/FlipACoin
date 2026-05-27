@@ -1,0 +1,234 @@
+[
+  {
+    "category": "chair",
+    "itemId": "1",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/1.png",
+    "assetType": "Image",
+    "assetId": "129406347749595",
+    "contentId": "rbxassetid://129406347749595"
+  },
+  {
+    "category": "chair",
+    "itemId": "2",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/2.png",
+    "assetType": "Image",
+    "assetId": "101116445517370",
+    "contentId": "rbxassetid://101116445517370"
+  },
+  {
+    "category": "chair",
+    "itemId": "3",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/3.png",
+    "assetType": "Image",
+    "assetId": "83426287366336",
+    "contentId": "rbxassetid://83426287366336"
+  },
+  {
+    "category": "chair",
+    "itemId": "4",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/4.png",
+    "assetType": "Image",
+    "assetId": "102564900374208",
+    "contentId": "rbxassetid://102564900374208"
+  },
+  {
+    "category": "chair",
+    "itemId": "5",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/5.png",
+    "assetType": "Image",
+    "assetId": "128773181933281",
+    "contentId": "rbxassetid://128773181933281"
+  },
+  {
+    "category": "chair",
+    "itemId": "6",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/6.png",
+    "assetType": "Image",
+    "assetId": "102685246153033",
+    "contentId": "rbxassetid://102685246153033"
+  },
+  {
+    "category": "chair",
+    "itemId": "7",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/7.png",
+    "assetType": "Image",
+    "assetId": "93903350912800",
+    "contentId": "rbxassetid://93903350912800"
+  },
+  {
+    "category": "chair",
+    "itemId": "8",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/8.png",
+    "assetType": "Image",
+    "assetId": "131218268157973",
+    "contentId": "rbxassetid://131218268157973"
+  },
+  {
+    "category": "chair",
+    "itemId": "9",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/9.png",
+    "assetType": "Image",
+    "assetId": "122526304393100",
+    "contentId": "rbxassetid://122526304393100"
+  },
+  {
+    "category": "chair",
+    "itemId": "10",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/10.png",
+    "assetType": "Image",
+    "assetId": "119853620244094",
+    "contentId": "rbxassetid://119853620244094"
+  },
+  {
+    "category": "chair",
+    "itemId": "11",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/11.png",
+    "assetType": "Image",
+    "assetId": "97505501445825",
+    "contentId": "rbxassetid://97505501445825"
+  },
+  {
+    "category": "coin",
+    "itemId": "coin1",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/coin1.png",
+    "assetType": "Image",
+    "assetId": "87703843792466",
+    "contentId": "rbxassetid://87703843792466"
+  },
+  {
+    "category": "coin",
+    "itemId": "coin2",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/coin2.png",
+    "assetType": "Image",
+    "assetId": "77413226487039",
+    "contentId": "rbxassetid://77413226487039"
+  },
+  {
+    "category": "coin",
+    "itemId": "coin3",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/coin3.png",
+    "assetType": "Image",
+    "assetId": "120053499821990",
+    "contentId": "rbxassetid://120053499821990"
+  },
+  {
+    "category": "coin",
+    "itemId": "coin4",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/coin4.png",
+    "assetType": "Image",
+    "assetId": "89941287107128",
+    "contentId": "rbxassetid://89941287107128"
+  },
+  {
+    "category": "coin",
+    "itemId": "coin5",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/coin5.png",
+    "assetType": "Image",
+    "assetId": "89115650359147",
+    "contentId": "rbxassetid://89115650359147"
+  },
+  {
+    "category": "coin",
+    "itemId": "coin6",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/coin6.png",
+    "assetType": "Image",
+    "assetId": "111778975313436",
+    "contentId": "rbxassetid://111778975313436"
+  },
+  {
+    "category": "coin",
+    "itemId": "coin7",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/coin7.png",
+    "assetType": "Image",
+    "assetId": "118820503405069",
+    "contentId": "rbxassetid://118820503405069"
+  },
+  {
+    "category": "coin",
+    "itemId": "coin8",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/coin8.png",
+    "assetType": "Image",
+    "assetId": "93911197854572",
+    "contentId": "rbxassetid://93911197854572"
+  },
+  {
+    "category": "coin",
+    "itemId": "coin9",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/coin9.png",
+    "assetType": "Image",
+    "assetId": "128618077571452",
+    "contentId": "rbxassetid://128618077571452"
+  },
+  {
+    "category": "coin",
+    "itemId": "coin10",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/coin10.png",
+    "assetType": "Image",
+    "assetId": "105862323163418",
+    "contentId": "rbxassetid://105862323163418"
+  },
+  {
+    "category": "desk",
+    "itemId": "1",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/TableDecoration1.png",
+    "assetType": "Image",
+    "assetId": "89476185096602",
+    "contentId": "rbxassetid://89476185096602"
+  },
+  {
+    "category": "desk",
+    "itemId": "2",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/TableDecoration2.png",
+    "assetType": "Image",
+    "assetId": "111785266096558",
+    "contentId": "rbxassetid://111785266096558"
+  },
+  {
+    "category": "desk",
+    "itemId": "3",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/TableDecoration3.png",
+    "assetType": "Image",
+    "assetId": "91341963753162",
+    "contentId": "rbxassetid://91341963753162"
+  },
+  {
+    "category": "desk",
+    "itemId": "4",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/TableDecoration4.png",
+    "assetType": "Image",
+    "assetId": "92177211789921",
+    "contentId": "rbxassetid://92177211789921"
+  },
+  {
+    "category": "desk",
+    "itemId": "5",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/TableDecoration5.png",
+    "assetType": "Image",
+    "assetId": "86995818756222",
+    "contentId": "rbxassetid://86995818756222"
+  },
+  {
+    "category": "desk",
+    "itemId": "6",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/TableDecoration6.png",
+    "assetType": "Image",
+    "assetId": "83303930968160",
+    "contentId": "rbxassetid://83303930968160"
+  },
+  {
+    "category": "desk",
+    "itemId": "7",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/TableDecoration7.png",
+    "assetType": "Image",
+    "assetId": "121158535605125",
+    "contentId": "rbxassetid://121158535605125"
+  },
+  {
+    "category": "desk",
+    "itemId": "8",
+    "filePath": "/Users/magicalhailuo/Desktop/Roblox/FlipACoin/textures/TableDecoration8.png",
+    "assetType": "Image",
+    "assetId": "135882021824962",
+    "contentId": "rbxassetid://135882021824962"
+  }
+]

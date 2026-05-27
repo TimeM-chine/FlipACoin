@@ -584,6 +584,7 @@ FlipACoin
 - 观察者看到他人 Heads streak 达到阈值时，会在落地 pulse 外追加第二层 streak ring，并按 streak 增大半径；高 streak 或 milestone 会给对应硬币 / 座位创建短生命周期 `Highlight`
 - `PlayInsideEffects()` 使用 `SettingSystem:GetParticleRateFactor()` 决定粒子倍率
 - `PlayStreakMilestone()` 按 `AnnouncementSystem/Presets.lua` 的 fixed streak 配置，在硬币本地落地回调后通过 `MusicSystem` 播放 SFX、播放 `EffectSystem.Assets` VFX，并可选触发本地 camera shake；如果 milestone VFX 资产缺失或类型无效，会 fallback 到程序化 streak pulse + `Highlight`
+- 客户端监听鼠标 / 触屏点击场景射线：命中 `DecorationsRuntime` 下 `{SeatId}Decoration` / `{SeatId}FakeDecoration` 时只在本机按模型底部接触点为支点抖动桌搭并短暂高光，命中 `TableTop` 时播放 `tableKnock` SFX 并生成短生命周期桌面 ripple；不新增服务端状态。
 
 ### 7.4d `SettingSystem`
 
@@ -664,7 +665,7 @@ FlipACoin
 
 - 这个系统已经启用
 - 它依赖 `SoundService` 下的分组和资源命名，以及 `workspace.BGSoundsFolder`
-- 当前主玩法音效占位在 `SoundService.SFX`：`flipPress`、`coinToss`、`coinSpin`、`coinLand`、`headsWin`、`tailsLose`、`cashReward`、`streak1`、`streak2`、`streak3`、`streak5`、`streak7`、`streak10`、`shopPurchase`、`equipItem`、`rebirth`、`notification`
+- 当前主玩法音效占位在 `SoundService.SFX`：`flipPress`、`coinToss`、`coinSpin`、`coinLand`、`headsWin`、`tailsLose`、`cashReward`、`streak1`、`streak2`、`streak3`、`streak5`、`streak7`、`streak10`、`shopPurchase`、`equipItem`、`rebirth`、`notification`、`tableKnock`
 - UI 通用按钮仍使用 `SFX.hoverBtn` / `SFX.clickBtn`，BGM 使用 `SoundService.bgm`
 - 当前音效 `SoundId` 可为空；客户端播放逻辑会跳过空 `SoundId`，后续填入资源 id 后自动生效
 
@@ -868,7 +869,7 @@ FlipACoin
 - `RebirthSystem/ui.lua` 绑定 TopbarPlus `Rebirth` 图标、兼容旧 `Buttons.CoinFlipMenu.RebirthButton`，并管理 `Frames.Rebirth`。
 - `EffectSystem` 负责桌面 coin flip 表现，`CoinFlipSystem/ui.lua` 只调用它并等待落地回调。
 - 当前 in-play minimal HUD 是 Studio-authored 资源：TopbarPlus 是顶部入口，`CoinFlipMenu` 只保留兼容且玩法态隐藏，`Elements.cash / candy` 保留为 hidden legacy 节点但不再作为右上钱包显示，`CoinFlipHUD` 是全屏透明承载层，左下显示现金 / 连击，右下显示概率 / 速度 / Value / Bias，底部中心显示 `FLIP`、`Auto:Off / Auto:On` 和短结果提示；`Main.Elements` 只保留 `CoinFlipHUD`、`cash`、`candy`、`ripple`，旧 `Buffs / Rewards / Quests / auto / blockInfo` 和旧 CoinFlip onboarding / spectator / overview 节点已从 Studio 资源中删除。
-- `Frames.Shop / Inventory / Rebirth` 的主结构、布局、圆角、描边和文字约束均在 Studio 中维护；Shop / Inventory 的 item 区域是 Studio-authored `ScrollingFrame` 卡片池，不再使用分页控件；运行时代码只绑定按钮、更新文本 / selected 状态、打开关闭、重置滚动位置和播放音效。触屏移动端打开面板时通过 `uiController` 套安全区尺寸 / 位置的重排逻辑已临时注释，等待移动端布局重做。
+- `Frames.Shop / Inventory / Rebirth` 的主结构、布局、圆角、描边和文字约束均在 Studio 中维护；Shop / Inventory 的 item 区域是 Studio-authored `ScrollingFrame` 卡片池，不再使用分页控件；Shop 卡片的 `Art.Image` 和 Inventory 卡片的 `Icon.Image` 由 `EcoSystem/ui.lua` 绑定到 `Textures.FlipACoinItems` 临时 icon 配置，后续替换图片链接只需改 `src/ReplicatedStorage/configs/Textures.lua`；运行时代码只绑定按钮、更新图片 / 文本 / selected 状态、打开关闭、重置滚动位置和播放音效。触屏移动端打开面板时通过 `uiController` 套安全区尺寸 / 位置的重排逻辑已临时注释，等待移动端布局重做。
 - `Frames.Shop / Inventory / Rebirth` 打开时会走 `uiController.OpenFrame()` 的轻遮罩，并由 `CoinFlipSystem/ui.lua` 隐藏 gameplay HUD，关闭后再恢复。
 - 当前游戏具备基础触屏支持；`uiClient.client.lua` 会在触屏设备上禁用 Roblox 默认 `TouchGui`，因为当前玩法不需要移动 / 跳跃；触屏端仍隐藏 keyboard / gamepad 输入提示并把 ready 文案改为 `Tap FLIP`。`CoinFlipSystem/ui.lua` 的 mobile HUD profile 和 portrait 下折叠 Chance / Speed 的逻辑已临时注释，移动端先沿用桌面 / narrow HUD 布局。`uiController.OpenFrame()` 的移动端 growth panel 重排与 viewport 刷新绑定也已临时注释；TopbarPlus 入口点击面积、growth panel 内容挤压和整体观感仍需 Studio / 真机 QA。
 - 旧 `Stats` / `Actions` 容器如果仍存在，只是隐藏兼容遗留，不是当前主 HUD 数据源。

@@ -125,6 +125,75 @@ Textures.GamePasses = {
 	},
 }
 
+Textures.FlipACoinItems = {
+	fallback = {
+		coin = {
+			icon = "rbxassetid://119503428482490",
+		},
+		desk = {
+			icon = "rbxassetid://17553657803",
+		},
+		chair = {
+			icon = "rbxassetid://17445487334",
+		},
+		product = {
+			icon = "rbxassetid://11560341132",
+		},
+		gamePass = {
+			icon = "rbxassetid://13267287237",
+		},
+	},
+	coin = {
+		coin1 = { icon = "rbxassetid://87703843792466" },
+		coin2 = { icon = "rbxassetid://77413226487039" },
+		coin3 = { icon = "rbxassetid://120053499821990" },
+		coin4 = { icon = "rbxassetid://89941287107128" },
+		coin5 = { icon = "rbxassetid://89115650359147" },
+		coin6 = { icon = "rbxassetid://111778975313436" },
+		coin7 = { icon = "rbxassetid://118820503405069" },
+		coin8 = { icon = "rbxassetid://93911197854572" },
+		coin9 = { icon = "rbxassetid://128618077571452" },
+		coin10 = { icon = "rbxassetid://105862323163418" },
+	},
+	desk = {
+		["1"] = { icon = "rbxassetid://89476185096602" },
+		["2"] = { icon = "rbxassetid://111785266096558" },
+		["3"] = { icon = "rbxassetid://91341963753162" },
+		["4"] = { icon = "rbxassetid://92177211789921" },
+		["5"] = { icon = "rbxassetid://86995818756222" },
+		["6"] = { icon = "rbxassetid://83303930968160" },
+		["7"] = { icon = "rbxassetid://121158535605125" },
+		["8"] = { icon = "rbxassetid://135882021824962" },
+	},
+	chair = {
+		["1"] = { icon = "rbxassetid://129406347749595" },
+		["2"] = { icon = "rbxassetid://101116445517370" },
+		["3"] = { icon = "rbxassetid://83426287366336" },
+		["4"] = { icon = "rbxassetid://102564900374208" },
+		["5"] = { icon = "rbxassetid://128773181933281" },
+		["6"] = { icon = "rbxassetid://102685246153033" },
+		["7"] = { icon = "rbxassetid://93903350912800" },
+		["8"] = { icon = "rbxassetid://131218268157973" },
+		["9"] = { icon = "rbxassetid://122526304393100" },
+		["10"] = { icon = "rbxassetid://119853620244094" },
+		["11"] = { icon = "rbxassetid://97505501445825" },
+	},
+	product = {
+		cashPackSmall = { icon = "rbxassetid://119503428482490" },
+		cashPackMedium = { icon = "rbxassetid://119503428482490" },
+		cashPackLarge = { icon = "rbxassetid://119503428482490" },
+		rebirthShardSmall = { icon = "rbxassetid://12062624806" },
+		rebirthShardLarge = { icon = "rbxassetid://12062624806" },
+		apexLoadoutBundle = { icon = "rbxassetid://17261388741" },
+	},
+	gamePass = {
+		vip = { icon = "rbxassetid://13267287237" },
+		winsX2 = { icon = "rbxassetid://104575988697906" },
+		luckyCharm = { icon = "rbxassetid://13104245207" },
+		quickFlip = { icon = "rbxassetid://98819933823596" },
+	},
+}
+
 Textures.RarityColor = {
 	Default = Color3.fromRGB(234, 234, 234),
 	DefaultBG = "rbxassetid://17222966646",
@@ -890,6 +959,17 @@ function Textures.GetIcon(args)
 	else
 		return Textures.UnclassifiedIcons[itemType] or ""
 	end
+end
+
+function Textures.GetFlipACoinItemIcon(category, itemId)
+	local categoryIcons = Textures.FlipACoinItems[category]
+	local itemIcon = categoryIcons and categoryIcons[itemId]
+	if itemIcon then
+		return itemIcon.icon
+	end
+
+	local fallbackIcon = Textures.FlipACoinItems.fallback[category]
+	return fallbackIcon and fallbackIcon.icon or Textures.Empty
 end
 
 return Textures
