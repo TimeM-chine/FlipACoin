@@ -25,7 +25,6 @@ local RebirthPerks = RebirthFrame.Body:WaitForChild("Perks")
 local RebirthPointGain = RebirthSummary:WaitForChild("PointGain")
 local RebirthResetPreview = RebirthSummary:WaitForChild("ResetPreview")
 local RebirthConfirmButton = RebirthSummary:WaitForChild("ConfirmButton")
-local RebirthKeepRunButton = RebirthSummary:WaitForChild("KeepRunButton")
 local RebirthPerkCards = {
 	RebirthPerks:WaitForChild("Perk1"),
 	RebirthPerks:WaitForChild("Perk2"),
@@ -76,7 +75,6 @@ local function updateRebirthPanel()
 		canRebirth and "Rebirth" or `Need $ {Util.FormatNumber(minCash, true)}`,
 		canRebirth
 	)
-	RebirthKeepRunButton.Text = "Keep Run"
 
 	local upgradesByKey = {}
 	for _, entry in ipairs(currentRebirthState.rebirthUpgrades or {}) do
@@ -116,13 +114,8 @@ local function syncTopbarIcon(icon, frame)
 end
 
 local function bindTopbarIcon()
-	rebirthTopbarIcon = Icon.new()
-		:align("Left")
-		:setName("Rebirth")
-		:setLabel("R")
-		:setOrder(19)
-		:setCaption("Rebirth")
-		:autoDeselect(false)
+	rebirthTopbarIcon =
+		Icon.new():align("Left"):setName("Rebirth"):setLabel("R"):setOrder(19):setCaption("Rebirth"):autoDeselect(false)
 
 	rebirthTopbarIcon.toggled:Connect(function(isSelected): ()
 		if suppressTopbarToggle or GuiService.MenuIsOpen then
@@ -149,9 +142,6 @@ local function bindButtons()
 	end)
 	uiController.SetButtonHoverAndClick(RebirthConfirmButton, function()
 		SystemMgr.systems.RebirthSystem.Server:RequestRebirth()
-	end)
-	uiController.SetButtonHoverAndClick(RebirthKeepRunButton, function()
-		uiController.CloseFrame("Rebirth")
 	end)
 
 	for index, upgradeKey in ipairs(RebirthPresets.FlipACoin.UpgradeOrder) do

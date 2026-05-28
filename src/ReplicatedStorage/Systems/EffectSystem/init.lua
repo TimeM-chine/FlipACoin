@@ -1219,7 +1219,7 @@ function raycastSceneInteraction(input)
 
 	local pointerPosition = input.UserInputType == Enum.UserInputType.Touch and input.Position
 		or UserInputService:GetMouseLocation()
-	local ray = camera:ViewportPointToRay(pointerPosition.X, pointerPosition.Y)
+	local ray = camera:ScreenPointToRay(pointerPosition.X, pointerPosition.Y)
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
 	local filterDescendants = {}

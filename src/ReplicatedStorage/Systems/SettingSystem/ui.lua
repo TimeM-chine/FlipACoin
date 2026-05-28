@@ -46,6 +46,9 @@ function SettingUi.Init()
 			end
 		end
 	end)
+	uiController.SetButtonHoverAndClick(SettingFrame:WaitForChild("X"), function()
+		uiController.CloseFrame("Settings")
+	end)
 
 	for _, name in menu do
 		local frame = settingScroll:FindFirstChild(name)

@@ -1,13 +1,18 @@
 local players = game:GetService("Players")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
 
-local RobStar = ReplicatedFirst:WaitForChild("RobStar")
+local LoadingScreenTemplate = ReplicatedFirst:WaitForChild("LoadingScreen")
 
 function run()
 	ReplicatedFirst:RemoveDefaultLoadingScreen()
 
-	RobStar.Parent = players.LocalPlayer.PlayerGui
-	RobStar.LocalScript.Enabled = true
+	local loadingScreen = LoadingScreenTemplate:Clone()
+	loadingScreen.LocalScript.Enabled = false
+	loadingScreen.Parent = players.LocalPlayer:WaitForChild("PlayerGui")
+
+	task.spawn(function()
+		require(loadingScreen.Loader).Start()
+	end)
 end
 
 run()

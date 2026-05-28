@@ -4,6 +4,6 @@
     "properties":{
         "ResetOnSpawn":false,
         "IgnoreGuiInset":true,
-        "DisplayOrder":1
+        "DisplayOrder":500
     }
 }

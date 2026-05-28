@@ -1,6 +1,6 @@
 # PROJECT_LOGIC
 
-更新时间：2026-05-27
+更新时间：2026-05-28
 
 ## 1. 这份文档的定位
 
@@ -135,9 +135,9 @@ FlipACoin
 
 - `src/ReplicatedFirst/Loading.client.lua`
   - 移除默认 Loading Screen
-  - 把 `ReplicatedFirst.RobStar` 挂到 `PlayerGui`
-  - 这是最早可见的加载体验
-  - 旧 `ReplicatedFirst.LoadingScreen` 已删除；不要再接回旧 `Loader.lua` 路径
+  - 把 `ReplicatedFirst.LoadingScreen` 作为模板 clone 到 `PlayerGui`，并由 `Loading.client.lua` 直接启动 clone 内的 `Loader`
+  - 这是最早可见的加载体验：全屏 Coin Flip 主题硬币抛投动画、首发相关图片资源预加载、时间驱动的虚拟横向进度条、50% 后可点击 Skip，满足最短展示时间并完成预加载后淡出销毁，或到最长展示时间强制淡出
+  - `ReplicatedFirst.RobStar` 仍可作为旧资源保留，但不再接入当前启动链
 
 玩家脚本阶段：
 
@@ -521,7 +521,8 @@ FlipACoin
   - 购买后再 Flip 一次以理解 streak 目标，不再把随机达成 `2 streak` 作为引导完成门槛
 - 首次升级引导只使用已有 HUD 升级按钮做短 pulse，不再发教学 / 建议类 toast，也不恢复旧大引导浮层
 - 桌面沉浸视角当前由 `StarterPlayerScripts/Modules/FirstPersonCamera.lua` 负责：
-  - 平时是头部第一人称：镜头贴到 `Head.Position`，保留默认相机输入，所以玩家可自由转头
+  - 平时是头部第一人称：镜头以 `Head.Position` 为基准，再叠加 `BODY_VIEW_CAMERA_OFFSET` 配置（当前略向角色正前方并下移），保留默认相机输入，所以玩家可自由转头且低头更容易看到身体
+  - 角色生成和成功入座时各做一次初始对准，优先看向 `TableTop.TableCenterAttachment`，没有该 Attachment 时看向 `TableTop` 中心
   - 镜头相对 `HumanoidRootPart` 的左右转向被限制在 `-90° ~ 90°`，避免玩家坐在桌边时回头穿帮
   - `Head` 和配件本地透明，身体可见，玩家低头能看到自己身体
   - 自己手动 Flip 时由 `EffectSystem:PlayCoinFlipVisual()` 调 `FirstPersonCamera.FollowCoin()`，相机临时切到 `Scriptable` 并从头部视角看向硬币；`Auto:On` 连续 Flip 不接管相机
@@ -544,7 +545,7 @@ FlipACoin
 当前在 Flip A Coin 主线里负责：
 
 - `wins` / Cash 的统一加减入口仍走 `EcoSystem:AddResource()`
-- `RequestShopPurchase()` 处理 Coin / Desk Setup 购买，并购买后立即装备
+- `RequestShopPurchase()` 处理 Coin / Desk Setup / Chair 购买，只写入 owned；已拥有商品在 Shop 只显示 `Owned`，装备切换与 Shop 解耦
 - `RequestEquipItem()` 处理 Inventory 装备切换，不重复扣 Cash
 - `GetLoadoutState()` 同步 owned / equipped 数据给 Shop / Inventory UI
 - `GetLoadoutBonuses()` 给 `CoinFlipSystem` 计算正面概率、Cash 倍率和 flip 间隔倍率；当前会合并 Coin / Desk / Chair 装备和已拥有的 FlipACoin gamepass 加成
@@ -584,7 +585,7 @@ FlipACoin
 - 观察者看到他人 Heads streak 达到阈值时，会在落地 pulse 外追加第二层 streak ring，并按 streak 增大半径；高 streak 或 milestone 会给对应硬币 / 座位创建短生命周期 `Highlight`
 - `PlayInsideEffects()` 使用 `SettingSystem:GetParticleRateFactor()` 决定粒子倍率
 - `PlayStreakMilestone()` 按 `AnnouncementSystem/Presets.lua` 的 fixed streak 配置，在硬币本地落地回调后通过 `MusicSystem` 播放 SFX、播放 `EffectSystem.Assets` VFX，并可选触发本地 camera shake；如果 milestone VFX 资产缺失或类型无效，会 fallback 到程序化 streak pulse + `Highlight`
-- 客户端监听鼠标 / 触屏点击场景射线：命中 `DecorationsRuntime` 下 `{SeatId}Decoration` / `{SeatId}FakeDecoration` 时只在本机按模型底部接触点为支点抖动桌搭并短暂高光，命中 `TableTop` 时播放 `tableKnock` SFX 并生成短生命周期桌面 ripple；不新增服务端状态。
+- 客户端监听鼠标 / 触屏点击场景射线，当前用 `Camera:ScreenPointToRay()` 消化屏幕坐标，避免移动端触点和桌面命中点偏移；命中 `DecorationsRuntime` 下 `{SeatId}Decoration` / `{SeatId}FakeDecoration` 时只在本机按模型底部接触点为支点抖动桌搭并短暂高光，命中 `TableTop` 时播放 `tableKnock` SFX 并生成短生命周期小尺寸桌面 ripple；不新增服务端状态。
 
 ### 7.4d `SettingSystem`
 
@@ -593,6 +594,7 @@ FlipACoin
 - 进服补齐 `settingsData` 默认值，且只在字段为 `nil` 时补齐，不覆盖合法的 `false / 0`
 - `ChangeSetting()` 仍同步 BGM / SFX 设置
 - `GetSettingValue()` / `GetParticleRateFactor()` 给其他系统读取本地设置
+- `Frames.Settings` 是 Studio-authored 主面板，当前只展示并绑定 BGM / SFX 两个 row；关闭按钮仍走 `Settings.X`，TopbarPlus `Settings` 入口只负责打开 / 关闭该 Frame
 
 ### 7.5 `AnnouncementSystem`
 
@@ -693,6 +695,8 @@ FlipACoin
 2. 成功后给玩家挂 `profileLoaded`
 3. `SystemMgr.Start()` 里的 `HandlePlayerAdded()` 通过 `PlayerServerClass.GetIns(player, true)` 等待数据就绪
 4. 各系统的 `PlayerAdded` 才开始真正执行
+
+玩家“刚进服过一会儿才能上桌”的服务端硬等待主要在第 3 步：`PlayerServerClass:WaitForDataLoaded()` 最多等 `profileLoaded` `15` 秒；数据没准备好前 `TableSeatSystem:PlayerAdded()` 不会排自动入座。客户端视觉上还叠加 `ReplicatedFirst.LoadingScreen` 的首发图片预加载进度与淡出时间；玩家在进度达到 50% 后可以 Skip 提前进入。
 
 ### 8.2 玩家数据下发
 
@@ -869,7 +873,7 @@ FlipACoin
 - `RebirthSystem/ui.lua` 绑定 TopbarPlus `Rebirth` 图标、兼容旧 `Buttons.CoinFlipMenu.RebirthButton`，并管理 `Frames.Rebirth`。
 - `EffectSystem` 负责桌面 coin flip 表现，`CoinFlipSystem/ui.lua` 只调用它并等待落地回调。
 - 当前 in-play minimal HUD 是 Studio-authored 资源：TopbarPlus 是顶部入口，`CoinFlipMenu` 只保留兼容且玩法态隐藏，`Elements.cash / candy` 保留为 hidden legacy 节点但不再作为右上钱包显示，`CoinFlipHUD` 是全屏透明承载层，左下显示现金 / 连击，右下显示概率 / 速度 / Value / Bias，底部中心显示 `FLIP`、`Auto:Off / Auto:On` 和短结果提示；`Main.Elements` 只保留 `CoinFlipHUD`、`cash`、`candy`、`ripple`，旧 `Buffs / Rewards / Quests / auto / blockInfo` 和旧 CoinFlip onboarding / spectator / overview 节点已从 Studio 资源中删除。
-- `Frames.Shop / Inventory / Rebirth` 的主结构、布局、圆角、描边和文字约束均在 Studio 中维护；Shop / Inventory 的 item 区域是 Studio-authored `ScrollingFrame` 卡片池，不再使用分页控件；Shop 卡片的 `Art.Image` 和 Inventory 卡片的 `Icon.Image` 由 `EcoSystem/ui.lua` 绑定到 `Textures.FlipACoinItems` 临时 icon 配置，后续替换图片链接只需改 `src/ReplicatedStorage/configs/Textures.lua`；运行时代码只绑定按钮、更新图片 / 文本 / selected 状态、打开关闭、重置滚动位置和播放音效。触屏移动端打开面板时通过 `uiController` 套安全区尺寸 / 位置的重排逻辑已临时注释，等待移动端布局重做。
+- `Frames.Shop / Inventory / Rebirth / Settings` 的主结构、布局、圆角、描边和文字约束均在 Studio 中维护；Shop / Inventory 的 item 区域是 Studio-authored `ScrollingFrame + Template`，运行时从单个 `Template` clone 商品卡，不再依赖固定 `Item1` 到 `Item12` 卡片池或分页控件；Shop 卡片的 `Art.Image`、Shop Preview 的 `PreviewScene.Icon` 和 Inventory 卡片的 `Icon.Image` 由 `EcoSystem/ui.lua` 绑定到 `Textures.FlipACoinItems` 临时 icon 配置，后续替换图片链接只需改 `src/ReplicatedStorage/configs/Textures.lua`；运行时代码只绑定按钮、更新图片 / 文本 / selected 状态、打开关闭、重置滚动位置和播放音效。触屏移动端打开面板时通过 `uiController` 套安全区尺寸 / 位置的重排逻辑已临时注释，等待移动端布局重做。
 - `Frames.Shop / Inventory / Rebirth` 打开时会走 `uiController.OpenFrame()` 的轻遮罩，并由 `CoinFlipSystem/ui.lua` 隐藏 gameplay HUD，关闭后再恢复。
 - 当前游戏具备基础触屏支持；`uiClient.client.lua` 会在触屏设备上禁用 Roblox 默认 `TouchGui`，因为当前玩法不需要移动 / 跳跃；触屏端仍隐藏 keyboard / gamepad 输入提示并把 ready 文案改为 `Tap FLIP`。`CoinFlipSystem/ui.lua` 的 mobile HUD profile 和 portrait 下折叠 Chance / Speed 的逻辑已临时注释，移动端先沿用桌面 / narrow HUD 布局。`uiController.OpenFrame()` 的移动端 growth panel 重排与 viewport 刷新绑定也已临时注释；TopbarPlus 入口点击面积、growth panel 内容挤压和整体观感仍需 Studio / 真机 QA。
 - 旧 `Stats` / `Actions` 容器如果仍存在，只是隐藏兼容遗留，不是当前主 HUD 数据源。

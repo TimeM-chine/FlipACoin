@@ -648,7 +648,10 @@ function CoinFlipUi.Init()
 	uiController.SetButtonHoverAndClick(AutoButton, function()
 		setAutoFlipEnabled(not autoFlipEnabled)
 		if autoFlipEnabled then
-			requestFlip()
+			local didRequestFlip = requestFlip()
+			if not didRequestFlip and not currentFlipInProgress then
+				scheduleAutoFlipRequest()
+			end
 		end
 	end)
 

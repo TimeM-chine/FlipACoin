@@ -14,6 +14,11 @@ local FOLLOW_FIELD_OF_VIEW = 68
 local FOLLOW_LERP_ALPHA = 0.34
 local FOLLOW_TARGET_OFFSET = Vector3.new(0, 0.08, 0)
 local DEFAULT_FOLLOW_DURATION = 1.1
+-- X right, Y up, Z back relative to HumanoidRootPart; negative Z moves camera forward.
+local BODY_VIEW_CAMERA_OFFSET = Vector3.new(0, -0.08, -0.28)
+local TABLE_MODEL_NAME = "CoinFlipTable"
+local TABLE_TOP_NAME = "TableTop"
+local TABLE_CENTER_ATTACHMENT_NAME = "TableCenterAttachment"
 local HEAD_POSE_SEND_INTERVAL = 1 / 12
 local HEAD_POSE_FORCE_INTERVAL = 0.35
 local HEAD_POSE_DELTA = math.rad(1.5)
@@ -26,6 +31,7 @@ local currentHumanoid
 local characterConnections = {}
 local coinFollowState
 local SystemMgr
+local initialTableLookPending = false
 local lastHeadPosePitch = 0
 local lastHeadPoseYaw = 0
 local lastHeadPoseSentAt = 0
@@ -89,6 +95,34 @@ local function getRootPart()
 	end
 
 	return nil
+end
+
+local function getBodyViewCameraPosition(head)
+	local rootPart = getRootPart()
+	if not rootPart then
+		return head.Position
+	end
+
+	return head.Position + rootPart.CFrame:VectorToWorldSpace(BODY_VIEW_CAMERA_OFFSET)
+end
+
+local function getTableCenterPosition()
+	local tableModel = Workspace:FindFirstChild(TABLE_MODEL_NAME)
+	if not tableModel then
+		return nil
+	end
+
+	local tableTop = tableModel:FindFirstChild(TABLE_TOP_NAME)
+	if tableTop and tableTop:IsA("BasePart") then
+		local centerAttachment = tableTop:FindFirstChild(TABLE_CENTER_ATTACHMENT_NAME)
+		if centerAttachment and centerAttachment:IsA("Attachment") then
+			return centerAttachment.WorldPosition
+		end
+
+		return tableTop.Position
+	end
+
+	return tableModel:GetPivot().Position
 end
 
 local function getCharacterSystem()
@@ -200,7 +234,16 @@ local function applyFreeFirstPerson(camera)
 
 	local lookVector = clampLookToRootYaw(camera.CFrame.LookVector)
 	local upVector = camera.CFrame.UpVector
-	local cameraPosition = head.Position
+	local cameraPosition = getBodyViewCameraPosition(head)
+	local tableCenterPosition = initialTableLookPending and getTableCenterPosition() or nil
+	if tableCenterPosition then
+		local tableLookOffset = tableCenterPosition - cameraPosition
+		if tableLookOffset.Magnitude > 0.001 then
+			lookVector = clampLookToRootYaw(tableLookOffset.Unit)
+			upVector = Vector3.yAxis
+		end
+		initialTableLookPending = false
+	end
 
 	camera.CFrame = CFrame.lookAt(cameraPosition, cameraPosition + lookVector, upVector)
 	camera.Focus = CFrame.lookAt(cameraPosition + lookVector, cameraPosition + (lookVector * 2), upVector)
@@ -225,7 +268,7 @@ local function applyCoinFollow(camera)
 		return false
 	end
 
-	local cameraPosition = head.Position
+	local cameraPosition = getBodyViewCameraPosition(head)
 	local targetPosition = state.coin.Position + FOLLOW_TARGET_OFFSET
 	local lookOffset = targetPosition - cameraPosition
 	if lookOffset.Magnitude < 0.001 then
@@ -286,6 +329,12 @@ local function bindCharacter(character)
 	local humanoid = character:FindFirstChild("Humanoid") or character:WaitForChild("Humanoid", 5)
 	if humanoid and humanoid:IsA("Humanoid") then
 		currentHumanoid = humanoid
+		initialTableLookPending = true
+		table.insert(characterConnections, humanoid.Seated:Connect(function(isSeated)
+			if isSeated then
+				initialTableLookPending = true
+			end
+		end))
 	end
 
 	applyCharacterVisibility(character)

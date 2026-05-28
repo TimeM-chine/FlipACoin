@@ -1,6 +1,6 @@
 # TASK_STATE
 
-最后更新：2026-05-27
+最后更新：2026-05-28
 
 > 目的：记录当前正在做什么、下一步是什么、关键决策、待验证项与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`；不要把本文件变成长篇历史日志。
 
@@ -57,6 +57,36 @@
 - 可评估极简决策点：高 streak 后出现 `Cash Out` / `Double` / bonus choice，但不要破坏“一键 Flip”的主循环。
 
 ## Done
+
+### 2026-05-28 LoadingScreen duration controls
+
+- Outcome: `ReplicatedFirst.LoadingScreen.Config` 新增 `MinimumDuration = 2.5` 和 `MaximumDuration = 6`；`Loader` 的进度条改为时间驱动的虚拟进度，不再按真实资源数量展示。自动淡出需要预加载完成且达到最短展示时间；若预加载卡住则最长展示时间到达后强制淡出；Skip 仍在虚拟进度达到 50% 后解锁并可立即淡出。
+- Validation: `git diff --check -- src/ReplicatedFirst/LoadingScreen/Config.lua src/ReplicatedFirst/LoadingScreen/Loader.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过；`stylua --check` 因 Aftman 未配置 stylua 无法运行；Studio edit-time 调用 `Loader.GetDisplayProgress()` 确认 `0s -> 0`、预加载完成 `1s -> 0.392`、`MinimumDuration -> 1`、`MaximumDuration -> 1`；Studio Play 等待 `7s` 后确认 `LoadingScreen` 已销毁且 `Main.Enabled = true`。
+
+### 2026-05-28 First-person body-view camera offset
+
+- Outcome: `FirstPersonCamera` 新增 `BODY_VIEW_CAMERA_OFFSET = Vector3.new(0, -0.08, -0.28)` 配置，idle 第一人称和手动 flip 跟随都以 `Head.Position` 加该偏移作为镜头位置；偏移按 `HumanoidRootPart` 本地坐标解释，负 `Z` 向角色正前方推进，轻微负 `Y` 下移，便于低头看到身体。`PROJECT_LOGIC.md` 已同步当前相机配置口径。
+- Validation: `git diff --check -- src/StarterPlayer/StarterPlayerScripts/Modules/FirstPersonCamera.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过；源码复核确认偏移只影响本地相机位置，不改座位、头部姿态上报 clamp 或服务端逻辑。`stylua --check src/StarterPlayer/StarterPlayerScripts/Modules/FirstPersonCamera.lua` 因 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；本机未发现 `luau` / `luau-analyze` / `selene`。本轮未做 Studio Play，最终胸膛可见比例仍需在 Studio / 设备里看一眼并按配置微调。
+
+### 2026-05-28 LoadingScreen coin flip rewrite
+
+- Outcome: `ReplicatedFirst.LoadingScreen` 已接管启动体验；`Loading.client.lua` 现在 clone `LoadingScreen` 模板到 `PlayerGui` 并直接启动 clone 内 `Loader`，不再使用 `RobStar` 启动屏。Studio prefab 已重做为全屏 Coin Flip 主题：硬币上抛翻转、阴影、横向进度条、进度文字和 50% 后解锁的 Skip。`Loader` 预加载首发相关 `Textures.FlipACoinItems` 图片资源和加载屏自身图片，完成或 Skip 后淡出销毁；不再锁相机、锚定角色或控制 `Main.Enabled`。`PROJECT_LOGIC.md` 已同步当前启动链。
+- Validation: `git diff --check -- src/ReplicatedFirst/Loading.client.lua src/ReplicatedFirst/LoadingScreen/init.meta.json src/ReplicatedFirst/LoadingScreen/Config.lua src/ReplicatedFirst/LoadingScreen/Loader.lua src/ReplicatedFirst/LoadingScreen/LocalScript.client.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过；Studio edit-time 确认 LoadingScreen 必需节点存在、布局 `Position` / `Size` offset 为 `0`、Skip 默认隐藏不可点、ProgressBar 初始为 `0`；Studio Play 单客户端确认加载屏启动后淡出销毁，`Main` 和 `CoinFlipHUD` 保持启用。由于本地资源缓存很快，本轮自动检查未捕获到中途可点击 Skip 的可视状态，Skip 解锁由源码条件 `loaded / total >= 0.5` 覆盖。
+
+### 2026-05-28 Mobile table tap / spawn camera pass
+
+- Outcome: `EffectSystem` 的桌面点击射线从 `Camera:ViewportPointToRay()` 改为 `Camera:ScreenPointToRay()`，让移动端触点按屏幕坐标命中桌面；桌面 tap ripple 的 start / end size 按 30% 缩小。`FirstPersonCamera` 在角色生成和成功入座时各做一次初始朝向对准，优先看向 `TableTop.TableCenterAttachment`，再回退到 `TableTop` 中心。`PROJECT_LOGIC.md` 已同步记录相机、桌面交互和上桌等待链路。
+- Validation: `git diff --check -- src/ReplicatedStorage/Systems/EffectSystem/Presets.lua src/ReplicatedStorage/Systems/EffectSystem/init.lua src/StarterPlayer/StarterPlayerScripts/Modules/FirstPersonCamera.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过；`stylua --check` 因 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；本机未发现 `luau` / `luau-analyze` / `selene`。本轮未做 Studio Play 或真机触屏验证，移动端最终触感仍需用户在设备上确认。
+
+### 2026-05-28 Frame UI template / stroke pass
+
+- Outcome: 通过 Studio MCP 确认并修改 `StarterGui.Main.Frames`：所有 Frame 关闭 `X` 改为红底，所有 `UIStroke` 改为 `Enum.StrokeSizingMode.ScaledSize` 且 `Thickness` 位于 `0.05` 到 `0.1`；Shop / Inventory 的 `Items.Template` 继续作为单一 Studio prefab，Shop Template 补 `SelectButton`，Shop Preview 的 `PreviewScene` 补 `Icon`，Settings Frame 重做为与主 growth panels 统一的黑底 / 金描边结构并只展示 BGM / SFX。`EcoSystem/ui.lua` 改为运行时 clone 单 Template 渲染列表，Shop 选中商品会刷新 Preview 和 Icon；Shop 已拥有商品只显示 `Owned`，购买只写 owned 不再自动装备；Inventory 已装备显示绿色 `Equipped`，未装备显示蓝色 `Equip`。`SettingSystem/ui.lua` 绑定 `Settings.X` 关闭按钮，`PROJECT_LOGIC.md` 已同步。
+- Validation: Studio edit-time 扫描确认 `Main.Frames` 下无非红底 `X`、无未转 `ScaledSize` 或厚度越界的 `UIStroke`，且 Shop `Template.SelectButton` / Preview `PreviewScene.Icon` / `Settings.X` 均存在；Studio Play 单客户端打开 Shop / Inventory / Settings 成功，Shop 克隆 `10` 个商品卡且 Preview 标题为 `Copper R Coin`，Inventory 默认 owned 卡按钮显示绿色 `Equipped`；控制台未见新增脚本错误，仅有既有 StyleRule `CornerRadius` 转换警告。`stylua --check` 因 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；本机未发现 `luau` / `luau-analyze`。
+
+### 2026-05-28 Auto Flip cooldown enable fix
+
+- Outcome: 修复 Flip 结束后、本地冷却尚未结束的窗口点击 `AutoButton` 只会开启按钮状态但不会排下一次自动请求的问题。`CoinFlipSystem/ui.lua` 现在在 Auto 开启时先尝试立即 `requestFlip()`；如果因为 cooldown 等本地状态未能立刻请求且当前没有正在播放的 Flip，就调用既有 `scheduleAutoFlipRequest()` 排到可请求时间。Auto Flip 仍复用 `RequestFlip`，服务端座位 / 冷却校验不变。
+- Validation: `git diff --check -- src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua docs/TASK_STATE.md` 通过；源码复核确认当前 Flip 仍在播放时不额外排请求，继续由落地回调负责下一次 Auto 调度。`stylua --check src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua` 因 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；本机未发现 `luau` / `selene`。
 
 ### 2026-05-27 Roblox texture upload script
 

@@ -14,6 +14,13 @@ local Icon = require(Replicated.Packages.topbarplus)
 local dataKey = Keys.DataKey
 local PANEL_COLOR = Color3.fromRGB(5, 5, 6)
 local CREAM_COLOR = Color3.fromRGB(255, 244, 220)
+local BUY_BUTTON_COLOR = Color3.fromRGB(198, 158, 68)
+local OWNED_BUTTON_COLOR = Color3.fromRGB(88, 92, 98)
+local EQUIP_BUTTON_COLOR = Color3.fromRGB(57, 118, 180)
+local EQUIPPED_BUTTON_COLOR = Color3.fromRGB(61, 148, 87)
+local DISABLED_BUTTON_COLOR = Color3.fromRGB(72, 72, 76)
+local SELECTED_STROKE_COLOR = Color3.fromRGB(255, 218, 110)
+local IDLE_STROKE_COLOR = Color3.fromRGB(84, 68, 42)
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -31,39 +38,13 @@ local ShopTabs = ShopBody:WaitForChild("Tabs")
 local ShopBoostTab = ShopTabs:FindFirstChild("BoostTab") or ShopTabs:FindFirstChild("RobuxTab")
 local ShopItems = ShopBody:WaitForChild("Items")
 local ShopPreview = ShopBody:WaitForChild("Preview")
-local ShopItemCards = {
-	ShopItems:WaitForChild("Item1"),
-	ShopItems:WaitForChild("Item2"),
-	ShopItems:WaitForChild("Item3"),
-	ShopItems:WaitForChild("Item4"),
-	ShopItems:WaitForChild("Item5"),
-	ShopItems:WaitForChild("Item6"),
-	ShopItems:WaitForChild("Item7"),
-	ShopItems:WaitForChild("Item8"),
-	ShopItems:WaitForChild("Item9"),
-	ShopItems:WaitForChild("Item10"),
-	ShopItems:WaitForChild("Item11"),
-	ShopItems:WaitForChild("Item12"),
-}
+local ShopItemTemplate = ShopItems:WaitForChild("Template")
 
 local InventoryBody = InventoryFrame:WaitForChild("Body")
 local InventoryTabs = InventoryBody:WaitForChild("Tabs")
 local InventoryItems = InventoryBody:WaitForChild("Items")
 local InventoryLoadout = InventoryBody:WaitForChild("Loadout")
-local InventoryItemCards = {
-	InventoryItems:WaitForChild("Item1"),
-	InventoryItems:WaitForChild("Item2"),
-	InventoryItems:WaitForChild("Item3"),
-	InventoryItems:WaitForChild("Item4"),
-	InventoryItems:WaitForChild("Item5"),
-	InventoryItems:WaitForChild("Item6"),
-	InventoryItems:WaitForChild("Item7"),
-	InventoryItems:WaitForChild("Item8"),
-	InventoryItems:WaitForChild("Item9"),
-	InventoryItems:WaitForChild("Item10"),
-	InventoryItems:WaitForChild("Item11"),
-	InventoryItems:WaitForChild("Item12"),
-}
+local InventoryItemTemplate = InventoryItems:WaitForChild("Template")
 
 local EcoUi = {}
 local initialized = false
@@ -80,8 +61,7 @@ local suppressTopbarToggle = false
 local shopTopbarIcon
 local inventoryTopbarIcon
 local boostsTopbarIcon
-local shopRenderedItems = {}
-local inventoryRenderedItems = {}
+local selectedShopItemKeys = {}
 
 local function getOwnedItems(category)
 	if category == "coin" then
@@ -165,10 +145,13 @@ local function setTextIfPresent(parent, childName, text)
 	end
 end
 
-local function setButtonText(button, text, isEnabled)
+local function setButtonText(button, text, isEnabled, backgroundColor)
 	button.Text = text
 	button.AutoButtonColor = isEnabled
 	button.Active = isEnabled
+	if backgroundColor then
+		button.BackgroundColor3 = backgroundColor
+	end
 end
 
 local function setCardIcon(card, icon)
@@ -193,6 +176,97 @@ local function getItemIcon(category, item)
 	end
 
 	return Textures.GetFlipACoinItemIcon(category, item.id)
+end
+
+local function getShopSelectionKey(category, item)
+	if category == "boost" then
+		return `{item.itemType}:{item.key}`
+	end
+
+	return item.id
+end
+
+local function getSelectedShopItem(items)
+	local selectedKey = selectedShopItemKeys[selectedShopCategory]
+	for _, item in ipairs(items) do
+		if getShopSelectionKey(selectedShopCategory, item) == selectedKey then
+			return item
+		end
+	end
+
+	local firstItem = items[1]
+	if firstItem then
+		selectedShopItemKeys[selectedShopCategory] = getShopSelectionKey(selectedShopCategory, firstItem)
+	end
+	return firstItem
+end
+
+local function setPreviewIcon(icon)
+	local holder = ShopPreview:FindFirstChild("Icon") or ShopPreview.PreviewScene:FindFirstChild("Icon")
+	if holder and (holder:IsA("ImageLabel") or holder:IsA("ImageButton")) then
+		holder.Image = icon
+		holder.Visible = icon ~= ""
+	end
+end
+
+local function clearGeneratedCards(container)
+	for _, child in ipairs(container:GetChildren()) do
+		if child:GetAttribute("GeneratedItemCard") == true then
+			child:Destroy()
+		elseif child:IsA("GuiObject") and child.Name ~= "Template" then
+			child.Visible = false
+		end
+	end
+end
+
+local function createGeneratedCard(template, container, layoutOrder)
+	local card = template:Clone()
+	card:SetAttribute("GeneratedItemCard", true)
+	card.LayoutOrder = layoutOrder
+	card.Visible = true
+	card.Parent = container
+	return card
+end
+
+local function updateCardSelection(card, isSelected)
+	local viewBorder = card:FindFirstChild("viewBorder")
+	if viewBorder then
+		local stroke = viewBorder:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			stroke.Color = isSelected and SELECTED_STROKE_COLOR or IDLE_STROKE_COLOR
+			stroke.Transparency = isSelected and 0 or 0.2
+		end
+	end
+end
+
+local function updateShopPreview(item, ownedItems)
+	if not item then
+		ShopPreview.Title.Text = "Select Item"
+		ShopPreview.Equipped.Text = ""
+		ShopPreview.TotalBonus.Text = ""
+		setPreviewIcon("")
+		return
+	end
+
+	setPreviewIcon(getItemIcon(selectedShopCategory, item))
+	ShopPreview.Title.Text = item.displayName
+	if selectedShopCategory == "boost" then
+		local isOwnedPass = item.itemType == "gamePass" and currentGamePasses[item.key] == true
+		ShopPreview.Equipped.Text = item.description or "Premium boost"
+		if isOwnedPass then
+			ShopPreview.TotalBonus.Text = "Owned"
+		elseif item.configured then
+			ShopPreview.TotalBonus.Text = item.price and Util.GetRobuxText(item.price) or "Robux"
+		else
+			ShopPreview.TotalBonus.Text = "Set ID"
+		end
+		return
+	end
+
+	local isOwned = ownedItems[item.id] == true
+	local priceText = item.cost == 0 and "Starter" or `$ {Util.FormatNumber(item.cost, true)}`
+	ShopPreview.Equipped.Text = `{item.rarity} | {item.role}`
+	ShopPreview.TotalBonus.Text = `{describeItemStats(item.stats)} | {isOwned and "Owned" or priceText}`
 end
 
 local function playSfx(soundName)
@@ -250,8 +324,6 @@ local function updateLoadoutSummary()
 	InventoryLoadout.DeskSlot.Value.Text = equippedDeskName
 	InventoryLoadout.ChairSlot.Value.Text = equippedChairName
 	InventoryLoadout.TotalBonus.Text = describeItemStats(bonuses)
-	ShopPreview.Equipped.Text = `{equippedCoinName} / {equippedDeskName} / {equippedChairName}`
-	ShopPreview.TotalBonus.Text = describeItemStats(bonuses)
 end
 
 local function updateShopPanel()
@@ -261,57 +333,71 @@ local function updateShopPanel()
 	if ShopBoostTab and ShopBoostTab:IsA("TextButton") then
 		updateTabButton(ShopBoostTab, selectedShopCategory == "boost")
 	end
-	if selectedShopCategory == "coin" then
-		ShopPreview.Title.Text = "Coin Loadout"
-	elseif selectedShopCategory == "desk" then
-		ShopPreview.Title.Text = "Desk Setup"
-	elseif selectedShopCategory == "boost" then
-		ShopPreview.Title.Text = "Boosts"
-	else
-		ShopPreview.Title.Text = "Chair Setup"
-	end
 
 	local ownedItems = getOwnedItems(selectedShopCategory)
-	local equippedItem = getEquippedItem(selectedShopCategory)
 	local items = selectedShopCategory == "boost" and getOrderedBoostItems()
 		or (EcoPresets.GrowthShopItems[selectedShopCategory] or {})
-	table.clear(shopRenderedItems)
+	local selectedItem = getSelectedShopItem(items)
+	clearGeneratedCards(ShopItems)
 
-	for index, card in ipairs(ShopItemCards) do
-		local item = items[index]
-		shopRenderedItems[index] = item
-		card.Visible = item ~= nil
-		if item then
-			setCardIcon(card, getItemIcon(selectedShopCategory, item))
-			if selectedShopCategory == "boost" then
-				local isOwnedPass = item.itemType == "gamePass" and currentGamePasses[item.key] == true
-				setTextIfPresent(card, "Name", item.displayName)
-				card.Bonus.Text = item.description or "Premium boost"
-				card.Price.Text = item.price and Util.GetRobuxText(item.price) or "Robux"
-				if isOwnedPass then
-					setButtonText(card.BuyButton, "Owned", false)
-				elseif item.configured then
-					setButtonText(card.BuyButton, "Buy", true)
-				else
-					setButtonText(card.BuyButton, "Set ID", false)
-				end
+	for index, item in ipairs(items) do
+		local card = createGeneratedCard(ShopItemTemplate, ShopItems, index)
+		local itemKey = getShopSelectionKey(selectedShopCategory, item)
+		updateCardSelection(card, selectedItem and itemKey == getShopSelectionKey(selectedShopCategory, selectedItem))
+		setCardIcon(card, getItemIcon(selectedShopCategory, item))
+		setTextIfPresent(card, "Name", item.displayName)
+		if selectedShopCategory == "boost" then
+			local isOwnedPass = item.itemType == "gamePass" and currentGamePasses[item.key] == true
+			card.Bonus.Text = item.description or "Premium boost"
+			card.Price.Text = item.price and Util.GetRobuxText(item.price) or "Robux"
+			if isOwnedPass then
+				setButtonText(card.BuyButton, "Owned", false, OWNED_BUTTON_COLOR)
+			elseif item.configured then
+				setButtonText(card.BuyButton, "Buy", true, BUY_BUTTON_COLOR)
 			else
-				local isOwned = ownedItems[item.id] == true
-				local isEquipped = equippedItem == item.id
-				setTextIfPresent(card, "Name", item.displayName)
-				card.Bonus.Text = `{item.rarity} | {item.role} | {describeItemStats(item.stats)}`
-				card.Price.Text = item.cost == 0 and "Starter" or `$ {Util.FormatNumber(item.cost, true)}`
-				if isEquipped then
-					setButtonText(card.BuyButton, "On", false)
-				elseif isOwned then
-					setButtonText(card.BuyButton, "Equip", true)
-				else
-					setButtonText(card.BuyButton, currentCash >= item.cost and "Buy" or "Need", currentCash >= item.cost)
-				end
+				setButtonText(card.BuyButton, "Set ID", false, DISABLED_BUTTON_COLOR)
+			end
+		else
+			local isOwned = ownedItems[item.id] == true
+			card.Bonus.Text = `{item.rarity} | {item.role} | {describeItemStats(item.stats)}`
+			card.Price.Text = item.cost == 0 and "Starter" or `$ {Util.FormatNumber(item.cost, true)}`
+			if isOwned then
+				setButtonText(card.BuyButton, "Owned", false, OWNED_BUTTON_COLOR)
+			else
+				setButtonText(card.BuyButton, currentCash >= item.cost and "Buy" or "Need", currentCash >= item.cost, currentCash >= item.cost and BUY_BUTTON_COLOR or DISABLED_BUTTON_COLOR)
 			end
 		end
+
+		local selectButton = card:FindFirstChild("SelectButton")
+		if selectButton and selectButton:IsA("GuiButton") then
+			uiController.SetButtonHoverAndClick(selectButton, function()
+				selectedShopItemKeys[selectedShopCategory] = getShopSelectionKey(selectedShopCategory, item)
+				updateShopPanel()
+			end)
+		end
+		uiController.SetButtonHoverAndClick(card.BuyButton, function()
+			selectedShopItemKeys[selectedShopCategory] = getShopSelectionKey(selectedShopCategory, item)
+			if selectedShopCategory == "boost" then
+				if not item.configured then
+					updateShopPanel()
+					return
+				end
+				if item.itemType == "product" then
+					MarketplaceService:PromptProductPurchase(LocalPlayer, item.storeId)
+				elseif item.itemType == "gamePass" and not currentGamePasses[item.key] then
+					MarketplaceService:PromptGamePassPurchase(LocalPlayer, item.storeId)
+				end
+			elseif not ownedItems[item.id] then
+				SystemMgr.systems.EcoSystem.Server:RequestShopPurchase({
+					category = selectedShopCategory,
+					itemId = item.id,
+				})
+			end
+			updateShopPanel()
+		end)
 	end
 
+	updateShopPreview(selectedItem, ownedItems)
 	updateLoadoutSummary()
 end
 
@@ -324,19 +410,14 @@ local function updateInventoryPanel()
 	local ownedItems = getOwnedItems(selectedInventoryCategory)
 	local equippedItem = getEquippedItem(selectedInventoryCategory)
 	local visibleIndex = 0
-	table.clear(inventoryRenderedItems)
-
-	for _, card in ipairs(InventoryItemCards) do
-		card.Visible = false
-	end
+	clearGeneratedCards(InventoryItems)
 
 	if selectedInventoryCategory == "other" then
-		local card = InventoryItemCards[1]
-		card.Visible = true
+		local card = createGeneratedCard(InventoryItemTemplate, InventoryItems, 1)
 		setCardIcon(card, Textures.Empty)
 		setTextIfPresent(card, "Name", "Coming Soon")
 		card.Bonus.Text = "Future item types"
-		setButtonText(card.EquipButton, "Locked", false)
+		setButtonText(card.EquipButton, "Locked", false, DISABLED_BUTTON_COLOR)
 		updateLoadoutSummary()
 		return
 	end
@@ -344,21 +425,24 @@ local function updateInventoryPanel()
 	for _, item in ipairs(EcoPresets.GrowthShopItems[selectedInventoryCategory] or {}) do
 		if ownedItems[item.id] then
 			visibleIndex += 1
-			local cardIndex = visibleIndex
-			local card = InventoryItemCards[cardIndex]
-			if not card then
-				break
-			end
-			inventoryRenderedItems[cardIndex] = item
-			card.Visible = true
+			local card = createGeneratedCard(InventoryItemTemplate, InventoryItems, visibleIndex)
 			setCardIcon(card, getItemIcon(selectedInventoryCategory, item))
 			setTextIfPresent(card, "Name", item.displayName)
 			card.Bonus.Text = describeItemStats(item.stats)
 			if equippedItem == item.id then
-				setButtonText(card.EquipButton, "On", false)
+				setButtonText(card.EquipButton, "Equipped", false, EQUIPPED_BUTTON_COLOR)
 			else
-				setButtonText(card.EquipButton, "Equip", true)
+				setButtonText(card.EquipButton, "Equip", true, EQUIP_BUTTON_COLOR)
 			end
+			uiController.SetButtonHoverAndClick(card.EquipButton, function()
+				if equippedItem == item.id then
+					return
+				end
+				SystemMgr.systems.EcoSystem.Server:RequestEquipItem({
+					category = selectedInventoryCategory,
+					itemId = item.id,
+				})
+			end)
 		end
 	end
 
@@ -464,35 +548,6 @@ local function bindButtons()
 			updatePanels()
 		end)
 	end
-	for index, card in ipairs(ShopItemCards) do
-		local boundIndex = index
-		uiController.SetButtonHoverAndClick(card.BuyButton, function()
-			local item = shopRenderedItems[boundIndex]
-			if not item then
-				return
-			end
-			if selectedShopCategory == "boost" then
-				if not item.configured then
-					return
-				end
-				if item.itemType == "product" then
-					MarketplaceService:PromptProductPurchase(LocalPlayer, item.storeId)
-				elseif item.itemType == "gamePass" and not currentGamePasses[item.key] then
-					MarketplaceService:PromptGamePassPurchase(LocalPlayer, item.storeId)
-				end
-			elseif getOwnedItems(selectedShopCategory)[item.id] then
-				SystemMgr.systems.EcoSystem.Server:RequestEquipItem({
-					category = selectedShopCategory,
-					itemId = item.id,
-				})
-			else
-				SystemMgr.systems.EcoSystem.Server:RequestShopPurchase({
-					category = selectedShopCategory,
-					itemId = item.id,
-				})
-			end
-		end)
-	end
 
 	uiController.SetButtonHoverAndClick(InventoryTabs.CoinTab, function()
 		selectedInventoryCategory = "coin"
@@ -514,23 +569,6 @@ local function bindButtons()
 		resetScrollPosition(InventoryItems)
 		updateInventoryPanel()
 	end)
-	for index, card in ipairs(InventoryItemCards) do
-		local boundIndex = index
-		uiController.SetButtonHoverAndClick(card.EquipButton, function()
-			if selectedInventoryCategory == "other" then
-				return
-			end
-
-			local item = inventoryRenderedItems[boundIndex]
-			if not item then
-				return
-			end
-			SystemMgr.systems.EcoSystem.Server:RequestEquipItem({
-				category = selectedInventoryCategory,
-				itemId = item.id,
-			})
-		end)
-	end
 end
 
 function EcoUi.Init()
@@ -541,6 +579,10 @@ function EcoUi.Init()
 
 	ShopFrame.Visible = false
 	InventoryFrame.Visible = false
+	ShopItemTemplate.Visible = false
+	ShopItemTemplate.Parent = nil
+	InventoryItemTemplate.Visible = false
+	InventoryItemTemplate.Parent = nil
 	currentCash = ClientData:GetOneData(dataKey.wins) or 0
 	currentLoadoutState = ClientData:GetOneData("loadoutState") or currentLoadoutState
 	currentGamePasses = ClientData:GetOneData(dataKey.gamePasses) or currentGamePasses

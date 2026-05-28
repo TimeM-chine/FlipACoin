@@ -724,7 +724,6 @@ function EcoSystem:RequestShopPurchase(sender, player, args)
 		end
 
 		local ownedKey = getOwnedKey(category)
-		local equippedKey = getEquippedKey(category)
 		local playerIns = PlayerServerClass.GetIns(player)
 		if not playerIns then
 			return
@@ -733,19 +732,8 @@ function EcoSystem:RequestShopPurchase(sender, player, args)
 		normalizeLoadoutData(playerIns)
 		local ownedItems = playerIns:GetOneData(ownedKey)
 		if ownedItems[item.id] then
-			playerIns:SetOneData(equippedKey, item.id)
 			refreshCashDisplays(player)
-			refreshDecoration(player, category)
-			SystemMgr.systems.AnalyticsSystem:LogItemEquipped(SENDER, player, {
-				category = category,
-				itemId = item.id,
-				source = "shop_owned",
-			})
-			SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
-			SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
-				equippedItem = item.id,
-				equippedCategory = category,
-			})
+			SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player)
 			return
 		end
 
@@ -767,25 +755,15 @@ function EcoSystem:RequestShopPurchase(sender, player, args)
 		})
 		ownedItems[item.id] = true
 		playerIns:SetOneData(ownedKey, ownedItems)
-		playerIns:SetOneData(equippedKey, item.id)
 
-		refreshDecoration(player, category)
 		SystemMgr.systems.AnalyticsSystem:LogShopItemPurchased(SENDER, player, {
 			category = category,
 			itemId = item.id,
 			rarity = item.rarity,
 			cost = item.cost,
 		})
-		SystemMgr.systems.AnalyticsSystem:LogItemEquipped(SENDER, player, {
-			category = category,
-			itemId = item.id,
-			source = "shop_purchase",
-		})
-		SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
 		SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
 			purchasedItem = item.id,
-			equippedItem = item.id,
-			equippedCategory = category,
 		})
 	else
 		--
