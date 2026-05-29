@@ -144,7 +144,7 @@ GameConfig.FlipACoin = {
 			maxLevel = 10,
 		},
 		biasLevel = {
-			displayName = "Bias",
+			displayName = "Luck",
 			costBase = 28,
 			costGrowth = 1.58,
 			maxLevel = 12,

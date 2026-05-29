@@ -24,6 +24,8 @@ local uiController = require(Main:WaitForChild("uiController"))
 local CoinFlipSystem = SystemMgr.systems.CoinFlipSystem
 local TableSeatSystem = SystemMgr.systems.TableSeatSystem
 local EffectSystem = SystemMgr.systems.EffectSystem
+local FirstPersonCamera =
+	require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Modules"):WaitForChild("FirstPersonCamera"))
 
 local function findFirstByNames(parent, names)
 	for _, name in ipairs(names) do
@@ -54,7 +56,6 @@ local CenterPanel = Content:WaitForChild("CenterPanel")
 local RightPanel = Content:WaitForChild("RightPanel")
 local RightStatsFrame = RightPanel:WaitForChild("Stats")
 local UpgradeButtons = RightPanel:WaitForChild("UpgradeButtons")
-local SeatLabel = CenterPanel:WaitForChild("SeatLabel")
 local InputHints = CenterPanel:WaitForChild("InputHints")
 
 local function resolveStatLabel(card)
@@ -106,7 +107,7 @@ local UpgradeTitles = {
 	valueLevel = "Value",
 	comboLevel = "Combo",
 	speedLevel = "Speed",
-	biasLevel = "Bias",
+	biasLevel = "Luck",
 }
 
 local CoinFlipUi = {}
@@ -137,6 +138,7 @@ local currentRunSnapshot = {
 	derivedStats = {},
 }
 local latestRunStateVersion = 0
+local initialTableLookRequested = false
 local FlipInputActionName = "COIN_FLIP_REQUEST"
 local AUTO_BUTTON_ON_COLOR = Color3.fromRGB(92, 255, 132)
 local AUTO_BUTTON_OFF_COLOR = Color3.fromRGB(255, 255, 255)
@@ -249,10 +251,7 @@ local function resolveHudSizeScale(baseSize, minSize, maxSize, viewportSize)
 		targetHeight = math.min(targetHeight, maxSize.Y)
 	end
 
-	return Vector2.new(
-		math.clamp(targetWidth / viewportSize.X, 0, 1),
-		math.clamp(targetHeight / viewportSize.Y, 0, 1)
-	)
+	return Vector2.new(math.clamp(targetWidth / viewportSize.X, 0, 1), math.clamp(targetHeight / viewportSize.Y, 0, 1))
 end
 
 local function resolveHudLayoutProfile()
@@ -363,7 +362,6 @@ local function applyGameplayVisibility(isVisible)
 	RightStatsFrame.Visible = showHud and not currentLayoutIsMobilePortrait
 	UpgradeButtons.Visible = showHud
 	CenterPanel.Visible = showHud
-	SeatLabel.Visible = showHud
 	InputHints.Visible = canRequestFlip and not UserInputService.TouchEnabled
 	ResultLabel.Visible = showHud
 	FlipButton.Visible = showHud
@@ -558,6 +556,15 @@ local function setVisible(isVisible)
 	end
 end
 
+local function requestInitialTableLookIfNeeded(isSeated)
+	if initialTableLookRequested or not isSeated then
+		return
+	end
+
+	initialTableLookRequested = true
+	FirstPersonCamera.RequestInitialTableLook()
+end
+
 local function updateUpgradeButton(button, title, level, cost, isMaxed)
 	button.Title.Text = title
 	button.Level.Text = `Lv.{level}`
@@ -710,7 +717,6 @@ function CoinFlipUi.SyncRunState(args)
 	ChanceValue.Text = `{math.round((args.derivedStats.headsChance or 0) * 1000) / 10}%`
 	StreakValue.Text = tostring(args.runData.currentStreak or 0)
 	SpeedValue.Text = `{math.round((args.derivedStats.flipInterval or 0) * 100) / 100}s`
-	SeatLabel.Text = seatState.seatId and tostring(seatState.seatId):gsub("^Seat", "Seat ") or "Seat --"
 
 	for upgradeKey, button in pairs(UpgradeMap) do
 		local level = args.runData[upgradeKey] or 0
@@ -720,6 +726,7 @@ function CoinFlipUi.SyncRunState(args)
 
 	setVisible(isSeated)
 	updateTableOverview(seatState)
+	requestInitialTableLookIfNeeded(isSeated)
 	CoinFlipUi.UpdateOnboarding(args.onboarding)
 	pulseRecommendedUpgrade(args.onboarding)
 	if isSeated and ResultLabel.Text == "Waiting for seat assignment..." then
@@ -775,9 +782,9 @@ function CoinFlipUi.SeatStateChanged(args)
 		leaveButton.Visible = false
 	end
 	updateTableOverview(args and args.seatState)
+	requestInitialTableLookIfNeeded(isSeated)
 	hideOnboardingPanel()
 	if isSeated then
-		SeatLabel.Text = args.seatState.seatId and tostring(args.seatState.seatId):gsub("^Seat", "Seat ") or "Seat --"
 		if ResultLabel.Text == "Waiting for seat assignment..." then
 			updateResultText(getReadyPrompt(), "Neutral")
 		end
@@ -809,21 +816,39 @@ local function findFakeActorModel(fakeId)
 end
 
 local function getFakeHeadPoseMotor(model, motorName)
-	local motor = model:FindFirstChild(motorName, true)
-	if motor and motor:IsA("Motor6D") then
-		return motor
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant.Name == motorName and (descendant:IsA("Motor6D") or descendant.ClassName == "AnimationConstraint") then
+			return descendant
+		end
 	end
 
 	return nil
 end
 
-local function restoreFakeCoinLookMotor(motor, baseC0)
-	if not motor or not motor.Parent then
+local function getFakeHeadPoseJointBase(joint)
+	if joint.ClassName == "AnimationConstraint" then
+		return joint.Transform
+	end
+
+	return joint.C0
+end
+
+local function setFakeHeadPoseJoint(joint, baseCFrame, offsetCFrame)
+	if joint.ClassName == "AnimationConstraint" then
+		joint.Transform = baseCFrame * offsetCFrame
+	else
+		joint.C0 = baseCFrame * offsetCFrame
+	end
+end
+
+local function restoreFakeCoinLookMotor(joint, baseCFrame)
+	if not joint or not joint.Parent then
 		return
 	end
 
-	TweenService:Create(motor, TweenInfo.new(FAKE_COIN_LOOK_RESTORE_DURATION, Enum.EasingStyle.Quad), {
-		C0 = baseC0,
+	local propertyName = joint.ClassName == "AnimationConstraint" and "Transform" or "C0"
+	TweenService:Create(joint, TweenInfo.new(FAKE_COIN_LOOK_RESTORE_DURATION, Enum.EasingStyle.Quad), {
+		[propertyName] = baseCFrame,
 	}):Play()
 end
 
@@ -843,8 +868,8 @@ local function playFakeActorCoinLook(fakeId, focusPart)
 		return
 	end
 	local waist = getFakeHeadPoseMotor(model, "Waist")
-	local neckBaseC0 = neck.C0
-	local waistBaseC0 = waist and waist.C0 or nil
+	local neckBaseC0 = getFakeHeadPoseJointBase(neck)
+	local waistBaseC0 = waist and getFakeHeadPoseJointBase(waist) or nil
 	local token = (fakeCoinLookTokens[fakeId] or 0) + 1
 	fakeCoinLookTokens[fakeId] = token
 	local startedAt = os.clock()
@@ -878,18 +903,25 @@ local function playFakeActorCoinLook(fakeId, focusPart)
 
 		local target = root.CFrame:PointToObjectSpace(focusPart.Position)
 		local horizontalMagnitude = math.max(Vector2.new(target.X, target.Z).Magnitude, 0.1)
-		local pitch = math.clamp(math.atan2(target.Y, horizontalMagnitude), -FAKE_COIN_LOOK_PITCH_LIMIT, FAKE_COIN_LOOK_PITCH_LIMIT)
+		local pitch = math.clamp(
+			math.atan2(target.Y, horizontalMagnitude),
+			-FAKE_COIN_LOOK_PITCH_LIMIT,
+			FAKE_COIN_LOOK_PITCH_LIMIT
+		)
 		local yaw = math.clamp(math.atan2(-target.X, -target.Z), -FAKE_COIN_LOOK_YAW_LIMIT, FAKE_COIN_LOOK_YAW_LIMIT)
 		local blend = math.clamp(alpha / 0.12, 0, 1)
 
-		neck.C0 = neckBaseC0
-			* CFrame.Angles(
+		setFakeHeadPoseJoint(
+			neck,
+			neckBaseC0,
+			CFrame.Angles(
 				pitch * FAKE_COIN_LOOK_NECK_PITCH_WEIGHT * blend,
 				yaw * FAKE_COIN_LOOK_NECK_YAW_WEIGHT * blend,
 				0
 			)
+		)
 		if waist and waistBaseC0 then
-			waist.C0 = waistBaseC0 * CFrame.Angles(0, yaw * FAKE_COIN_LOOK_WAIST_YAW_WEIGHT * blend, 0)
+			setFakeHeadPoseJoint(waist, waistBaseC0, CFrame.Angles(0, yaw * FAKE_COIN_LOOK_WAIST_YAW_WEIGHT * blend, 0))
 		end
 	end)
 end

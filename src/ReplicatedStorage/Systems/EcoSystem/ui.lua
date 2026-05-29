@@ -346,6 +346,7 @@ local function updateShopPanel()
 		updateCardSelection(card, selectedItem and itemKey == getShopSelectionKey(selectedShopCategory, selectedItem))
 		setCardIcon(card, getItemIcon(selectedShopCategory, item))
 		setTextIfPresent(card, "Name", item.displayName)
+		card.Price.Visible = false
 		if selectedShopCategory == "boost" then
 			local isOwnedPass = item.itemType == "gamePass" and currentGamePasses[item.key] == true
 			card.Bonus.Text = item.description or "Premium boost"
@@ -353,18 +354,29 @@ local function updateShopPanel()
 			if isOwnedPass then
 				setButtonText(card.BuyButton, "Owned", false, OWNED_BUTTON_COLOR)
 			elseif item.configured then
-				setButtonText(card.BuyButton, "Buy", true, BUY_BUTTON_COLOR)
+				setButtonText(
+					card.BuyButton,
+					item.price and Util.GetRobuxText(item.price) or "Robux",
+					true,
+					BUY_BUTTON_COLOR
+				)
 			else
 				setButtonText(card.BuyButton, "Set ID", false, DISABLED_BUTTON_COLOR)
 			end
 		else
 			local isOwned = ownedItems[item.id] == true
+			local priceText = item.cost == 0 and "Free" or `$ {Util.FormatNumber(item.cost, true)}`
 			card.Bonus.Text = `{item.rarity} | {item.role} | {describeItemStats(item.stats)}`
-			card.Price.Text = item.cost == 0 and "Starter" or `$ {Util.FormatNumber(item.cost, true)}`
+			card.Price.Text = priceText
 			if isOwned then
 				setButtonText(card.BuyButton, "Owned", false, OWNED_BUTTON_COLOR)
 			else
-				setButtonText(card.BuyButton, currentCash >= item.cost and "Buy" or "Need", currentCash >= item.cost, currentCash >= item.cost and BUY_BUTTON_COLOR or DISABLED_BUTTON_COLOR)
+				setButtonText(
+					card.BuyButton,
+					priceText,
+					currentCash >= item.cost,
+					currentCash >= item.cost and BUY_BUTTON_COLOR or DISABLED_BUTTON_COLOR
+				)
 			end
 		end
 

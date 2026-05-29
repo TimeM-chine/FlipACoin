@@ -106,6 +106,7 @@ function Loader.ResetUi()
 
 	Background.Visible = true
 	Coin.Visible = true
+	Coin.ScaleType = Enum.ScaleType.Stretch
 	CoinShadow.Visible = true
 	SkipButton.Visible = false
 	SkipButton.Active = false
@@ -115,16 +116,26 @@ function Loader.ResetUi()
 	ProgressLabel.Text = "Loading 0%"
 
 	for _, descendant in Background:GetDescendants() do
+		if descendant:IsA("UIAspectRatioConstraint") and descendant.Parent == Coin then
+			descendant:Destroy()
+			continue
+		end
+
 		if descendant:IsA("Frame") then
-			descendant.BackgroundTransparency = descendant:GetAttribute("DefaultBackgroundTransparency") or descendant.BackgroundTransparency
+			descendant.BackgroundTransparency = descendant:GetAttribute("DefaultBackgroundTransparency")
+				or descendant.BackgroundTransparency
 		elseif descendant:IsA("UIStroke") then
 			descendant.Transparency = descendant:GetAttribute("DefaultTransparency") or descendant.Transparency
 		elseif descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
-			descendant.TextTransparency = descendant:GetAttribute("DefaultTextTransparency") or descendant.TextTransparency
-			descendant.BackgroundTransparency = descendant:GetAttribute("DefaultBackgroundTransparency") or descendant.BackgroundTransparency
+			descendant.TextTransparency = descendant:GetAttribute("DefaultTextTransparency")
+				or descendant.TextTransparency
+			descendant.BackgroundTransparency = descendant:GetAttribute("DefaultBackgroundTransparency")
+				or descendant.BackgroundTransparency
 		elseif descendant:IsA("ImageLabel") or descendant:IsA("ImageButton") then
-			descendant.ImageTransparency = descendant:GetAttribute("DefaultImageTransparency") or descendant.ImageTransparency
-			descendant.BackgroundTransparency = descendant:GetAttribute("DefaultBackgroundTransparency") or descendant.BackgroundTransparency
+			descendant.ImageTransparency = descendant:GetAttribute("DefaultImageTransparency")
+				or descendant.ImageTransparency
+			descendant.BackgroundTransparency = descendant:GetAttribute("DefaultBackgroundTransparency")
+				or descendant.BackgroundTransparency
 		end
 	end
 end
@@ -132,6 +143,7 @@ end
 function Loader.StartAnimation(config, startTime, updateProgress)
 	local startPosition = Coin.Position
 	local shadowStartSize = CoinShadow.Size
+	local coinSize = 0.35
 
 	animationConnection = RunService.RenderStepped:Connect(function()
 		if isFinishing then
@@ -141,13 +153,16 @@ function Loader.StartAnimation(config, startTime, updateProgress)
 		local elapsed = os.clock()
 		local phase = (elapsed % 1.45) / 1.45
 		local lift = math.sin(phase * math.pi)
-		local flip = math.sin(phase * math.pi * 8)
-		local squash = 0.34 + math.abs(flip) * 0.66
+		local flipAngle = phase * math.pi * 8
+		local projectedFaceHeight = math.abs(math.sin(flipAngle))
+		if projectedFaceHeight < 0.02 then
+			projectedFaceHeight = 0
+		end
 		local shadowScale = 1 - lift * 0.38
 
 		Coin.Position = UDim2.fromScale(startPosition.X.Scale, startPosition.Y.Scale - lift * 0.24)
-		Coin.Size = UDim2.fromScale(0.16 * squash, 0.16)
-		Coin.Rotation = (phase * 720) % 360
+		Coin.Size = UDim2.fromScale(coinSize, coinSize * projectedFaceHeight)
+		Coin.Rotation = 0
 		CoinShadow.Size = UDim2.fromScale(shadowStartSize.X.Scale * shadowScale, shadowStartSize.Y.Scale * shadowScale)
 		CoinShadow.ImageTransparency = 0.48 + lift * 0.34
 	end)
@@ -223,9 +238,10 @@ function Loader.Finish()
 		end
 	end
 
-	local backgroundTween = TweenService:Create(Background, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		BackgroundTransparency = 1,
-	})
+	local backgroundTween =
+		TweenService:Create(Background, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			BackgroundTransparency = 1,
+		})
 	backgroundTween:Play()
 	table.insert(fadeTweens, backgroundTween)
 

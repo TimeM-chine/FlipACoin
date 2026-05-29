@@ -100,6 +100,17 @@ local function isActiveSeatOwner(actor)
 	return isFakeActor(actor) and actor.isActive == true
 end
 
+local function isHumanoidReadyToSit(player, character, humanoid)
+	return player
+		and player:IsDescendantOf(Players)
+		and character
+		and character:IsDescendantOf(Workspace)
+		and humanoid
+		and humanoid.Parent == character
+		and humanoid.Health > 0
+		and humanoid:GetState() ~= Enum.HumanoidStateType.Dead
+end
+
 local function getActorUserId(actor)
 	if isRealPlayer(actor) then
 		return actor.UserId
@@ -809,12 +820,12 @@ function TableSeatSystem:_QueueAutoSeat(player)
 			seatKey = self:_FindOpenSeatKey(player)
 		end
 
-		if humanoid and seatKey and isPlayerActuallySeated(seatKey, humanoid) then
+		if isHumanoidReadyToSit(player, character, humanoid) and seatKey and isPlayerActuallySeated(seatKey, humanoid) then
 			clearWaitingForSeat()
 			return true
 		end
 
-		if humanoid and seatKey then
+		if isHumanoidReadyToSit(player, character, humanoid) and seatKey then
 			self:RequestSit(SENDER, player, {
 				seatId = seatKey,
 				autoAssigned = true,
@@ -1308,7 +1319,7 @@ function TableSeatSystem:RequestSit(sender, player, args)
 
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if not humanoid or humanoid.Health <= 0 then
+	if not isHumanoidReadyToSit(player, character, humanoid) then
 		return false
 	end
 
@@ -1328,6 +1339,11 @@ function TableSeatSystem:RequestSit(sender, player, args)
 
 	if currentSeatKey and currentSeatKey ~= seatKey then
 		clearSeatOwnership(self, player)
+		character = player.Character
+		humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not isHumanoidReadyToSit(player, character, humanoid) then
+			return false
+		end
 	end
 
 	if seatRecord.seat.Occupant == humanoid then

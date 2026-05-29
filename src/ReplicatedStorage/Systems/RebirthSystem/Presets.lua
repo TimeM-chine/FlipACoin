@@ -1913,7 +1913,7 @@ RebirthPresets.FlipACoin = {
 		},
 		luckyStart = {
 			displayName = "Lucky Start",
-			description = "+1 Bias level after each rebirth",
+			description = "+1 Luck level after each rebirth",
 			runDataKey = "biasLevel",
 			runDataStep = 1,
 			costBase = 1,

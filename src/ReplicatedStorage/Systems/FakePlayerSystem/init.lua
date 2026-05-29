@@ -391,8 +391,8 @@ function prepareFakeRig(fakeActor)
 	local waist = getHeadPoseMotor(model, "Waist")
 	fakeActor.neck = neck
 	fakeActor.waist = waist
-	fakeActor.neckC0 = neck and neck.C0 or nil
-	fakeActor.waistC0 = waist and waist.C0 or nil
+	fakeActor.neckC0 = neck and getHeadPoseJointBase(neck) or nil
+	fakeActor.waistC0 = waist and getHeadPoseJointBase(waist) or nil
 end
 
 function applyFakeAppearance(fakeActor)
@@ -441,17 +441,38 @@ end
 
 function applyHeadPose(fakeActor, pitch, yaw)
 	if fakeActor.neck and fakeActor.neckC0 then
-		fakeActor.neck.C0 = fakeActor.neckC0 * CFrame.Angles(pitch * Presets.NeckPitchWeight, yaw * Presets.NeckYawWeight, 0)
+		setHeadPoseJoint(
+			fakeActor.neck,
+			fakeActor.neckC0,
+			CFrame.Angles(pitch * Presets.NeckPitchWeight, yaw * Presets.NeckYawWeight, 0)
+		)
 	end
 	if fakeActor.waist and fakeActor.waistC0 then
-		fakeActor.waist.C0 = fakeActor.waistC0 * CFrame.Angles(0, yaw * Presets.WaistYawWeight, 0)
+		setHeadPoseJoint(fakeActor.waist, fakeActor.waistC0, CFrame.Angles(0, yaw * Presets.WaistYawWeight, 0))
+	end
+end
+
+function getHeadPoseJointBase(joint)
+	if joint.ClassName == "AnimationConstraint" then
+		return joint.Transform
+	end
+
+	return joint.C0
+end
+
+function setHeadPoseJoint(joint, baseCFrame, offsetCFrame)
+	if joint.ClassName == "AnimationConstraint" then
+		joint.Transform = baseCFrame * offsetCFrame
+	else
+		joint.C0 = baseCFrame * offsetCFrame
 	end
 end
 
 function getHeadPoseMotor(model, motorName)
-	local motor = model:FindFirstChild(motorName, true)
-	if motor and motor:IsA("Motor6D") then
-		return motor
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant.Name == motorName and (descendant:IsA("Motor6D") or descendant.ClassName == "AnimationConstraint") then
+			return descendant
+		end
 	end
 
 	return nil

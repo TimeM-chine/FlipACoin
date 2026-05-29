@@ -1,6 +1,6 @@
 # TASK_STATE
 
-最后更新：2026-05-28
+最后更新：2026-05-30
 
 > 目的：记录当前正在做什么、下一步是什么、关键决策、待验证项与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`；不要把本文件变成长篇历史日志。
 
@@ -27,7 +27,7 @@
 - 头部姿态只是弱互动反馈，不做全身 IK；采用服务端驱动角色关节 C0，客户端只上报相机相对身体的 pitch / yaw。
 - 玩家重生后应重新回到可用座位，不进入自由行走态。
 - Rebirth Points 复用持久化 `fateShards`，不新增重复点数币种。
-- Shop / Inventory 小按钮采用固定字号 Bold 文本；短状态标签优先于挤压长文案。
+- Shop 商品卡购买按钮采用底部居中的大按钮，按钮直接显示价格或 `Owned`；Inventory 装备按钮仍采用短状态标签，优先避免挤压长文案。
 - Inventory 装备从 item card 立即生效；除非新增 staged-loadout 流程，否则独立 Apply 按钮保持隐藏。
 - 运行态 Rebirth / Shop / Inventory 入口使用 TopbarPlus 顶栏按钮；`CoinFlipMenu` 只保留为旧绑定兼容节点，玩法态不再显示。
 - Growth panels 保持 Studio-authored 结构但由运行时代码统一套黑底大面板布局；当前游戏具备基础触屏支持，但移动端布局、提示、安全区和实机观感仍需专项收敛。
@@ -57,6 +57,46 @@
 - 可评估极简决策点：高 streak 后出现 `Cash Out` / `Double` / bonus choice，但不要破坏“一键 Flip”的主循环。
 
 ## Done
+
+### 2026-05-30 Mobile seated camera / fake head / auto-seat warning
+
+- Outcome: `FirstPersonCamera.RequestInitialTableLook()` 仍只在首次 seated state 触发一次，但移动端初始看桌面期间会短暂切到 `Scriptable` 并连续应用桌面 look vector，随后回到 `Custom`，避免手机默认相机脚本把方向恢复。fake player 头部跟随和服务端 fake 小动作现在支持当前 avatar rig 的 `AnimationConstraint.Transform`，旧 `Motor6D` rig 仍走 `C0`。`TableSeatSystem` 在自动落座和 `RequestSit()` 调用 `Seat:Sit()` 前后确认玩家、角色、Humanoid 仍有效且未死亡，避免重生 / 离场竞态触发 `Sit : param is not a Humanoid or humanoid is dead`。
+- Validation: `git diff --check -- src/StarterPlayer/StarterPlayerScripts/Modules/FirstPersonCamera.lua src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua src/ReplicatedStorage/Systems/FakePlayerSystem/init.lua src/ReplicatedStorage/Systems/TableSeatSystem/init.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过；当前 Studio 手机端 Play 中，落座 `5s` 后相机 LookVector 指向桌面中心的 dot 约 `0.9996`；fake `Neck` 识别为 `AnimationConstraint`，`12s` 采样中 `Transform` 最大旋转约 `24.5°`；控制台未出现新的 `Sit` 警告，仅剩既有 StyleRule `CornerRadius` 警告。
+
+### 2026-05-29 Initial table camera / fake flip head tracking
+
+- Outcome: `FirstPersonCamera` 新增 `RequestInitialTableLook()`，移除角色绑定 / `Humanoid.Seated` 时反复设置 `initialTableLookPending` 的逻辑；`CoinFlipSystem/ui.lua` 在首次收到已入座 seat state 时调用一次，让玩家刚落座后看向桌面中心，之后不再重置玩家视角。fake player flip 继续走纯客户端 `ObservedFlip()` 表现，`EffectSystem:PlayCoinFlipVisual()` 在已有 visual 正在 flipping 时也会返回该 visual，保证 `playFakeActorCoinLook()` 能稳定拿到 `focusPart` 并本地驱动 fake Rig 的 `Neck` / 可选 `Waist` 看向硬币。
+- Validation: 源码扫描确认 `initialTableLookPending` 只由 `RequestInitialTableLook()` 设置，`Humanoid.Seated` 不再触发视角重置；确认 fake head tracking 仍只在 `CoinFlipSystem/ui.lua` 客户端执行，服务端 `ObservedFlip` payload 未新增状态；`git diff --check -- src/StarterPlayer/StarterPlayerScripts/Modules/FirstPersonCamera.lua src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua src/ReplicatedStorage/Systems/EffectSystem/init.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过。`stylua --check src/StarterPlayer/StarterPlayerScripts/Modules/FirstPersonCamera.lua src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua src/ReplicatedStorage/Systems/EffectSystem/init.lua` 因 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；本轮未做 Studio Play 观感验证。`PROJECT_LOGIC.md` 已同步当前口径。
+
+### 2026-05-29 Coin flip vertical-axis spin correction
+
+- Outcome: `EffectSystem` 移除了空中 `airborneYawRadians` / `yawAngle` 路径，`buildAirborneCoinWorldRotation()` 改为从最终平铺姿态反推空中姿态：取硬币最终平铺后的 `RightVector` 投影到桌面平面作为水平翻面轴，并用剩余翻转角回推当前位置；起始帧也不再使用竖立的 `CoinVisualBaseRot`，避免硬币像竖着的轮子转。`EffectSystem/Presets.lua` 移除了 `AirYawMinTurns / AirYawMaxTurns` 和旧落地姿态 blend 配置。落地仍会收敛到 Heads / Tails 与随机平铺朝向。`PROJECT_LOGIC.md` 已同步当前表现口径。
+- Validation: Studio MCP 确认 `coin1` 到 `coin10` 的 PrimaryPart 都是 `X/Z` 大、`Y` 薄，厚度轴确认为本地 Y；`rg` 确认 `AirYaw`、`airborneYaw`、`yawAngle`、`getRandomAirborneYawRadians`、`LandingOrientationBlend`、`easeOutCubic` 在 `EffectSystem` 无残留；`git diff --check -- src/ReplicatedStorage/Systems/EffectSystem/init.lua src/ReplicatedStorage/Systems/EffectSystem/Presets.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过。`stylua --check src/ReplicatedStorage/Systems/EffectSystem/init.lua src/ReplicatedStorage/Systems/EffectSystem/Presets.lua` 因 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；本轮未做 Studio Play 观感验证。
+
+### 2026-05-29 Loading coin X-size lock correction
+
+- Outcome: 修正加载屏硬币视觉宽度随高度一起缩小的问题。`Loader.ResetUi()` 现在强制 `Coin.ScaleType = Stretch` 并销毁硬币自身的 `UIAspectRatioConstraint`；打开的 Studio 模板 `ReplicatedFirst.LoadingScreen.Background.CoinStage.Coin` 也已改为 `ScaleType = Stretch` 且移除 `Aspect` 约束。翻面动画继续只改 `Coin.Size.Y`，`Coin.Size.X` 固定为 `0.22`。
+- Validation: Studio MCP 确认模板 `ScaleType=Stretch; AspectConstraints=0`；本地采样确认动画尺寸范围为 `Size.X = 0.22 -> 0.22`、`Size.Y = 0 -> 0.22`；`git diff --check -- src/ReplicatedFirst/LoadingScreen/Loader.lua docs/TASK_STATE.md` 通过。`stylua --check src/ReplicatedFirst/LoadingScreen/Loader.lua` 因 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；本轮未做 Studio Play。
+
+### 2026-05-29 Loading coin projection correction
+
+- Outcome: `ReplicatedFirst.LoadingScreen.Loader` 的硬币翻面逻辑改为平视圆盘投影：硬币宽度保持 `0.22`，可见正面高度按 `abs(sin(flipAngle))` 从 `0` 到完整直径循环，接近横截面时强制归零；保留上抛位移和阴影缩放，不再给 `Size.Y` 保底厚度。
+- Validation: `git diff --check -- src/ReplicatedFirst/LoadingScreen/Loader.lua docs/TASK_STATE.md` 通过；本地采样确认投影高度范围为 `min = 0`、`max ≈ 1`。`stylua --check src/ReplicatedFirst/LoadingScreen/Loader.lua` 因 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；本轮未做 Studio Play。
+
+### 2026-05-29 Loading coin / desktop scene click correction
+
+- Outcome: `ReplicatedFirst.LoadingScreen.Loader` 的加载硬币改为更大的 `0.22` scale，并用固定宽度 + `Size.Y` 高度缩放表现翻面，不再旋转 2D 图片；`EffectSystem` 的桌面 / 桌搭点击射线改为使用 `InputObject.Position` 配合 `Camera:ScreenPointToRay()`，避免桌面鼠标从 `GetMouseLocation()` 取坐标导致命中点下偏。
+- Validation: `git diff --check -- src/ReplicatedFirst/LoadingScreen/Loader.lua src/ReplicatedStorage/Systems/EffectSystem/init.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过；源码扫描确认相关路径不再调用 `UserInputService:GetMouseLocation()`，并记录 `InputObject.Position + ScreenPointToRay()` 口径。`stylua --check src/ReplicatedFirst/LoadingScreen/Loader.lua src/ReplicatedStorage/Systems/EffectSystem/init.lua` 因 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；本轮未做 Studio Play，最终桌面命中手感和加载屏视觉比例仍需在 Studio 里看一眼。
+
+### 2026-05-29 Shop price button layout
+
+- Outcome: 通过 Studio MCP 调整 `StarterGui.Main.Frames.Shop.Body.Items.Template`：隐藏独立 `Price` 文本，把 `BuyButton` 放到底部中间并放大到卡片宽度约 `68%`、高度约 `21%`，按钮文本开启缩放。`EcoSystem/ui.lua` 同步改为隐藏每张 Shop 卡的 `Price`，购买按钮直接显示价格 / Robux 价格；已拥有显示 `Owned`，未配置付费 id 仍显示 `Set ID`，现金不足时保留价格但置灰不可点。
+- Validation: Studio edit-time 扫描确认模板 `Price.Visible = false`、`BuyButton.Position = UDim2.fromScale(0.5, 0.84)`、`BuyButton.Size = UDim2.fromScale(0.68, 0.21)`、`TextScaled = true`；Studio Play 单客户端生成卡片确认 `Price` 隐藏，`Copper R Coin` 按钮显示 `Owned`，后续商品按钮直接显示 `$ 180`、`$ 520` 等价格。控制台仅有既有 StyleRule `CornerRadius` 警告；`git diff --check -- src/ReplicatedStorage/Systems/EcoSystem/ui.lua docs/TASK_STATE.md` 通过。
+
+### 2026-05-29 UI text scale / Bias wording pass
+
+- Outcome: 通过 Studio MCP 把 DataModel 内所有 `TextLabel.TextScaled` 启用；`CoinFlipHUD` 的 `Bias` 标题改为 `Luck`，Rebirth 重置说明缩短为 `Cash, Value, Combo, Speed, and Luck reset.`。源码中玩家可见升级名 / Rebirth 永久升级描述同步改为 `Luck`，内部 `biasLevel`、`BiasStep` 和 Studio 节点名保持不变，避免触碰存档和绑定路径。`PROJECT_LOGIC.md` 已同步 UI / Rebirth 口径。
+- Validation: Studio edit-time 扫描确认全 DataModel 无 `TextLabel.TextScaled = false`，且 TextLabel / TextButton / TextBox 中无可见 `bias` 文本；长文案扫描剩余项来自 disabled legacy `Main.Frames.noUse`、旧 `Tutor` 或插件 CoreGui，未混入主玩法改动。`git diff --check -- src/ReplicatedStorage/configs/GameConfig.lua src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua src/ReplicatedStorage/Systems/RebirthSystem/Presets.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过；源码扫描确认剩余 `Bias` 只在内部字段 / 常量 / 节点名中出现。
 
 ### 2026-05-28 LoadingScreen duration controls
 

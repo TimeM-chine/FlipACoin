@@ -14,6 +14,7 @@ local FOLLOW_FIELD_OF_VIEW = 68
 local FOLLOW_LERP_ALPHA = 0.34
 local FOLLOW_TARGET_OFFSET = Vector3.new(0, 0.08, 0)
 local DEFAULT_FOLLOW_DURATION = 1.1
+local INITIAL_TABLE_LOOK_HOLD_DURATION = 0.8
 -- X right, Y up, Z back relative to HumanoidRootPart; negative Z moves camera forward.
 local BODY_VIEW_CAMERA_OFFSET = Vector3.new(0, -0.08, -0.28)
 local TABLE_MODEL_NAME = "CoinFlipTable"
@@ -32,6 +33,9 @@ local characterConnections = {}
 local coinFollowState
 local SystemMgr
 local initialTableLookPending = false
+local initialTableLookRequested = false
+local initialTableLookVector
+local initialTableLookHoldUntil = 0
 local lastHeadPosePitch = 0
 local lastHeadPoseYaw = 0
 local lastHeadPoseSentAt = 0
@@ -235,14 +239,22 @@ local function applyFreeFirstPerson(camera)
 	local lookVector = clampLookToRootYaw(camera.CFrame.LookVector)
 	local upVector = camera.CFrame.UpVector
 	local cameraPosition = getBodyViewCameraPosition(head)
+	local now = os.clock()
 	local tableCenterPosition = initialTableLookPending and getTableCenterPosition() or nil
 	if tableCenterPosition then
 		local tableLookOffset = tableCenterPosition - cameraPosition
 		if tableLookOffset.Magnitude > 0.001 then
-			lookVector = clampLookToRootYaw(tableLookOffset.Unit)
-			upVector = Vector3.yAxis
+			initialTableLookVector = tableLookOffset.Unit
+			initialTableLookHoldUntil = now + INITIAL_TABLE_LOOK_HOLD_DURATION
 		end
 		initialTableLookPending = false
+	end
+	if initialTableLookVector and now <= initialTableLookHoldUntil then
+		lookVector = clampLookToRootYaw(initialTableLookVector)
+		upVector = Vector3.yAxis
+		camera.CameraType = Enum.CameraType.Scriptable
+	elseif initialTableLookVector and now > initialTableLookHoldUntil then
+		initialTableLookVector = nil
 	end
 
 	camera.CFrame = CFrame.lookAt(cameraPosition, cameraPosition + lookVector, upVector)
@@ -329,12 +341,6 @@ local function bindCharacter(character)
 	local humanoid = character:FindFirstChild("Humanoid") or character:WaitForChild("Humanoid", 5)
 	if humanoid and humanoid:IsA("Humanoid") then
 		currentHumanoid = humanoid
-		initialTableLookPending = true
-		table.insert(characterConnections, humanoid.Seated:Connect(function(isSeated)
-			if isSeated then
-				initialTableLookPending = true
-			end
-		end))
 	end
 
 	applyCharacterVisibility(character)
@@ -383,6 +389,16 @@ end
 
 function FirstPersonCamera.ReturnToFirstPerson(coin)
 	clearCoinFollow(coin)
+	applyCamera()
+end
+
+function FirstPersonCamera.RequestInitialTableLook()
+	if initialTableLookRequested then
+		return
+	end
+
+	initialTableLookRequested = true
+	initialTableLookPending = true
 	applyCamera()
 end
 
