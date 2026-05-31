@@ -762,6 +762,11 @@ function EcoSystem:RequestShopPurchase(sender, player, args)
 			rarity = item.rarity,
 			cost = item.cost,
 		})
+		if category == "coin" then
+			SystemMgr.systems.CoinFlipSystem:HandleGuideCoinPurchased(SENDER, player, {
+				itemId = item.id,
+			})
+		end
 		SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
 			purchasedItem = item.id,
 		})
@@ -807,6 +812,11 @@ function EcoSystem:RequestEquipItem(sender, player, args)
 			itemId = item.id,
 			source = "inventory",
 		})
+		if category == "coin" then
+			SystemMgr.systems.CoinFlipSystem:HandleGuideCoinEquipped(SENDER, player, {
+				itemId = item.id,
+			})
+		end
 		SystemMgr.systems.TableSeatSystem:RefreshAudienceState(SENDER)
 		SystemMgr.systems.CoinFlipSystem:SyncPlayerState(SENDER, player, {
 			equippedItem = item.id,
@@ -834,6 +844,22 @@ function EcoSystem:SyncLoadoutState(sender, player, args)
 	end
 
 	EcoUi.SyncLoadoutState(args)
+end
+
+function EcoSystem:OpenGuideShopItem(args)
+	if IsServer then
+		return nil
+	end
+
+	return EcoUi.OpenGuideShopItem(args)
+end
+
+function EcoSystem:OpenGuideInventoryItem(args)
+	if IsServer then
+		return nil
+	end
+
+	return EcoUi.OpenGuideInventoryItem(args)
 end
 
 function EcoSystem:GrantFlipACoinProduct(sender, player, args)

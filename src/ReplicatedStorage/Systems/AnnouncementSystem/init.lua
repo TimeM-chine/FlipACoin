@@ -72,12 +72,14 @@ function AnnouncementSystem:HandleFlipResolved(sender, player, args)
 		return
 	end
 
-	local milestone = args.streakMilestone or self:BuildStreakMilestonePayload(SENDER, player, args)
+	local milestone = args.streakMilestone
+		or self:BuildBestStreakPayload(SENDER, player, args)
+		or self:BuildStreakMilestonePayload(SENDER, player, args)
 	if not milestone then
 		return
 	end
 
-	local dedupeKey = `{player.UserId}:{milestone.streak}`
+	local dedupeKey = `{player.UserId}:{milestone.kind or "streakMilestone"}:{milestone.streak}`
 	local now = os.clock()
 	if self.recentAnnouncements[dedupeKey] and now - self.recentAnnouncements[dedupeKey] < Presets.DebounceSeconds then
 		return
@@ -107,10 +109,42 @@ function AnnouncementSystem:BuildStreakMilestonePayload(sender, player, args)
 	end
 
 	return {
+		kind = "streakMilestone",
 		userId = player.UserId,
 		seatId = args.seatId,
 		streak = args.streak,
 		text = Presets.BuildText(player, args.streak),
+		textColor = Presets.NotificationColor,
+		duration = Presets.NotificationDuration,
+		sfx = effectConfig.sfx,
+		vfx = effectConfig.vfx,
+		cameraShake = effectConfig.cameraShake,
+	}
+end
+
+function AnnouncementSystem:BuildBestStreakPayload(sender, player, args)
+	if not IsServer then
+		return nil
+	end
+	if sender ~= SENDER then
+		return nil
+	end
+	if args.result ~= "Heads" then
+		return nil
+	end
+	if args.isBestStreak ~= true then
+		return nil
+	end
+
+	local effectConfig = Presets.BestStreakEffect
+
+	return {
+		kind = "bestStreak",
+		userId = player.UserId,
+		seatId = args.seatId,
+		streak = args.streak,
+		bestStreak = args.bestStreak,
+		text = Presets.BuildBestStreakText(player, args.streak),
 		textColor = Presets.NotificationColor,
 		duration = Presets.NotificationDuration,
 		sfx = effectConfig.sfx,

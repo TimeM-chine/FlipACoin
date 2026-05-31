@@ -487,7 +487,7 @@ function getDynamicDecorationCFrame(assignment, seatCFrame)
 		right = right.Unit
 	end
 
-	local rawPosition = seatCFrame.Position + inward * 2.25 - right * 0.85
+	local rawPosition = seatCFrame.Position + inward * 2.25 - right * 1.45
 	local surfacePosition = rawPosition - tableNormal * (rawPosition - surfaceCenter):Dot(tableNormal)
 	local position = surfacePosition + tableNormal * 0.03
 	return CFrame.lookAt(position, position - inward, tableNormal)

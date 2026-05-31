@@ -54,6 +54,9 @@ EffectPresets.CoinFlipVisuals = table.freeze({
 	MilestoneHighlightOutlineColor = Color3.fromRGB(255, 255, 235),
 	MilestoneHighlightFillTransparency = 0.52,
 	MilestoneHighlightOutlineTransparency = 0.04,
+	HotStreakSpotlightAssetName = "hotStreakSpotlight",
+	HotStreakSpotlightMinimum = 5,
+	HotStreakSpotlightOffset = CFrame.new(0, 1.15, 0),
 	-- 平铺落地：局部厚度轴与世界桌面法线。1 为 +Y 对 +法线；-1 为 +Y 对 -法线（常见导入硬币）
 	FlatThicknessLocalSign = -1,
 })

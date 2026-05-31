@@ -273,6 +273,8 @@ local function resolveActorFlip(self, actor)
 	local hiddenChanceBonus = playerState and getFirstRebirthAssistBonus(actor.playerIns, playerState) or 0
 	local isHeads = math.random() < Presets.GetRollHeadsChance(runData, bonusStats, hiddenChanceBonus)
 	local reward = 0
+	local isBestStreak = false
+	local bestStreak
 
 	runData.flipsThisRun += 1
 	if isHeads then
@@ -284,6 +286,20 @@ local function resolveActorFlip(self, actor)
 		reward = Presets.GetHeadsReward(runData, bonusStats)
 		runData.cashEarnedThisRun += reward
 		runData.bestStreakThisRun = math.max(runData.bestStreakThisRun, runData.currentStreak)
+		if actor.isFake then
+			local previousBestStreak = if actor.fakeActor
+				then actor.fakeActor.bestStreak or 0
+				else actor.bestStreak or 0
+			isBestStreak = runData.currentStreak > previousBestStreak
+			bestStreak = math.max(previousBestStreak, runData.currentStreak)
+			if actor.fakeActor then
+				actor.fakeActor.bestStreak = bestStreak
+			end
+		else
+			local previousBestStreak = actor.playerIns:GetOneData(dataKey.bestStreak)
+			isBestStreak = runData.currentStreak > previousBestStreak
+			bestStreak = math.max(previousBestStreak, runData.currentStreak)
+		end
 	else
 		if playerState then
 			if hiddenChanceBonus > 0 then
@@ -312,10 +328,7 @@ local function resolveActorFlip(self, actor)
 		end
 		if isHeads then
 			playerIns:SetOneData(dataKey.lifetimeHeads, playerIns:GetOneData(dataKey.lifetimeHeads) + 1)
-			playerIns:SetOneData(
-				dataKey.bestStreak,
-				math.max(playerIns:GetOneData(dataKey.bestStreak), runData.bestStreakThisRun)
-			)
+			playerIns:SetOneData(dataKey.bestStreak, bestStreak)
 		end
 		playerIns:SetOneData(dataKey.runData, runData)
 	end
@@ -326,13 +339,22 @@ local function resolveActorFlip(self, actor)
 		result = isHeads and "Heads" or "Tails",
 		reward = reward,
 		streak = runData.currentStreak,
+		isBestStreak = isBestStreak,
+		bestStreak = bestStreak,
 		bestStreakThisRun = runData.bestStreakThisRun,
 		equippedCoin = actor.equippedCoin,
 		isFake = actor.isFake == true,
 		fakeId = actor.fakeId,
 	}
-	local streakMilestone =
-		SystemMgr.systems.AnnouncementSystem:BuildStreakMilestonePayload(SENDER, actor.announcementActor, observedPayload)
+	local streakMilestone = SystemMgr.systems.AnnouncementSystem:BuildBestStreakPayload(
+		SENDER,
+		actor.announcementActor,
+		observedPayload
+	) or SystemMgr.systems.AnnouncementSystem:BuildStreakMilestonePayload(
+		SENDER,
+		actor.announcementActor,
+		observedPayload
+	)
 	if streakMilestone then
 		observedPayload.streakMilestone = streakMilestone
 	end
@@ -456,9 +478,6 @@ function CoinFlipSystem:RequestFlip(sender, player)
 	applyOnboardingAction(self, player, "flip", {
 		flipCount = runData.flipsThisRun,
 	})
-	applyOnboardingAction(self, player, "streak", {
-		streak = runData.currentStreak,
-	})
 
 	seatSystem:RegisterActivity(SENDER, player)
 	refreshCashDisplays(player)
@@ -470,6 +489,8 @@ function CoinFlipSystem:RequestFlip(sender, player)
 		result = observedPayload.result,
 		reward = resolvedFlip.reward,
 		streak = runData.currentStreak,
+		isBestStreak = observedPayload.isBestStreak,
+		bestStreak = observedPayload.bestStreak,
 		equippedCoin = equippedCoin,
 		streakMilestone = resolvedFlip.streakMilestone,
 	}, true)
@@ -507,6 +528,8 @@ function CoinFlipSystem:RequestFakeFlip(sender, fakeActor)
 		equippedCoin = fakeActor.equippedCoin,
 		equippedDeskSetup = fakeActor.equippedDeskSetup,
 		equippedChair = fakeActor.equippedChair,
+		bestStreak = fakeActor.bestStreak,
+		fakeActor = fakeActor,
 		bonusStats = bonusStats,
 		isFake = true,
 		fakeId = fakeActor.fakeId,
@@ -566,7 +589,6 @@ function CoinFlipSystem:BuyUpgrade(sender, player, args)
 	})
 	runData[upgradeKey] += 1
 	playerIns:SetOneData(dataKey.runData, runData)
-	applyOnboardingAction(self, player, "buyUpgrade")
 	SystemMgr.systems.AnalyticsSystem:LogRunUpgradePurchased(SENDER, player, {
 		upgradeKey = upgradeKey,
 		newLevel = runData[upgradeKey],
@@ -643,6 +665,49 @@ function CoinFlipSystem:HandleGuideSit(sender, player)
 	end
 
 	applyOnboardingAction(self, player, "autoSeat", nil, true)
+end
+
+function CoinFlipSystem:HandleGuideRebirth(sender, player)
+	if not IsServer then
+		return
+	end
+	if sender ~= SENDER then
+		return
+	end
+
+	applyOnboardingAction(self, player, "rebirth", nil, true)
+end
+
+function CoinFlipSystem:HandleGuideCoinPurchased(sender, player, args)
+	if not IsServer then
+		return
+	end
+	if sender ~= SENDER then
+		return
+	end
+	if typeof(args) ~= "table" then
+		return
+	end
+
+	applyOnboardingAction(self, player, "coinPurchase", {
+		itemId = args.itemId,
+	}, true)
+end
+
+function CoinFlipSystem:HandleGuideCoinEquipped(sender, player, args)
+	if not IsServer then
+		return
+	end
+	if sender ~= SENDER then
+		return
+	end
+	if typeof(args) ~= "table" then
+		return
+	end
+
+	applyOnboardingAction(self, player, "coinEquip", {
+		itemId = args.itemId,
+	}, true)
 end
 
 function CoinFlipSystem:UpdateOnboarding(sender, player, args)

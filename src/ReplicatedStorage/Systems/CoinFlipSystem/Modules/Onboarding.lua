@@ -1,48 +1,41 @@
 local Replicated = game:GetService("ReplicatedStorage")
 
 local Keys = require(Replicated.configs.Keys)
+local EcoPresets = require(Replicated.Systems.EcoSystem.Presets)
+local RebirthPresets = require(Replicated.Systems.RebirthSystem.Presets)
 
 local dataKey = Keys.DataKey
 
 local Onboarding = {}
 
-Onboarding.RequiredFlipCount = 3
-
 Onboarding.StepOrder = table.freeze({
 	{
-		key = "autoSeat",
-		label = "Seat Ready",
-		title = "Get seated at the table",
-		analyticsStep = 2,
-		analyticsName = "coinflip_auto_seated",
-	},
-	{
 		key = "firstFlip",
-		label = "First Flip",
-		title = "Make your first flip",
+		label = "Flip",
+		title = "Flip your first coin",
 		analyticsStep = 3,
 		analyticsName = "coinflip_first_flip",
 	},
 	{
-		key = "flipThree",
-		label = "Flip x3",
-		title = "Flip 3 times",
-		analyticsStep = 4,
-		analyticsName = "coinflip_flip_three",
+		key = "rebirth",
+		label = "Rebirth",
+		title = "Make your first rebirth",
+		analyticsStep = 7,
+		analyticsName = "coinflip_first_rebirth",
 	},
 	{
-		key = "buyUpgrade",
-		label = "Buy Upgrade",
-		title = "Buy your first upgrade",
-		analyticsStep = 5,
-		analyticsName = "coinflip_buy_upgrade",
+		key = "coinBuy",
+		label = "Buy Coin",
+		title = "Buy a new coin",
+		analyticsStep = 8,
+		analyticsName = "coinflip_buy_coin",
 	},
 	{
-		key = "tryStreak",
-		label = "Try Streak",
-		title = "Try for a Heads streak",
-		analyticsStep = 6,
-		analyticsName = "coinflip_try_streak",
+		key = "coinEquip",
+		label = "Equip Coin",
+		title = "Equip your new coin",
+		analyticsStep = 9,
+		analyticsName = "coinflip_equip_coin",
 	},
 })
 
@@ -52,12 +45,11 @@ for _, step in ipairs(Onboarding.StepOrder) do
 end
 
 local DefaultState = table.freeze({
-	version = 2,
-	autoSeated = false,
-	firstFlip = false,
-	flipCount = 0,
-	boughtUpgrade = false,
-	triedStreak = false,
+	version = 3,
+	firstFlipDone = false,
+	rebirthDone = false,
+	coinPurchased = false,
+	coinEquipped = false,
 	completed = false,
 })
 
@@ -65,29 +57,164 @@ local function cloneDefaultState()
 	return table.clone(DefaultState)
 end
 
+local function getDefaultCoinId()
+	return EcoPresets.LoadoutDefaults.equippedCoin
+end
+
+local function isNonDefaultCoin(coinId)
+	return typeof(coinId) == "string" and coinId ~= "" and coinId ~= getDefaultCoinId()
+end
+
+local function getOwnedCoins(playerIns)
+	local ownedCoins = playerIns:GetOneData(dataKey.ownedCoins)
+	if typeof(ownedCoins) == "table" then
+		return ownedCoins
+	end
+
+	return {}
+end
+
+local function getFirstOwnedNonDefaultCoinId(playerIns)
+	local ownedCoins = getOwnedCoins(playerIns)
+	for _, item in ipairs(EcoPresets.GrowthShopItems.coin or {}) do
+		if isNonDefaultCoin(item.id) and ownedCoins[item.id] == true then
+			return item.id
+		end
+	end
+
+	return nil
+end
+
+local function getCoinDisplayName(coinId)
+	return EcoPresets.GetShopItemDisplayName("coin", coinId)
+end
+
+local function hasAnyFlipProgress(playerIns)
+	local lifetimeFlips = playerIns:GetOneData(dataKey.lifetimeFlips) or 0
+	if lifetimeFlips > 0 then
+		return true
+	end
+
+	local runData = playerIns:GetOneData(dataKey.runData)
+	return typeof(runData) == "table" and (runData.flipsThisRun or 0) > 0
+end
+
+function Onboarding.GetCoinPurchaseTarget(playerIns)
+	local ownedCoins = getOwnedCoins(playerIns)
+	local cash = playerIns:GetOneData(dataKey.wins) or 0
+
+	for _, item in ipairs(EcoPresets.GrowthShopItems.coin or {}) do
+		if isNonDefaultCoin(item.id) and ownedCoins[item.id] ~= true and cash >= item.cost then
+			return item
+		end
+	end
+
+	return nil
+end
+
+function Onboarding.GetCoinEquipTarget(playerIns, state)
+	local ownedCoins = getOwnedCoins(playerIns)
+	local preferredCoinId = state and state.coinPurchasedItemId
+	if isNonDefaultCoin(preferredCoinId) and ownedCoins[preferredCoinId] == true then
+		return EcoPresets.GetShopItem("coin", preferredCoinId)
+	end
+
+	local firstOwnedCoinId = getFirstOwnedNonDefaultCoinId(playerIns)
+	if firstOwnedCoinId then
+		return EcoPresets.GetShopItem("coin", firstOwnedCoinId)
+	end
+
+	return nil
+end
+
+function Onboarding.CanRebirth(playerIns)
+	local cash = playerIns:GetOneData(dataKey.wins) or 0
+	return RebirthPresets.GetFlipACoinPointGain(cash) > 0
+end
+
 local function isStateComplete(state)
-	return state.autoSeated
-		and state.firstFlip
-		and state.flipCount >= Onboarding.RequiredFlipCount
-		and state.boughtUpgrade
-		and state.triedStreak
+	return state.firstFlipDone and state.rebirthDone and state.coinEquipped
+end
+
+local function persistState(playerIns, guideData, state)
+	guideData.coinFlipOnboarding = state
+	playerIns:SetOneData(dataKey.guideData, guideData)
+end
+
+local function migrateState(playerIns, state)
+	local migratedState = cloneDefaultState()
+	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin)
+	local ownedCoinId = getFirstOwnedNonDefaultCoinId(playerIns)
+
+	if state.completed == true or state.firstFlip == true or (state.flipCount or 0) >= 1 or hasAnyFlipProgress(playerIns) then
+		migratedState.firstFlipDone = true
+	end
+	if (playerIns:GetOneData(dataKey.rebirth) or 0) > 0 then
+		migratedState.rebirthDone = true
+	end
+	if isNonDefaultCoin(equippedCoin) then
+		migratedState.coinPurchased = true
+		migratedState.coinPurchasedItemId = equippedCoin
+		migratedState.coinEquipped = true
+	elseif ownedCoinId then
+		migratedState.coinPurchased = true
+		migratedState.coinPurchasedItemId = ownedCoinId
+	end
+	migratedState.completed = isStateComplete(migratedState)
+
+	return migratedState
+end
+
+local function applyLiveProgress(playerIns, state)
+	local changed = false
+	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin)
+	local ownedCoinId = getFirstOwnedNonDefaultCoinId(playerIns)
+
+	if not state.firstFlipDone and hasAnyFlipProgress(playerIns) then
+		state.firstFlipDone = true
+		changed = true
+	end
+	if not state.rebirthDone and (playerIns:GetOneData(dataKey.rebirth) or 0) > 0 then
+		state.rebirthDone = true
+		changed = true
+	end
+	if isNonDefaultCoin(equippedCoin) then
+		if not state.coinPurchased or state.coinPurchasedItemId ~= equippedCoin then
+			state.coinPurchased = true
+			state.coinPurchasedItemId = equippedCoin
+			changed = true
+		end
+		if not state.coinEquipped then
+			state.coinEquipped = true
+			changed = true
+		end
+	elseif ownedCoinId and not state.coinPurchased then
+		state.coinPurchased = true
+		state.coinPurchasedItemId = ownedCoinId
+		changed = true
+	end
+
+	local completed = isStateComplete(state)
+	if state.completed ~= completed then
+		state.completed = completed
+		changed = true
+	end
+
+	return changed
 end
 
 function Onboarding.IsStepComplete(state, stepKey)
-	if stepKey == "autoSeat" then
-		return state.autoSeated == true
-	end
 	if stepKey == "firstFlip" then
-		return state.firstFlip == true
+		return state.firstFlipDone == true
 	end
-	if stepKey == "flipThree" then
-		return (state.flipCount or 0) >= Onboarding.RequiredFlipCount
+	if stepKey == "rebirth" then
+		return state.rebirthDone == true
 	end
-	if stepKey == "buyUpgrade" then
-		return state.boughtUpgrade == true
+	if stepKey == "coinBuy" then
+		return state.coinPurchased == true
 	end
-	if stepKey == "tryStreak" then
-		return state.triedStreak == true
+	if stepKey == "coinEquip" then
+		return state.coinEquipped == true
 	end
 
 	return false
@@ -103,12 +230,20 @@ function Onboarding.GetCompletedCount(state)
 	return completedCount
 end
 
-function Onboarding.GetCurrentStepKey(state)
-	for _, step in ipairs(Onboarding.StepOrder) do
-		if not Onboarding.IsStepComplete(state, step.key) then
-			return step.key
-		end
+function Onboarding.GetCurrentStepKey(playerIns, state)
+	if not state.firstFlipDone then
+		return "firstFlip"
 	end
+	if not state.rebirthDone then
+		return "rebirth"
+	end
+	if not state.coinPurchased then
+		return "coinBuy"
+	end
+	if not state.coinEquipped then
+		return "coinEquip"
+	end
+
 	return nil
 end
 
@@ -116,8 +251,8 @@ function Onboarding.GetStepConfig(stepKey)
 	return stepKey and StepLookup[stepKey] or nil
 end
 
-function Onboarding.GetCurrentStepConfig(state)
-	return Onboarding.GetStepConfig(Onboarding.GetCurrentStepKey(state))
+function Onboarding.GetCurrentStepConfig(playerIns, state)
+	return Onboarding.GetStepConfig(Onboarding.GetCurrentStepKey(playerIns, state))
 end
 
 local function getCurrentStepKeyFromState(state)
@@ -129,7 +264,7 @@ local function getCurrentStepKeyFromState(state)
 		return state.currentStep
 	end
 
-	return Onboarding.GetCurrentStepKey(state)
+	return nil
 end
 
 function Onboarding.BuildActionText(state, context)
@@ -138,21 +273,17 @@ function Onboarding.BuildActionText(state, context)
 		return "Free Play"
 	end
 
-	if stepKey == "autoSeat" then
-		return "Finding Seat"
-	end
 	if stepKey == "firstFlip" then
 		return "First Flip"
 	end
-	if stepKey == "flipThree" then
-		local flipCount = math.min(state.flipCount or 0, Onboarding.RequiredFlipCount)
-		return `Flip {flipCount}/{Onboarding.RequiredFlipCount}`
+	if stepKey == "rebirth" then
+		return state.shouldGuide and "Rebirth Ready" or "Build Rebirth"
 	end
-	if stepKey == "buyUpgrade" then
-		return "Buy Upgrade"
+	if stepKey == "coinBuy" then
+		return state.shouldGuide and "Buy Coin" or "Earn Coin"
 	end
-	if stepKey == "tryStreak" then
-		return "Try Streak"
+	if stepKey == "coinEquip" then
+		return "Equip Coin"
 	end
 
 	return "Keep Going"
@@ -168,59 +299,20 @@ function Onboarding.BuildHeadSecondaryText(state, context)
 		return "Cash Run"
 	end
 
-	if stepKey == "autoSeat" then
-		return "Auto seating"
-	end
 	if stepKey == "firstFlip" then
 		return "Tap FLIP"
 	end
-	if stepKey == "flipThree" then
-		return "Earn first upgrade"
+	if stepKey == "rebirth" then
+		return state.shouldGuide and "Use Rebirth" or "Build Cash"
 	end
-	if stepKey == "buyUpgrade" then
-		local cash = context and context.cash
-		if typeof(cash) == "number" then
-			return `$ {cash}`
-		end
-		if typeof(cash) == "string" and cash ~= "" then
-			return `$ {cash}`
-		end
-		return "Spend your Cash"
+	if stepKey == "coinBuy" then
+		return state.shouldGuide and `Buy {state.targetCoinName or "Coin"}` or "Save for Coin"
 	end
-	if stepKey == "tryStreak" then
-		return "Flip after upgrading"
+	if stepKey == "coinEquip" then
+		return `Equip {state.targetCoinName or "Coin"}`
 	end
 
 	return "Keep Going"
-end
-
-local function persistState(playerIns, guideData, state)
-	guideData.coinFlipOnboarding = state
-	playerIns:SetOneData(dataKey.guideData, guideData)
-end
-
-local function migrateState(state)
-	local migratedState = cloneDefaultState()
-	local flipCount = state.flipCount or 0
-
-	if state.completed == true then
-		migratedState.autoSeated = true
-		migratedState.firstFlip = true
-		migratedState.flipCount = Onboarding.RequiredFlipCount
-		migratedState.boughtUpgrade = true
-		migratedState.triedStreak = true
-		migratedState.completed = true
-		return migratedState
-	end
-
-	migratedState.autoSeated = state.autoSeated == true or state.sitDown == true or state.approachSeat == true
-	migratedState.firstFlip = state.firstFlip == true or flipCount >= 1
-	migratedState.flipCount = flipCount
-	migratedState.boughtUpgrade = state.boughtUpgrade == true
-	migratedState.triedStreak = state.triedStreak == true or state.reachedTwoStreak == true
-	migratedState.completed = isStateComplete(migratedState)
-
-	return migratedState
 end
 
 function Onboarding.EnsureState(playerIns)
@@ -236,29 +328,28 @@ function Onboarding.EnsureState(playerIns)
 	if typeof(state) ~= "table" then
 		state = cloneDefaultState()
 		needsSave = true
+	elseif state.version ~= DefaultState.version then
+		state = migrateState(playerIns, state)
+		needsSave = true
 	else
-		if state.version ~= DefaultState.version then
-			state = migrateState(state)
+		if typeof(state.firstFlipDone) ~= "boolean" then
+			state.firstFlipDone = false
 			needsSave = true
 		end
-		if typeof(state.autoSeated) ~= "boolean" then
-			state.autoSeated = false
+		if typeof(state.rebirthDone) ~= "boolean" then
+			state.rebirthDone = false
 			needsSave = true
 		end
-		if typeof(state.firstFlip) ~= "boolean" then
-			state.firstFlip = false
+		if typeof(state.coinPurchased) ~= "boolean" then
+			state.coinPurchased = false
 			needsSave = true
 		end
-		if typeof(state.flipCount) ~= "number" then
-			state.flipCount = 0
+		if typeof(state.coinPurchasedItemId) ~= "string" then
+			state.coinPurchasedItemId = nil
 			needsSave = true
 		end
-		if typeof(state.boughtUpgrade) ~= "boolean" then
-			state.boughtUpgrade = false
-			needsSave = true
-		end
-		if typeof(state.triedStreak) ~= "boolean" then
-			state.triedStreak = false
+		if typeof(state.coinEquipped) ~= "boolean" then
+			state.coinEquipped = false
 			needsSave = true
 		end
 		if typeof(state.completed) ~= "boolean" then
@@ -267,15 +358,7 @@ function Onboarding.EnsureState(playerIns)
 		end
 	end
 
-	local clampedFlipCount = math.clamp(math.floor(state.flipCount or 0), 0, Onboarding.RequiredFlipCount)
-	if clampedFlipCount ~= state.flipCount then
-		state.flipCount = clampedFlipCount
-		needsSave = true
-	end
-
-	local completed = isStateComplete(state)
-	if state.completed ~= completed then
-		state.completed = completed
+	if applyLiveProgress(playerIns, state) then
 		needsSave = true
 	end
 
@@ -288,8 +371,16 @@ end
 
 function Onboarding.BuildState(playerIns)
 	local _, state = Onboarding.EnsureState(playerIns)
-	local currentStepKey = Onboarding.GetCurrentStepKey(state)
+	local currentStepKey = Onboarding.GetCurrentStepKey(playerIns, state)
 	local currentStep = currentStepKey and StepLookup[currentStepKey] or nil
+	local purchaseTarget = Onboarding.GetCoinPurchaseTarget(playerIns)
+	local equipTarget = Onboarding.GetCoinEquipTarget(playerIns, state)
+	local canRebirth = Onboarding.CanRebirth(playerIns)
+	local shouldGuide = currentStepKey == "firstFlip"
+		or (currentStepKey == "rebirth" and canRebirth)
+		or (currentStepKey == "coinBuy" and purchaseTarget ~= nil)
+		or (currentStepKey == "coinEquip" and equipTarget ~= nil)
+	local targetCoin = currentStepKey == "coinEquip" and equipTarget or purchaseTarget
 	local steps = {}
 
 	for _, step in ipairs(Onboarding.StepOrder) do
@@ -307,8 +398,11 @@ function Onboarding.BuildState(playerIns)
 		currentTitle = currentStep and currentStep.title or "Guide complete",
 		completedCount = Onboarding.GetCompletedCount(state),
 		totalSteps = #Onboarding.StepOrder,
-		flipCount = math.clamp(state.flipCount or 0, 0, Onboarding.RequiredFlipCount),
-		requiredFlips = Onboarding.RequiredFlipCount,
+		shouldGuide = shouldGuide,
+		canRebirth = canRebirth,
+		targetCoinId = targetCoin and targetCoin.id or nil,
+		targetCoinName = targetCoin and getCoinDisplayName(targetCoin.id) or nil,
+		targetCoinCost = targetCoin and targetCoin.cost or nil,
 		steps = steps,
 	}
 end
@@ -322,48 +416,43 @@ function Onboarding.ApplyAction(playerIns, action, context)
 		return false, milestones
 	end
 
-	if action == "autoSeat" or action == "approachSeat" or action == "sitDown" then
-		if not state.autoSeated then
-			state.autoSeated = true
-			changed = true
-			table.insert(milestones, StepLookup.autoSeat)
-		end
-	elseif action == "flip" then
-		if not state.firstFlip then
-			state.firstFlip = true
+	if action == "flip" then
+		if not state.firstFlipDone then
+			state.firstFlipDone = true
 			changed = true
 			table.insert(milestones, StepLookup.firstFlip)
 		end
-		local previousCount = state.flipCount or 0
-		local targetCount = context and context.flipCount
-		if typeof(targetCount) ~= "number" then
-			targetCount = previousCount + 1
-		end
-		targetCount = math.clamp(math.floor(targetCount), 0, Onboarding.RequiredFlipCount)
-		if targetCount ~= previousCount then
-			state.flipCount = targetCount
+	elseif action == "rebirth" then
+		if not state.rebirthDone then
+			state.rebirthDone = true
 			changed = true
+			table.insert(milestones, StepLookup.rebirth)
 		end
-		if previousCount < Onboarding.RequiredFlipCount and state.flipCount >= Onboarding.RequiredFlipCount then
-			table.insert(milestones, StepLookup.flipThree)
-		end
-	elseif action == "buyUpgrade" then
-		if not state.boughtUpgrade then
-			state.boughtUpgrade = true
+	elseif action == "coinPurchase" then
+		local itemId = context and context.itemId
+		if isNonDefaultCoin(itemId) and (not state.coinPurchased or state.coinPurchasedItemId ~= itemId) then
+			state.coinPurchased = true
+			state.coinPurchasedItemId = itemId
 			changed = true
-			table.insert(milestones, StepLookup.buyUpgrade)
+			table.insert(milestones, StepLookup.coinBuy)
 		end
-	elseif action == "streak" then
-		if state.boughtUpgrade and state.flipCount >= Onboarding.RequiredFlipCount and not state.triedStreak then
-			state.triedStreak = true
+	elseif action == "coinEquip" then
+		local itemId = context and context.itemId
+		if isNonDefaultCoin(itemId) then
+			if not state.coinPurchased or state.coinPurchasedItemId ~= itemId then
+				state.coinPurchased = true
+				state.coinPurchasedItemId = itemId
+				table.insert(milestones, StepLookup.coinBuy)
+			end
+			if not state.coinEquipped then
+				state.coinEquipped = true
+				table.insert(milestones, StepLookup.coinEquip)
+			end
 			changed = true
-			table.insert(milestones, StepLookup.tryStreak)
 		end
 	end
 
-	local completed = isStateComplete(state)
-	if state.completed ~= completed then
-		state.completed = completed
+	if applyLiveProgress(playerIns, state) then
 		changed = true
 	end
 

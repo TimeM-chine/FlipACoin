@@ -62,6 +62,12 @@ local shopTopbarIcon
 local inventoryTopbarIcon
 local boostsTopbarIcon
 local selectedShopItemKeys = {}
+local generatedShopCards = {}
+local generatedInventoryCards = {}
+
+local function getGeneratedCardKey(category, itemId)
+	return `{category}:{itemId}`
+end
 
 local function getOwnedItems(category)
 	if category == "coin" then
@@ -339,10 +345,12 @@ local function updateShopPanel()
 		or (EcoPresets.GrowthShopItems[selectedShopCategory] or {})
 	local selectedItem = getSelectedShopItem(items)
 	clearGeneratedCards(ShopItems)
+	generatedShopCards = {}
 
 	for index, item in ipairs(items) do
 		local card = createGeneratedCard(ShopItemTemplate, ShopItems, index)
 		local itemKey = getShopSelectionKey(selectedShopCategory, item)
+		generatedShopCards[getGeneratedCardKey(selectedShopCategory, itemKey)] = card
 		updateCardSelection(card, selectedItem and itemKey == getShopSelectionKey(selectedShopCategory, selectedItem))
 		setCardIcon(card, getItemIcon(selectedShopCategory, item))
 		setTextIfPresent(card, "Name", item.displayName)
@@ -423,6 +431,7 @@ local function updateInventoryPanel()
 	local equippedItem = getEquippedItem(selectedInventoryCategory)
 	local visibleIndex = 0
 	clearGeneratedCards(InventoryItems)
+	generatedInventoryCards = {}
 
 	if selectedInventoryCategory == "other" then
 		local card = createGeneratedCard(InventoryItemTemplate, InventoryItems, 1)
@@ -438,6 +447,7 @@ local function updateInventoryPanel()
 		if ownedItems[item.id] then
 			visibleIndex += 1
 			local card = createGeneratedCard(InventoryItemTemplate, InventoryItems, visibleIndex)
+			generatedInventoryCards[getGeneratedCardKey(selectedInventoryCategory, item.id)] = card
 			setCardIcon(card, getItemIcon(selectedInventoryCategory, item))
 			setTextIfPresent(card, "Name", item.displayName)
 			card.Bonus.Text = describeItemStats(item.stats)
@@ -624,6 +634,53 @@ function EcoUi.SyncLoadoutState(args)
 	elseif args and args.equippedItem then
 		playSfx("equipItem")
 	end
+end
+
+function EcoUi.OpenGuideShopItem(args)
+	if not initialized then
+		return nil
+	end
+
+	currentCash = ClientData:GetOneData(dataKey.wins) or currentCash
+	currentLoadoutState = ClientData:GetOneData("loadoutState") or currentLoadoutState
+	local category = args and args.category or "coin"
+	local itemId = args and args.itemId
+	if not EcoPresets.GrowthShopItems[category] then
+		return nil
+	end
+
+	selectedShopCategory = category
+	if typeof(itemId) == "string" then
+		selectedShopItemKeys[category] = itemId
+	end
+	resetScrollPosition(ShopItems)
+	updatePanels()
+	uiController.OpenFrame("Shop")
+
+	local card = typeof(itemId) == "string" and generatedShopCards[getGeneratedCardKey(category, itemId)] or nil
+	return card and card:FindFirstChild("BuyButton")
+end
+
+function EcoUi.OpenGuideInventoryItem(args)
+	if not initialized then
+		return nil
+	end
+
+	currentCash = ClientData:GetOneData(dataKey.wins) or currentCash
+	currentLoadoutState = ClientData:GetOneData("loadoutState") or currentLoadoutState
+	local category = args and args.category or "coin"
+	local itemId = args and args.itemId
+	if not EcoPresets.GrowthShopItems[category] then
+		return nil
+	end
+
+	selectedInventoryCategory = category
+	resetScrollPosition(InventoryItems)
+	updatePanels()
+	uiController.OpenFrame("Inventory")
+
+	local card = typeof(itemId) == "string" and generatedInventoryCards[getGeneratedCardKey(category, itemId)] or nil
+	return card and card:FindFirstChild("EquipButton")
 end
 
 function EcoUi.UpdateWins(args)

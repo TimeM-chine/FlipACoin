@@ -38,7 +38,9 @@ local cameraShakeToken = 0
 local CameraShakeRenderStepName = "StreakMilestoneCameraShake"
 local sceneInteractionConnection
 local activeDecorationShakes = {}
+local activeHotStreakSpotlights = {}
 local lastTableTapTime = 0
+local missingHotStreakSpotlightWarningShown = false
 
 -- 旧硬币 / 阴影模板的基准朝向；真实硬币空中姿态由最终平铺姿态反推，避免绕竖直轴自旋
 local CoinVisualBaseRot = CFrame.Angles(0, 0, math.rad(90))
@@ -450,6 +452,7 @@ function EffectSystem:RefreshPersistentSeatCoins(sender, player, args)
 			end
 		end
 	end
+	refreshHotStreakSpotlights(args.seatDisplayEntries)
 
 	for seatId, visual in pairs(activeCoinFlipVisuals) do
 		if not occupiedSeats[seatId] and not visual.isFlipping then
@@ -678,24 +681,55 @@ function getFlipPositions(seatId)
 		outward = outward.Unit
 	end
 
-	local flipAxisWorld = outward:Cross(tableNormal)
+	local rawSeatId = seatRecord and seatRecord.rawSeatId or seatId
+	local landingAnchor = getCoinLandingAnchor(tableModel, rawSeatId)
+	local landingAnchorPosition = landingAnchor and getAnchorPosition(landingAnchor)
+	local surfaceEndPos = centerPos + (outward * VisualConfig.LandingRadius)
+	if dynamicSeatCFrame then
+		surfaceEndPos = getDynamicCoinLandingSurfacePosition(
+			dynamicSeatCFrame,
+			tableTop,
+			tableNormal,
+			surfaceCenter
+		)
+	elseif landingAnchorPosition then
+		surfaceEndPos = landingAnchorPosition - tableNormal * (landingAnchorPosition - surfaceCenter):Dot(tableNormal)
+	end
+
+	local landingOutward = surfaceEndPos - surfaceCenter
+	landingOutward = landingOutward - (tableNormal * landingOutward:Dot(tableNormal))
+	if landingOutward.Magnitude < 0.001 then
+		landingOutward = outward
+	else
+		landingOutward = landingOutward.Unit
+	end
+
+	local flipAxisWorld = landingOutward:Cross(tableNormal)
 	if flipAxisWorld.Magnitude < 1e-4 then
 		flipAxisWorld = Vector3.new(0, 0, 1)
 	else
 		flipAxisWorld = flipAxisWorld.Unit
 	end
 
-	local rawSeatId = seatRecord and seatRecord.rawSeatId or seatId
-	local landingAnchor = getCoinLandingAnchor(tableModel, rawSeatId)
-	local landingAnchorPosition = landingAnchor and getAnchorPosition(landingAnchor)
-	local surfaceEndPos = centerPos + (outward * VisualConfig.LandingRadius)
-	if landingAnchorPosition and not dynamicSeatCFrame then
-		surfaceEndPos = landingAnchorPosition - tableNormal * (landingAnchorPosition - surfaceCenter):Dot(tableNormal)
-	end
 	local endPos = surfaceEndPos
 	startPos = surfaceEndPos
 
 	return startPos, endPos, tableNormal, surfaceEndPos, flipAxisWorld
+end
+
+function getDynamicCoinLandingSurfacePosition(seatCFrame, tableTop, tableNormal, surfaceCenter)
+	local inward = seatCFrame.LookVector - tableNormal * seatCFrame.LookVector:Dot(tableNormal)
+	if inward.Magnitude < 0.001 then
+		inward = (surfaceCenter - seatCFrame.Position) - tableNormal * (surfaceCenter - seatCFrame.Position):Dot(tableNormal)
+	end
+	if inward.Magnitude < 0.001 then
+		inward = tableTop.CFrame.LookVector
+	else
+		inward = inward.Unit
+	end
+
+	local rawPosition = seatCFrame.Position + inward * 2.55
+	return rawPosition - tableNormal * (rawPosition - surfaceCenter):Dot(tableNormal)
 end
 
 function getCoinVisual(seatId)
@@ -1478,6 +1512,198 @@ function getStreakMilestoneVfxAsset(vfxName)
 
 	local effectsFolder = assets:FindFirstChild("Effects")
 	return effectsFolder and effectsFolder:FindFirstChild(vfxName)
+end
+
+function refreshHotStreakSpotlights(seatDisplayEntries)
+	local activeSeats = {}
+
+	for _, entry in ipairs(seatDisplayEntries) do
+		if typeof(entry.seatId) ~= "string" then
+			continue
+		end
+
+		local shouldShowSpotlight = entry.isOccupied == true
+			and (entry.streak or 0) >= VisualConfig.HotStreakSpotlightMinimum
+		if shouldShowSpotlight then
+			local head, targetKey = getHotStreakActorHead(entry)
+			if head then
+				activeSeats[entry.seatId] = true
+				ensureHotStreakSpotlight(entry.seatId, head, targetKey)
+			else
+				removeHotStreakSpotlight(entry.seatId)
+			end
+		else
+			removeHotStreakSpotlight(entry.seatId)
+		end
+	end
+
+	local staleSeatIds = {}
+	for seatId in pairs(activeHotStreakSpotlights) do
+		if not activeSeats[seatId] then
+			table.insert(staleSeatIds, seatId)
+		end
+	end
+	for _, seatId in ipairs(staleSeatIds) do
+		removeHotStreakSpotlight(seatId)
+	end
+end
+
+function getHotStreakActorHead(entry)
+	if entry.isFake == true then
+		local model = findFakeActorModel(entry.fakeId)
+		local head = model and model:FindFirstChild("Head")
+		if head and head:IsA("BasePart") then
+			return head, `fake:{entry.fakeId}`
+		end
+		return nil
+	end
+
+	if typeof(entry.userId) ~= "number" then
+		return nil
+	end
+
+	local player = Players:GetPlayerByUserId(entry.userId)
+	local character = player and player.Character
+	local head = character and character:FindFirstChild("Head")
+	if head and head:IsA("BasePart") then
+		return head, `player:{entry.userId}`
+	end
+
+	return nil
+end
+
+function ensureHotStreakSpotlight(seatId, head, targetKey)
+	local current = activeHotStreakSpotlights[seatId]
+	if
+		current
+		and current.instance
+		and current.instance.Parent
+		and current.head == head
+		and current.targetKey == targetKey
+	then
+		return
+	end
+
+	removeHotStreakSpotlight(seatId)
+
+	local spotlight = buildHotStreakSpotlightClone(head)
+	if not spotlight then
+		return
+	end
+
+	activeHotStreakSpotlights[seatId] = {
+		head = head,
+		instance = spotlight,
+		targetKey = targetKey,
+	}
+end
+
+function removeHotStreakSpotlight(seatId)
+	local current = activeHotStreakSpotlights[seatId]
+	if not current then
+		return
+	end
+
+	activeHotStreakSpotlights[seatId] = nil
+	if current.instance and current.instance.Parent then
+		current.instance:Destroy()
+	end
+end
+
+function buildHotStreakSpotlightClone(head)
+	local effectAsset = getHotStreakSpotlightAsset()
+	if not effectAsset then
+		return nil
+	end
+
+	if effectAsset:IsA("Attachment") or effectAsset:IsA("Folder") then
+		local effectClone = effectAsset:Clone()
+		effectClone.Name = "HotStreakSpotlight"
+		effectClone.Parent = head
+		EffectSystem:PlayInsideEffects(effectClone)
+		return effectClone
+	end
+
+	if effectAsset:IsA("BasePart") then
+		local effectClone = effectAsset:Clone()
+		effectClone.Name = "HotStreakSpotlight"
+		prepareHotStreakSpotlightPart(effectClone, head)
+		effectClone.CFrame = head.CFrame * VisualConfig.HotStreakSpotlightOffset
+		effectClone.Parent = head
+		weldHotStreakPartToHead(effectClone, head)
+		EffectSystem:PlayInsideEffects(effectClone)
+		return effectClone
+	end
+
+	if effectAsset:IsA("Model") then
+		local effectClone = effectAsset:Clone()
+		effectClone.Name = "HotStreakSpotlight"
+		effectClone.Parent = head
+		effectClone:PivotTo(head.CFrame * VisualConfig.HotStreakSpotlightOffset)
+		for _, descendant in ipairs(effectClone:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				prepareHotStreakSpotlightPart(descendant, head)
+				weldHotStreakPartToHead(descendant, head)
+			end
+		end
+		EffectSystem:PlayInsideEffects(effectClone)
+		return effectClone
+	end
+
+	warn(`[EffectSystem] Hot streak spotlight asset must be a Model, BasePart, Attachment, or Folder.`)
+	return nil
+end
+
+function getHotStreakSpotlightAsset()
+	local effectAsset = script.Assets:FindFirstChild(VisualConfig.HotStreakSpotlightAssetName)
+	if effectAsset then
+		return effectAsset
+	end
+
+	if not missingHotStreakSpotlightWarningShown then
+		missingHotStreakSpotlightWarningShown = true
+		warn(`[EffectSystem] Missing hot streak spotlight asset: {VisualConfig.HotStreakSpotlightAssetName}`)
+	end
+	return nil
+end
+
+function prepareHotStreakSpotlightPart(part, head)
+	part.Anchored = false
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.Massless = true
+	part.AssemblyLinearVelocity = head.AssemblyLinearVelocity
+	part.AssemblyAngularVelocity = head.AssemblyAngularVelocity
+end
+
+function weldHotStreakPartToHead(part, head)
+	local weld = Instance.new("WeldConstraint")
+	weld.Name = "HotStreakSpotlightWeld"
+	weld.Part0 = head
+	weld.Part1 = part
+	weld.Parent = part
+end
+
+function findFakeActorModel(fakeId)
+	if typeof(fakeId) ~= "string" then
+		return nil
+	end
+
+	local tableModel = Workspace:FindFirstChild("CoinFlipTable")
+	local assetsFolder = tableModel and tableModel:FindFirstChild("Assets")
+	local runtimeFolder = assetsFolder and assetsFolder:FindFirstChild("FakePlayersRuntime")
+	local model = runtimeFolder and runtimeFolder:FindFirstChild(fakeId)
+	if model and model:IsA("Model") then
+		return model
+	end
+
+	model = Workspace:FindFirstChild(fakeId, true)
+	if model and model:IsA("Model") then
+		return model
+	end
+
+	return nil
 end
 
 function getStreakMilestoneCFrame(seatId)

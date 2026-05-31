@@ -270,6 +270,7 @@ function RebirthSystem:RequestRebirth(sender, player)
 		playerIns:SetOneData(dataKey.fateShards, playerIns:GetOneData(dataKey.fateShards) + pointGain)
 		playerIns:SetOneData(dataKey.rebirth, newRebirthLevel)
 		playerIns:SetOneData(dataKey.runData, resetRunData)
+		SystemMgr.systems.CoinFlipSystem:HandleGuideRebirth(SENDER, player)
 
 		SystemMgr.systems.AnalyticsSystem:LogRebirth(SENDER, player, {
 			rebirthLevel = playerIns:GetOneData(dataKey.rebirth),
@@ -367,6 +368,14 @@ function RebirthSystem:SyncRebirthState(sender, player, args)
 	end
 
 	RebirthUi.SyncRebirthState(args)
+end
+
+function RebirthSystem:OpenGuideRebirth()
+	if IsServer then
+		return nil
+	end
+
+	return RebirthUi.OpenGuideRebirth()
 end
 
 ---- [[ Server ]] ----

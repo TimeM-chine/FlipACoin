@@ -45,10 +45,13 @@ local LegacyRebirthText = Elements:WaitForChild("candy")
 local TopBar = Buttons:FindFirstChild("TopBar")
 local RightBottom = Buttons:FindFirstChild("RightBottom")
 local LegacyInventoryButton = Buttons:FindFirstChild("InventoryButton")
+local ShopFrame = Frames:WaitForChild("Shop")
+local InventoryFrame = Frames:WaitForChild("Inventory")
+local RebirthFrame = Frames:WaitForChild("Rebirth")
 local GrowthFrames = {
-	Frames:WaitForChild("Shop"),
-	Frames:WaitForChild("Inventory"),
-	Frames:WaitForChild("Rebirth"),
+	ShopFrame,
+	InventoryFrame,
+	RebirthFrame,
 }
 local Content = Hud:WaitForChild("Content")
 local LeftPanel = Content:WaitForChild("LeftPanel")
@@ -85,6 +88,9 @@ if not AutoButton or not AutoButton:IsA("GuiButton") then
 	error("CoinFlipHUD is missing AutoButton")
 end
 local AutoButtonStroke = AutoButton:WaitForChild("UIStroke")
+local GuidePrompt = CenterPanel:WaitForChild("GuidePrompt")
+local GuideMessage = GuidePrompt:WaitForChild("Message")
+local GuideActionButton = GuidePrompt:WaitForChild("ActionButton")
 
 local SpectatorFeed = Elements:FindFirstChild("CoinFlipSpectatorFeed")
 local TableOverview = Elements:FindFirstChild("CoinFlipTableOverview")
@@ -137,6 +143,9 @@ local currentRunSnapshot = {
 	nextCosts = {},
 	derivedStats = {},
 }
+local currentOnboarding
+local currentGuideButton
+local currentGuideFrame
 local latestRunStateVersion = 0
 local initialTableLookRequested = false
 local FlipInputActionName = "COIN_FLIP_REQUEST"
@@ -306,9 +315,7 @@ local function applyHudLayout()
 	Hud.Size = UDim2.fromScale(sizeScale.X, sizeScale.Y)
 end
 
-local function hideOnboardingPanel()
-	uiController.SetGuideButton(nil)
-
+local function hideLegacyOnboardingPanel()
 	if OnboardingPanel and OnboardingPanel:IsA("GuiObject") then
 		OnboardingPanel.Visible = false
 	end
@@ -476,6 +483,138 @@ local function requestFlip()
 	return true
 end
 
+local function clearGuideHighlight()
+	if not currentGuideButton then
+		return
+	end
+
+	uiController.SetGuideButton(nil)
+	currentGuideButton = nil
+	currentGuideFrame = nil
+end
+
+local function setGuideHighlight(button, frame)
+	local resolvedFrame = frame or button
+	if currentGuideButton == button and currentGuideFrame == resolvedFrame then
+		return
+	end
+
+	clearGuideHighlight()
+	if not button then
+		return
+	end
+
+	uiController.SetGuideButton(button, frame)
+	currentGuideButton = button
+	currentGuideFrame = resolvedFrame
+end
+
+local function getGuideCopy(onboarding)
+	local stepKey = onboarding and onboarding.currentStep
+	if stepKey == "firstFlip" then
+		return "Heads pay Cash. Streaks boost your payout.", "FLIP"
+	end
+	if stepKey == "rebirth" then
+		return "Rebirth turns this run into permanent points.", "REBIRTH"
+	end
+	if stepKey == "coinBuy" then
+		return `Buy {onboarding.targetCoinName or "a new Coin"} for better Cash and Luck.`, "BUY COIN"
+	end
+	if stepKey == "coinEquip" then
+		return `Equip {onboarding.targetCoinName or "your new Coin"} to use its bonus.`, "EQUIP"
+	end
+
+	return "", ""
+end
+
+local function openCurrentGuideTarget()
+	if not currentOnboarding or currentOnboarding.shouldGuide ~= true then
+		return nil
+	end
+
+	local stepKey = currentOnboarding.currentStep
+	if stepKey == "firstFlip" then
+		requestFlip()
+		return FlipButton
+	end
+	if stepKey == "rebirth" then
+		return SystemMgr.systems.RebirthSystem:OpenGuideRebirth()
+	end
+	if stepKey == "coinBuy" then
+		return SystemMgr.systems.EcoSystem:OpenGuideShopItem({
+			category = "coin",
+			itemId = currentOnboarding.targetCoinId,
+		})
+	end
+	if stepKey == "coinEquip" then
+		return SystemMgr.systems.EcoSystem:OpenGuideInventoryItem({
+			category = "coin",
+			itemId = currentOnboarding.targetCoinId,
+		})
+	end
+
+	return nil
+end
+
+local function refreshGuide()
+	hideLegacyOnboardingPanel()
+	if
+		not currentOnboarding
+		or currentOnboarding.isComplete == true
+		or currentOnboarding.shouldGuide ~= true
+		or currentSeatId == nil
+	then
+		GuidePrompt.Visible = false
+		clearGuideHighlight()
+		return
+	end
+
+	local message, actionText = getGuideCopy(currentOnboarding)
+	GuideMessage.Text = message
+	GuideActionButton.Text = actionText
+	GuideActionButton.Visible = true
+
+	local stepKey = currentOnboarding.currentStep
+	if stepKey == "firstFlip" then
+		GuideActionButton.Visible = false
+		GuidePrompt.Visible = Hud.Visible
+		setGuideHighlight(FlipButton)
+		return
+	end
+	if stepKey == "rebirth" and RebirthFrame.Visible then
+		GuidePrompt.Visible = false
+		setGuideHighlight(SystemMgr.systems.RebirthSystem:OpenGuideRebirth())
+		return
+	end
+	if stepKey == "coinBuy" and ShopFrame.Visible then
+		GuidePrompt.Visible = false
+		setGuideHighlight(SystemMgr.systems.EcoSystem:OpenGuideShopItem({
+			category = "coin",
+			itemId = currentOnboarding.targetCoinId,
+		}))
+		return
+	end
+	if stepKey == "coinEquip" and ShopFrame.Visible then
+		GuidePrompt.Visible = false
+		setGuideHighlight(SystemMgr.systems.EcoSystem:OpenGuideInventoryItem({
+			category = "coin",
+			itemId = currentOnboarding.targetCoinId,
+		}))
+		return
+	end
+	if stepKey == "coinEquip" and InventoryFrame.Visible then
+		GuidePrompt.Visible = false
+		setGuideHighlight(SystemMgr.systems.EcoSystem:OpenGuideInventoryItem({
+			category = "coin",
+			itemId = currentOnboarding.targetCoinId,
+		}))
+		return
+	end
+
+	GuidePrompt.Visible = Hud.Visible
+	setGuideHighlight(GuideActionButton, GuidePrompt)
+end
+
 local function scheduleAutoFlipRequest()
 	if not autoFlipEnabled then
 		return
@@ -554,6 +693,7 @@ local function setVisible(isVisible)
 		currentFlipInProgress = false
 		updateResultText("Waiting for seat assignment...", "Neutral")
 	end
+	refreshGuide()
 end
 
 local function requestInitialTableLookIfNeeded(isSeated)
@@ -585,13 +725,14 @@ local function ensureLeaveButton()
 end
 
 local function applyResponsiveLayout()
-	hideOnboardingPanel()
+	hideLegacyOnboardingPanel()
 	applyHudLayout()
 	applyGameplayVisibility(currentSeatId ~= nil)
 
 	if currentSeatState then
 		updateTableOverview(currentSeatState)
 	end
+	refreshGuide()
 end
 
 local function bindResponsiveLayout()
@@ -630,6 +771,7 @@ local function bindGrowthFrameVisibility()
 				setAutoFlipEnabled(false)
 			end
 			applyGameplayVisibility(currentSeatId ~= nil)
+			refreshGuide()
 		end)
 	end
 end
@@ -642,7 +784,8 @@ function CoinFlipUi.Init()
 
 	setVisible(false)
 	updateAutoButtonText()
-	hideOnboardingPanel()
+	hideLegacyOnboardingPanel()
+	GuidePrompt.Visible = false
 	ensureLeaveButton()
 	applyResponsiveLayout()
 	bindResponsiveLayout()
@@ -660,6 +803,11 @@ function CoinFlipUi.Init()
 				scheduleAutoFlipRequest()
 			end
 		end
+	end)
+	uiController.SetButtonHoverAndClick(GuideActionButton, function()
+		clearGuideHighlight()
+		openCurrentGuideTarget()
+		refreshGuide()
 	end)
 
 	for upgradeKey, button in pairs(UpgradeMap) do
@@ -701,6 +849,7 @@ function CoinFlipUi.SyncRunState(args)
 	ClientData:SetOneData(dataKey.wins, cash)
 	ClientData:SetOneData(dataKey.runData, args.runData)
 	if args.loadoutState then
+		ClientData:SetOneData("loadoutState", args.loadoutState)
 		ClientData:SetOneData(dataKey.equippedCoin, args.loadoutState.equippedCoin)
 		ClientData:SetOneData(dataKey.ownedCoins, args.loadoutState.ownedCoins)
 		ClientData:SetOneData(dataKey.equippedDeskSetup, args.loadoutState.equippedDeskSetup)
@@ -709,6 +858,7 @@ function CoinFlipUi.SyncRunState(args)
 		ClientData:SetOneData(dataKey.ownedChairs, args.loadoutState.ownedChairs)
 	end
 	if args.rebirthState then
+		ClientData:SetOneData("rebirthState", args.rebirthState)
 		ClientData:SetOneData(dataKey.rebirth, args.rebirthState.rebirth)
 		ClientData:SetOneData(dataKey.fateShards, args.rebirthState.fateShards)
 		ClientData:SetOneData(dataKey.rebirthTree, args.rebirthState.rebirthTree)
@@ -783,7 +933,8 @@ function CoinFlipUi.SeatStateChanged(args)
 	end
 	updateTableOverview(args and args.seatState)
 	requestInitialTableLookIfNeeded(isSeated)
-	hideOnboardingPanel()
+	hideLegacyOnboardingPanel()
+	refreshGuide()
 	if isSeated then
 		if ResultLabel.Text == "Waiting for seat assignment..." then
 			updateResultText(getReadyPrompt(), "Neutral")
@@ -791,11 +942,13 @@ function CoinFlipUi.SeatStateChanged(args)
 	end
 end
 
-function CoinFlipUi.UpdateOnboarding(_)
-	hideOnboardingPanel()
+function CoinFlipUi.UpdateOnboarding(onboarding)
+	currentOnboarding = onboarding
+	hideLegacyOnboardingPanel()
 	if currentSeatState then
 		hideLegacySeatBillboards(currentSeatState)
 	end
+	refreshGuide()
 end
 
 local function findFakeActorModel(fakeId)
@@ -817,7 +970,10 @@ end
 
 local function getFakeHeadPoseMotor(model, motorName)
 	for _, descendant in ipairs(model:GetDescendants()) do
-		if descendant.Name == motorName and (descendant:IsA("Motor6D") or descendant.ClassName == "AnimationConstraint") then
+		if
+			descendant.Name == motorName
+			and (descendant:IsA("Motor6D") or descendant.ClassName == "AnimationConstraint")
+		then
 			return descendant
 		end
 	end

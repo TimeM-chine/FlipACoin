@@ -1,6 +1,6 @@
 # TASK_STATE
 
-最后更新：2026-05-30
+最后更新：2026-05-31
 
 > 目的：记录当前正在做什么、下一步是什么、关键决策、待验证项与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`；不要把本文件变成长篇历史日志。
 
@@ -39,7 +39,7 @@
 - Studio / device QA：按 `docs/ROBLOX_PLATFORM_IMPROVEMENT.md` 覆盖手机 portrait / landscape、平板、桌面键鼠、手柄和双客户端同桌，确认 HUD 响应式布局、安全区、growth panels、Topbar 入口与装扮刷新。
 - Studio Play：填入真实 Developer Product / Game Pass id 后，确认 Boosts 入口能弹出 Robux 购买 prompt；购买 Cash / Rebirth Points / Apex bundle / VIP / 2x Cash / Lucky Charm / Quick Flip 后刷新 HUD、Shop、Inventory、Rebirth 和座位表现。
 - Creator Dashboard：创建 `cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle` 六个 Developer Products 和 `vip / winsX2 / luckyCharm / quickFlip` 四个 Game Pass，并把 id 填回 `EcoSystem/Presets.lua`。
-- Studio Play：新档默认 Cash 为 `9`，入座后不能立即买 `Value` 升级；完成 `3` 次 Flip 后即使全 Tails 也能到 `12` Cash，并进入首次升级引导 / 升级按钮 pulse。
+- Studio Play：新档默认 Cash 为 `9`，入座后看到首次 Flip 引导；首次 Flip 后不再出现旧首次升级引导，后续在达到 Rebirth / Coin 条件时进入对应 v3 引导。
 - Studio Play 双客户端：确认他人 Heads / Tails 落地 pulse 更明显、Heads streak ring 按 streak 扩大、高 streak / milestone 有短 Highlight；`streak1` / `streak2` 资产缺失时 fallback pulse 不阻塞落地回调。
 - Studio Play：确认 `coin1` through `coin10` 资产能按装备显示，新档默认 `Copper R Coin`，旧 Coin id 存档能 reconcile 到 `coin1`。
 - Studio Play：确认启动后 HUD 从 `Seat --` 切到分配座位并保持稳定，立刻点击 `FLIP` 不会被客户端旧 seat state 错拦。
@@ -57,6 +57,36 @@
 - 可评估极简决策点：高 streak 后出现 `Cash Out` / `Double` / bonus choice，但不要破坏“一键 Flip”的主循环。
 
 ## Done
+
+### 2026-05-31 Front coin / left desk layout
+
+- Outcome: `EffectSystem` dynamic coin placement now lands at `seatCFrame.Position + inward * 2.55`, putting the coin directly in front of the current real/fake seat with no right/left offset. `DecorationSystem` dynamic desk setup placement now uses `seatCFrame.Position + inward * 2.25 - right * 1.45`, moving desk setups farther to the player's left. Studio MCP also moved the static fallback `SeatXXCoinLandingAnchor` parts to seat-front positions and shifted `SeatXXDecorationAnchor` parts left to match the new fallback layout.
+- Validation: Studio MCP read back `game.ReplicatedStorage.Systems.EffectSystem` and `DecorationSystem` source with the new formulas. Static fallback anchors now place coin/decor marker pairs about `1.48` studs apart, with coin centered in front and decor left. `git diff --check -- src\ReplicatedStorage\Systems\EffectSystem\init.lua src\ReplicatedStorage\Systems\DecorationSystem\init.lua docs\PROJECT_LOGIC.md docs\TASK_STATE.md` passed with only existing CRLF warnings. `stylua --check` could not run because Aftman refuses `stylua` when it is not listed in this repo or user `aftman.toml`. Studio Play visual feel still needs user-side confirmation.
+
+### 2026-05-31 Fake player coin landing correction
+
+- Outcome: `EffectSystem` now uses `TableSeatSystem:GetSeatTargetCFrame()` first when dynamic seat layout is active, deriving coin landing from the same current seat CFrame that drives dynamic desk setup placement. Static `SeatXXCoinLandingAnchor` parts are now only the non-dynamic fallback. `PROJECT_LOGIC.md` was updated to describe dynamic coin placement and static anchor fallback.
+- Validation: Studio MCP confirmed the active `game.ReplicatedStorage.Systems.EffectSystem` source contains `getDynamicCoinLandingSurfacePosition()`, dynamic priority, and `elseif landingAnchorPosition` fallback; Studio was in edit mode, so next Play will start with the new logic. `git diff --check -- src\ReplicatedStorage\Systems\EffectSystem\init.lua docs\PROJECT_LOGIC.md docs\TASK_STATE.md` passed with only existing CRLF warnings. `stylua --check` could not run because Aftman refuses `stylua` when it is not listed in this repo or user `aftman.toml`. Studio Play visual feel still needs user-side confirmation.
+
+### 2026-05-31 Coin landing proximity / TextLabel constraints
+
+- Outcome: Studio MCP moved all eight `SeatXXCoinLandingAnchor` marker parts back toward the seated player side while keeping each landing marker opposite its desk setup anchor. Removed every `UIConstraint` descendant under non-CoreGui `TextLabel` instances so `TextScaled` is no longer capped by nested `UITextSizeConstraint` / `UIAspectRatioConstraint`. `PROJECT_LOGIC.md` now records that coin landing anchors sit on the player side and opposite desk setup anchors.
+- Validation: Studio MCP confirmed edit mode, removed `75` constraints under `TextLabel` (`71` `UITextSizeConstraint`, `4` `UIAspectRatioConstraint`), and confirmed remaining `TextLabel` constraint count is `0` with unscaled `TextLabel` count also `0`. Updated coin landing anchors now sit at table radius about `5.55` studs from center and about `2.62` studs from their matching desk setup anchor. Studio Play visual feel still needs user-side confirmation.
+
+### 2026-05-31 MCP text scale / coin landing anchors
+
+- Outcome: Studio MCP confirmed the active `Flip A Coin` place, then set all non-CoreGui `TextLabel.TextScaled` to true in the open DataModel. Updated all eight `Workspace.CoinFlipTable.Attachments.SeatXXCoinLandingAnchor` marker parts so each fixed coin landing spot sits opposite that seat's `DecorationAnchor`; `EffectSystem` now honors `CoinLandingAnchor` even when dynamic seat layout is active, only falling back to radial landing math if the anchor is missing. `PROJECT_LOGIC.md` was updated with the current landing rule.
+- Validation: Studio MCP confirmed non-CoreGui `TextLabel.TextScaled = false` count is `0`; all 8 coin landing anchors exist and are about `2.84` studs from their matching desk setup anchor. Studio script readback confirmed the open `game.ReplicatedStorage.Systems.EffectSystem` ModuleScript contains the updated anchor-first logic and no longer has the old `landingAnchorPosition and not dynamicSeatCFrame` condition. `git diff --check -- src\ReplicatedStorage\Systems\EffectSystem\init.lua docs\PROJECT_LOGIC.md docs\TASK_STATE.md` passed with only existing CRLF warnings. `stylua --check` and `selene` could not run because Aftman refuses those tools when they are not listed in this repo or user `aftman.toml`. Studio Play visual feel still needs user-side confirmation.
+
+### 2026-05-31 Reworked Flip / Rebirth / Coin onboarding
+
+- Outcome: `CoinFlipSystem/Modules/Onboarding.lua` 已迁到 v3，引导流程改为首次 Flip、首次 Rebirth、购买第一枚可负担非默认 Coin、装备该 Coin；旧 v2 / 旧存档会按历史 flip、rebirth、owned/equipped coin 迁移。`RebirthSystem` 和 `EcoSystem` 成功路径现在通知 `CoinFlipSystem` 推进引导；`CoinFlipSystem/ui.lua` 用 `GuidePrompt` 和 `uiController.SetGuideButton()` 轻强制高亮 `FLIP`、Rebirth 确认按钮、Shop Buy、Inventory Equip。Studio 中已创建 `StarterGui.Main.Elements.CoinFlipHUD.Content.CenterPanel.GuidePrompt`，默认隐藏、纯 Scale 布局。`PROJECT_LOGIC.md` 已同步当前口径。
+- Validation: `git diff --check -- src\ReplicatedStorage\Systems\CoinFlipSystem\Modules\Onboarding.lua src\ReplicatedStorage\Systems\CoinFlipSystem\init.lua src\ReplicatedStorage\Systems\CoinFlipSystem\ui.lua src\ReplicatedStorage\Systems\EcoSystem\init.lua src\ReplicatedStorage\Systems\EcoSystem\ui.lua src\ReplicatedStorage\Systems\RebirthSystem\init.lua src\ReplicatedStorage\Systems\RebirthSystem\ui.lua docs\PROJECT_LOGIC.md docs\TASK_STATE.md` 通过，仅有既有 CRLF 工作区提示。Studio MCP 确认 `GuidePrompt` 存在且 `Position / Size` offset 为 `0`。`stylua` / `selene` 因 Aftman 未在仓库或用户 `aftman.toml` 注册无法运行；本机未发现 `luau` / `luau-analyze`。当前 Studio 脚本未同步源码新内容，未做 Studio Play，以免给出无效运行结论。
+
+### 2026-05-30 Streak / best-streak visual feedback
+
+- Outcome: `CoinFlipSystem` 现在在 Heads 结算时显式判定是否刷新 `bestStreak`；真实玩家写入持久化 `bestStreak`，fake player 维护内存 `bestStreak`。`bestStreak` celebration 优先于普通 streak milestone，并通过同一个落地后 `EffectSystem:PlayStreakMilestone()` 路径播放。`AnnouncementSystem/Presets.lua` 改为配置 `BestStreakEffect` 与 `3 / 5 / 10 / 20` milestone 资源名。`EffectSystem` 会按 seat-state snapshot 在 streak `>= 5` 时把 `EffectSystem.Assets.hotStreakSpotlight` 克隆到真实玩家或 fake player 头顶，streak 失败、座位清空或角色消失时清理。`PROJECT_LOGIC.md` 已同步当前口径。
+- Validation: `git diff --check -- src\ReplicatedStorage\Systems\AnnouncementSystem\Presets.lua src\ReplicatedStorage\Systems\AnnouncementSystem\init.lua src\ReplicatedStorage\Systems\CoinFlipSystem\init.lua src\ReplicatedStorage\Systems\FakePlayerSystem\init.lua src\ReplicatedStorage\Systems\EffectSystem\init.lua src\ReplicatedStorage\Systems\EffectSystem\Presets.lua docs\PROJECT_LOGIC.md docs\TASK_STATE.md` 通过，仅有既有 LF-to-CRLF 工作区提示；`rg` 确认 `streak3 / streak5 / streak10 / streak20` 的运行配置只在 `AnnouncementSystem/Presets.lua`，文档同步提及。`stylua --check` 因 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行。本轮未开启 Studio，未做 Play / 多客户端 / 资产摆放观感验证。
 
 ### 2026-05-30 Mobile seated camera / fake head / auto-seat warning
 

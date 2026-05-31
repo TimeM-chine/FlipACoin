@@ -191,6 +191,17 @@ function RebirthUi.SyncRebirthState(args)
 	end
 end
 
+function RebirthUi.OpenGuideRebirth()
+	if not initialized then
+		return nil
+	end
+
+	currentRebirthState = ClientData:GetOneData("rebirthState") or currentRebirthState
+	updateRebirthPanel()
+	uiController.OpenFrame("Rebirth")
+	return RebirthConfirmButton
+end
+
 function RebirthUi.UpdateUi(args)
 	RebirthUi.SyncRebirthState({
 		cash = args and args.wins,

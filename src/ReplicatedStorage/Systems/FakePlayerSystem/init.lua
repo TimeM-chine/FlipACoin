@@ -227,6 +227,7 @@ function FakePlayerSystem:CreateFakeActor(args)
 			equippedDeskSetup = equippedDeskSetup,
 			equippedChair = equippedChair,
 			runData = runData,
+			bestStreak = 0,
 			cash = math.random(Presets.StartingCashMin, Presets.StartingCashMax),
 			nextActionAt = now + randomFloat(Presets.FirstActionMinDelay, Presets.FirstActionMaxDelay),
 			nextFlipAt = now + randomFloat(Presets.FirstActionMinDelay, Presets.FirstActionMaxDelay),
