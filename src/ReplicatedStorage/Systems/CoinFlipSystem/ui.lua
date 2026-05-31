@@ -575,12 +575,6 @@ local function refreshGuide()
 	GuideActionButton.Visible = true
 
 	local stepKey = currentOnboarding.currentStep
-	if stepKey == "firstFlip" then
-		GuideActionButton.Visible = false
-		GuidePrompt.Visible = Hud.Visible
-		setGuideHighlight(FlipButton)
-		return
-	end
 	if stepKey == "rebirth" and RebirthFrame.Visible then
 		GuidePrompt.Visible = false
 		setGuideHighlight(SystemMgr.systems.RebirthSystem:OpenGuideRebirth())
@@ -594,7 +588,7 @@ local function refreshGuide()
 		}))
 		return
 	end
-	if stepKey == "coinEquip" and ShopFrame.Visible then
+	if stepKey == "coinEquip" and InventoryFrame.Visible then
 		GuidePrompt.Visible = false
 		setGuideHighlight(SystemMgr.systems.EcoSystem:OpenGuideInventoryItem({
 			category = "coin",
@@ -602,12 +596,15 @@ local function refreshGuide()
 		}))
 		return
 	end
-	if stepKey == "coinEquip" and InventoryFrame.Visible then
+	if isGrowthFrameOpen() then
 		GuidePrompt.Visible = false
-		setGuideHighlight(SystemMgr.systems.EcoSystem:OpenGuideInventoryItem({
-			category = "coin",
-			itemId = currentOnboarding.targetCoinId,
-		}))
+		clearGuideHighlight()
+		return
+	end
+	if stepKey == "firstFlip" then
+		GuideActionButton.Visible = false
+		GuidePrompt.Visible = Hud.Visible
+		setGuideHighlight(FlipButton)
 		return
 	end
 

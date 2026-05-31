@@ -518,7 +518,7 @@ FlipACoin
   - 首次 Flip：客户端高亮 `FLIP`，`GuidePrompt` 文案为 `Heads pay Cash. Streaks boost your payout.`，不承诺固定 `2x`
   - 首次 Rebirth：当 `RebirthSystem` 判定 `canRebirth` 后，`GuidePrompt` 引导打开 Rebirth 面板并高亮 `ConfirmButton`
   - Coin 购买 / 装备：首次 Rebirth 后，Cash 足够购买第一枚未拥有非默认 Coin 时引导 Shop 的 Coin 页购买；购买后自动转到 Inventory 的 Coin 页并高亮对应 `EquipButton`
-- 引导采用“持续到完成”的轻强制高亮；不恢复旧大 guide 面板，不发教学 / 建议类 toast
+- 引导采用“持续到完成”的轻强制高亮；不恢复旧大 guide 面板，不发教学 / 建议类 toast。玩家手动打开与当前引导目标无关的 Shop / Inventory / Rebirth 面板时，会临时清理旧 HUD 高亮并保留普通面板遮罩，避免旧 `MaskFrame` 覆盖成长面板；关闭面板后再恢复当前步骤高亮。
 - 桌面沉浸视角当前由 `StarterPlayerScripts/Modules/FirstPersonCamera.lua` 负责：
   - 平时是头部第一人称：镜头以 `Head.Position` 为基准，再叠加 `BODY_VIEW_CAMERA_OFFSET` 配置（当前略向角色正前方并下移），保留默认相机输入，所以玩家可自由转头且低头更容易看到身体
   - 客户端首次收到已入座 seat state 后只做一次初始对准，优先看向 `TableTop.TableCenterAttachment`，没有该 Attachment 时看向 `TableTop` 中心；移动端会短暂把相机切到 `Scriptable` 以种入默认相机方向，随后回到 `Custom`；之后不再因 seated 事件反复重置玩家视角

@@ -58,6 +58,11 @@
 
 ## Done
 
+### 2026-05-31 Growth panel stale guide-mask fix
+
+- Outcome: 修复 Shop / Inventory / Rebirth 手动打开后被旧引导遮罩覆盖、表现为面板点击异常的问题。根因是 v3 引导仍保留 HUD `guideButton` 时，`MaskFrame` 继续使用 `ZIndex = 100` 压在无关成长面板上。`CoinFlipSystem/ui.lua` 现在会在打开与当前步骤不匹配的成长面板时临时清理旧 HUD 高亮；`uiController.SetGuideButton(nil)` 在面板仍打开时会恢复普通 `ZIndex = 0` 遮罩，而不是直接隐藏。顺手移除了 Coin Equip 阶段手动打开 Shop 时强制跳转 Inventory 的路径。
+- Validation: Studio MCP 读回当前 `Flip A Coin` DataModel 中两处脚本改动。Studio Play 首次 Flip 引导下确认初始 `Mask ZIndex = 100 / FlipButton ZIndex = 101`；显示 Shop 后旧 HUD 高亮恢复为 `FlipButton ZIndex = 1`。`git diff --check -- src/StarterGui/Main/uiController.lua src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过。MCP 顶栏 synthetic click 仍不可靠，最终真实鼠标点击观感需用户手动确认；Play 控制台未见新增脚本错误，仅有既有 StyleRule 警告和 Studio 外部请求失败。
+
 ### 2026-05-31 Front coin / left desk layout
 
 - Outcome: `EffectSystem` dynamic coin placement now lands at `seatCFrame.Position + inward * 2.55`, putting the coin directly in front of the current real/fake seat with no right/left offset. `DecorationSystem` dynamic desk setup placement now uses `seatCFrame.Position + inward * 2.25 - right * 1.45`, moving desk setups farther to the player's left. Studio MCP also moved the static fallback `SeatXXCoinLandingAnchor` parts to seat-front positions and shifted `SeatXXDecorationAnchor` parts left to match the new fallback layout.

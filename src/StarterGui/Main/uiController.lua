@@ -420,7 +420,6 @@ function controller.SetGuideButton(btn, frame)
 	else
 		if guideButton then
 			-- Main.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
-			MaskFrame.Visible = false
 			ripple.Visible = false
 			ripple.Parent = Elements
 			for _, des in guideFrame:GetDescendants() do
@@ -435,6 +434,13 @@ function controller.SetGuideButton(btn, frame)
 			if orig then
 				guideFrame.ZIndex = orig
 			end
+		end
+		if frameCache and frameCache.Visible then
+			MaskFrame.ZIndex = 0
+			MaskFrame.BackgroundTransparency = 0.48
+			MaskFrame.Visible = true
+		else
+			MaskFrame.Visible = false
 		end
 	end
 	guideButton = btn
