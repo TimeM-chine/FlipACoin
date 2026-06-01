@@ -23,6 +23,11 @@ local AnalyticsSystem: Types.System = {
 		"LogRunUpgradePurchased",
 		"LogShopItemPurchased",
 		"LogItemEquipped",
+		"LogRewardedAd",
+		"LogPotionGranted",
+		"LogPotionUsed",
+		"LogBuffActive",
+		"LogInputAction",
 		"LogRebirth",
 		"LogRebirthUpgradePurchased",
 		"_BuildFields",
@@ -120,6 +125,71 @@ function AnalyticsSystem:LogItemEquipped(sender, player, args)
 		"coinflip_item_equip",
 		1,
 		self:_BuildFields(args and args.category, args and args.itemId, args and args.source)
+	)
+end
+
+function AnalyticsSystem:LogRewardedAd(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	self:_LogCustomEvent(
+		player,
+		"coinflip_rewarded_ad",
+		1,
+		self:_BuildFields(args and args.stage, args and args.result, args and args.reason)
+	)
+end
+
+function AnalyticsSystem:LogPotionGranted(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	self:_LogCustomEvent(
+		player,
+		"coinflip_potion_granted",
+		args and args.count or 1,
+		self:_BuildFields(args and args.source, args and args.potionId, args and args.buffName)
+	)
+end
+
+function AnalyticsSystem:LogPotionUsed(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	self:_LogCustomEvent(
+		player,
+		"coinflip_potion_used",
+		args and args.duration or 0,
+		self:_BuildFields(args and args.source, args and args.potionId, args and args.buffName)
+	)
+end
+
+function AnalyticsSystem:LogBuffActive(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	self:_LogCustomEvent(
+		player,
+		"coinflip_buff_active",
+		args and args.duration or 0,
+		self:_BuildFields(args and args.source, args and args.buffName, args and args.potionId)
+	)
+end
+
+function AnalyticsSystem:LogInputAction(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	self:_LogCustomEvent(
+		player,
+		"coinflip_input_action",
+		1,
+		self:_BuildFields(args and args.action, args and args.source, args and args.inputType)
 	)
 end
 

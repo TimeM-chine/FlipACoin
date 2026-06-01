@@ -1,6 +1,6 @@
 # PROJECT_LOGIC
 
-更新时间：2026-05-28
+更新时间：2026-06-02
 
 ## 1. 这份文档的定位
 
@@ -195,6 +195,7 @@ FlipACoin
 - `AnimateSystem`
 - `AnalyticsSystem`
 - `AnnouncementSystem`
+- `BuffSystem`
 - `CharacterSystem`
 - `CoinFlipSystem`
 - `EcoSystem`
@@ -203,6 +204,7 @@ FlipACoin
 - `GuiSystem`
 - `MusicSystem`
 - `PlayerSystem`
+- `PotionSystem`
 - `RebirthSystem`
 - `SettingSystem`
 - `TableSeatSystem`
@@ -445,14 +447,14 @@ FlipACoin
 - 处理 `RequestFlip`
 - 处理 `RequestFakeFlip`，让假玩家复用同一套 actor flip 结算、结果 payload、best-streak / streak milestone 优先级和桌面广播
 - 按 `GameConfig.FlipACoin` 计算正面概率、奖励、速度
-- 从 `EcoSystem` 读取当前 Coin / Desk Setup 加成，用于修正正面概率和 Cash 倍率
 - 从 `EcoSystem` 读取当前 Coin / Desk Setup / Chair 加成，用于修正正面概率和 Cash 倍率
+- 真实玩家额外叠加 `BuffSystem:GetWinsBoost()` 到 Cash multiplier；`cash2x` 只影响 Cash 奖励，不改变 Heads 概率、streak 判定或 flip interval
 - 写入 `runData`
 - 维护首局 `coinFlipOnboarding` 引导状态
 - 累积 `wins / bestStreak / lifetimeFlips / lifetimeHeads / lifetimeCashEarned`；真实玩家的 `bestStreak` 写入存档，假玩家只维护内存 `bestStreak`
 - 刷新 `leaderstats` 与头顶 UI
 - 广播本次 flip 给同桌玩家，用于低噪音桌面反馈
-- 假玩家 flip 只广播 observed payload 和更新 fake run state，不写 `wins / lifetime* / onboarding / analytics`
+- 假玩家 flip 只广播 observed payload 和更新 fake run state，不写 `wins / lifetime* / onboarding / analytics`，也不读取 potion / buff
 - 客户端收到假玩家 `ObservedFlip` 时会仅在本机临时驱动该 fake Rig 的头部看向硬币，复用真实玩家 Flip 期间看硬币的表现意图，但不改变真实玩家相机；当前 rig 使用 `AnimationConstraint.Transform`，旧 `Motor6D` rig 使用 `C0`
 - 驱动 best-streak / streak 播报；同一次 flip 同时命中新纪录和普通 milestone 时只播放 `bestStreak`
 - 处理升级购买
@@ -466,6 +468,7 @@ FlipACoin
 - 让玩家面前的 `FLIP` 主按钮足够明确
 - 展示 Cash、streak、chance、speed、四项升级
 - 提供 Auto Flip 切换：客户端按当前 flip 间隔复用同一 `RequestFlip` 入口循环请求，服务端仍负责座位和冷却校验
+- 优先用 Input Action System 建 `CoinFlipGameplayInputContext`：`FlipCoin = Space / ButtonR2`、`ToggleAutoFlip = ButtonY`；打开 Shop / Inventory / Rebirth 时禁用 gameplay context。Input Action 实例不可用时回退到既有 `ContextActionService`
 - 展示同桌玩家的轻量状态 / streak / flip 结果
 - 请求 `EffectSystem` 播放 coin flip 可视表现，并在落地回调里更新结果文案
 
@@ -496,7 +499,7 @@ FlipACoin
 
 - `EcoSystem/Presets.lua`：首发 Coin / Desk Setup / Chair 商品、价格、稀有度 / 角色、Cash 倍率和 luck 加成；FlipACoin Developer Product / Game Pass 占位 id 与付费效果配置
 - `RebirthSystem/Presets.lua`：重生最低 Cash、Cash 到点数换算、单次点数上限、重生后 Cash、按 rebirth 次数给起始 Luck，以及 `polishedStart / chainStart / quickStart / luckyStart` 四个永久起步升级
-- `EffectSystem/Presets.lua`：桌面硬币飞行、水平轴翻面、落地随机平铺朝向收敛、自己 / 他人落地脉冲、streak ring、milestone fallback 和上次结果保留表现
+- `EffectSystem/Presets.lua`：桌面硬币飞行、水平轴翻面、落地随机平铺朝向收敛、自己 / 他人落地脉冲、落地短促粒子 burst、streak ring、milestone fallback 和上次结果保留表现
 
 硬币资产约定：
 
@@ -507,6 +510,7 @@ FlipACoin
 - `EffectSystem` 在动态座位布局下按当前 `TableSeatSystem:GetSeatTargetCFrame()` 推导硬币落点，让 fake player / 真实玩家当前座位、桌搭和硬币跟随同一套动态排位；动态硬币落点位于座位正前方，不带左右偏移。没有动态座位目标时才读取 `Workspace.CoinFlipTable.Attachments/<SeatId>CoinLandingAnchor`，再回退到 `EffectSystem/Presets.lua` 的 `LandingRadius`，当前默认半径为 `5.4`
 - 当前 Studio 资源使用 `<SeatId>CoinLandingAnchor` 作为每个座位的静态 fallback 硬币落点定位块，位于玩家侧且在桌搭锚点相反侧，避免 Coin 与 Desk Setup 重合
 - Flip 落点按硬币最终姿态的真实包围角点和 `TableTop` 表面法线计算；落地高度来自一次桌面 raycast 命中点加一次 bounds lift，不能再用固定 `coin.Size.X * 0.5` 或重复叠加 lift
+- Flip 落地时除程序化 pulse 外，会从 Studio-owned `EffectSystem.Assets.coinLandingBurst` 克隆短促粒子 burst；Heads 偏金色，Tails 偏橙红，缺失该资产时静默跳过
 - 每次 Flip 开始时决定该次落桌的随机桌面 yaw；空中翻转只绕水平轴旋转，接近桌面时平滑收敛到 Heads / Tails 与最终平铺朝向，避免硬币落桌后再突兀拧转
 - 每个座位的持久硬币记录上一轮落地结果和桌面随机 yaw；seat state 刷新、idle 重摆或换装后仍展示上一轮 Heads / Tails 和落地方向，不重置成默认正面
 - 新档默认 `wins = 9`（UI 展示为 Cash）；首个 `Value` 升级成本是 `12`，`BaseTailsReward = 1`，所以完成 `3` 次 Flip 后即使全是 Tails 也能买第一次升级；老玩家现金不迁移
@@ -521,7 +525,7 @@ FlipACoin
 - 引导采用“持续到完成”的轻强制高亮；不恢复旧大 guide 面板，不发教学 / 建议类 toast。玩家手动打开与当前引导目标无关的 Shop / Inventory / Rebirth 面板时，会临时清理旧 HUD 高亮并保留普通面板遮罩，避免旧 `MaskFrame` 覆盖成长面板；关闭面板后再恢复当前步骤高亮。
 - 桌面沉浸视角当前由 `StarterPlayerScripts/Modules/FirstPersonCamera.lua` 负责：
   - 平时是头部第一人称：镜头以 `Head.Position` 为基准，再叠加 `BODY_VIEW_CAMERA_OFFSET` 配置（当前略向角色正前方并下移），保留默认相机输入，所以玩家可自由转头且低头更容易看到身体
-  - 客户端首次收到已入座 seat state 后只做一次初始对准，优先看向 `TableTop.TableCenterAttachment`，没有该 Attachment 时看向 `TableTop` 中心；移动端会短暂把相机切到 `Scriptable` 以种入默认相机方向，随后回到 `Custom`；之后不再因 seated 事件反复重置玩家视角
+  - 客户端首次收到已入座 seat state 后只做一次初始对准，但会等 `LoadingScreen` 销毁且本地 `Humanoid.SeatPart` 存在后才消费该请求；对准时优先看向 `TableTop.TableCenterAttachment`，没有该 Attachment 时看向 `TableTop` 中心，并短暂把相机切到 `Scriptable` 以种入默认相机方向，随后回到 `Custom`；之后不再因 seated 事件反复重置玩家视角
   - 镜头相对 `HumanoidRootPart` 的左右转向被限制在 `-90° ~ 90°`，避免玩家坐在桌边时回头穿帮
   - `Head` 和配件本地透明，身体可见，玩家低头能看到自己身体
   - 自己手动 Flip 时由 `EffectSystem:PlayCoinFlipVisual()` 调 `FirstPersonCamera.FollowCoin()`，相机临时切到 `Scriptable` 并从头部视角看向硬币；`Auto:On` 连续 Flip 不接管相机
@@ -550,16 +554,29 @@ FlipACoin
 - `GetLoadoutState()` 同步 owned / equipped 数据给 Shop / Inventory UI
 - `GetLoadoutBonuses()` 给 `CoinFlipSystem` 计算正面概率、Cash 倍率和 flip 间隔倍率；当前会合并 Coin / Desk / Chair 装备和已拥有的 FlipACoin gamepass 加成
 - Desk Setup 装备成功后通知 `DecorationSystem` 刷新座位可视化
-- `MarketplaceService.ProcessReceipt` 处理 `EcoPresets.Products.flipACoin` 下的 Developer Product：Cash 包、Rebirth Points 包和 Apex 外观礼包
+- `MarketplaceService.ProcessReceipt` 处理 `EcoPresets.Products.flipACoin` 下的 Developer Product：Cash 包、Rebirth Points 包、Apex 外观礼包和购买后立即使用的 `paidCash2x10m`
+- Rewarded Video Ads 复用 Boosts 面板；服务端维护 15 分钟内存冷却和 in-flight 防重入，客户端用 `AdService:GetAdAvailabilityNowAsync()` 判断当前平台可用性
+- Rewarded Video Ads 必须在 `RewardedAds.DevProductId` 配置一个独立 Developer Product id；服务端用 `AdService:CreateAdRewardFromDevProductId()` 创建 `AdReward`，并在 `ProcessReceipt` 中发放并立即使用 `adCash2x5m`，不在 `ShowRewardedVideoAdAsync()` 返回后手动重复发奖
 - `PromptGamePassPurchaseFinished` / 进服 ownership 检查处理 `EcoPresets.GamePasses` 下的 `vip / winsX2 / luckyCharm / quickFlip`
 
 当前 Coin / Desk / Chair 商品配置在 `EcoSystem/Presets.lua` 的 `GrowthShopItems`。FlipACoin 付费配置在同文件：
 
-- `Products.flipACoin`：`cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle`
+- `Products.flipACoin`：`cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle / paidCash2x10m`
+- `RewardedAds`：独立 `DevProductId`、`adCash2x5m` potion id、15 分钟冷却
 - `GamePasses`：`vip / winsX2 / luckyCharm / quickFlip`
 - `GamePassEffects`：VIP 小幅 Cash / Luck 和外观解锁、`winsX2` 的 flip Cash 倍率、`luckyCharm` 的 Heads 概率加成、`quickFlip` 的 flip 间隔倍率
 
 这些付费 id 默认可为 `0` 占位；运行时 UI 会禁用未配置的购买按钮，等 Creator Dashboard 创建商品后只需把真实 `productId / gamePassId` 填回 `EcoSystem/Presets.lua`。
+
+### 7.4aa `PotionSystem` / `BuffSystem`
+
+当前在 Flip A Coin 主线里负责：
+
+- `PotionSystem` 复用持久字段 `potions`；`GrantAndUsePotion()` 统一执行“入库存 -> 立即扣库存使用 -> AddBuff -> 客户端同步”
+- `BuffSystem` 复用持久字段 `equippedBuff`；同名 buff 重复使用时累加 duration，并重排服务端清理倒计时
+- 当前 potion 只保留 `adCash2x5m` 和 `paidCash2x10m`；都映射到 `cash2x`
+- `cash2x` 配置为 `boostType = wins`、`boost = 1`；`GetWinsBoost()` 从 `1` 起加，因此最终总倍率为 `2x`
+- 旧 simulator 的 Quest progress 和 Store / Buffs UI 依赖不再接回主线；两个系统的客户端 `ui.lua` 只保留轻量同步占位
 
 ### 7.4b `RebirthSystem`
 
@@ -582,6 +599,7 @@ FlipACoin
 - 持久硬币 idle 显示上一轮 flip 结果和随机桌面 yaw，新入座 / 未翻过时默认显示 Heads
 - 自己 flip 时接管并释放 `FirstPersonCamera`；装备硬币为 Model 时跟随该 Model 的 `PrimaryPart`
 - 其他玩家 flip 时只播放桌面表现，不接管相机；观察者看到的 Heads / Tails 落地 pulse 使用更醒目的独立参数，Heads 更大更亮，Tails 更短促偏橙红
+- 硬币落地后会播放 `EffectSystem.Assets.coinLandingBurst` 短促粒子 burst，作为现有落地 pulse 的小型金属/赌场风反馈
 - 观察者看到他人 Heads streak 达到阈值时，会在落地 pulse 外追加第二层 streak ring，并按 streak 增大半径；高 streak 或 milestone 会给对应硬币 / 座位创建短生命周期 `Highlight`
 - `PlayInsideEffects()` 使用 `SettingSystem:GetParticleRateFactor()` 决定粒子倍率
 - `PlayStreakMilestone()` 按 `AnnouncementSystem/Presets.lua` 的 `BestStreakEffect` 或 `StreakEffects` 配置，在硬币本地落地回调后通过 `MusicSystem` 播放 SFX、播放 `EffectSystem.Assets` VFX，并可选触发本地 camera shake；如果 milestone VFX 资产缺失或类型无效，会 fallback 到程序化 streak pulse + `Highlight`
@@ -636,6 +654,11 @@ FlipACoin
   - `coinflip_run_upgrade`
   - `coinflip_shop_purchase`
   - `coinflip_item_equip`
+  - `coinflip_rewarded_ad`
+  - `coinflip_potion_granted`
+  - `coinflip_potion_used`
+  - `coinflip_buff_active`
+  - `coinflip_input_action`
   - `coinflip_rebirth`
   - `coinflip_rebirth_upgrade`
 - 自定义字段只放低基数维度，例如 result、streak band、装备 id、商品 category、rarity、来源和 cash band
@@ -671,9 +694,10 @@ FlipACoin
 
 - 这个系统已经启用
 - 它依赖 `SoundService` 下的分组和资源命名，以及 `workspace.BGSoundsFolder`
-- 当前主玩法音效占位在 `SoundService.SFX`：`flipPress`、`coinToss`、`coinSpin`、`coinLand`、`headsWin`、`tailsLose`、`cashReward`、`bestStreak`、`streak3`、`streak5`、`streak10`、`streak20`、`shopPurchase`、`equipItem`、`rebirth`、`notification`、`tableKnock`
+- 当前主玩法音效在 Studio-owned `SoundService.SFX`：`flipPress`、`coinToss`、`coinSpin`、`coinLand`、`headsWin`、`tailsLose`、`cashReward`、`bestStreak`、`streak3`、`streak5`、`streak7`、`streak10`、`streak20`、`shopPurchase`、`equipItem`、`rebirth`、`notification`、`tableKnock`
+- 他人 / fake player 的 `ObservedFlip()` 保留 `coinToss` / `coinSpin` / `coinLand`，但不播放本地 `headsWin` / `tailsLose` / streak milestone SFX；自己的 flip 仍播放结算与奖励相关 SFX。
 - UI 通用按钮仍使用 `SFX.hoverBtn` / `SFX.clickBtn`，BGM 使用 `SoundService.bgm`
-- 当前音效 `SoundId` 可为空；客户端播放逻辑会跳过空 `SoundId`，后续填入资源 id 后自动生效
+- `MusicSystem` 仍会跳过空 `SoundId`，但当前 Studio 主线 SFX 已填入第一版候选 id；最终听感仍需人工试听确认
 
 ### 7.8 `AnimateSystem`
 
@@ -737,6 +761,14 @@ FlipACoin
 6. 发回本人 HUD 结果
 7. 发给其他玩家观察结果
 8. 若达到阈值，驱动 `AnnouncementSystem`
+
+### 8.4a 广告 / 付费 potion boost
+
+1. Boosts 面板展示 Rewarded Ad 和 `paidCash2x10m`
+2. Rewarded Ad 在客户端检查当前平台 availability；服务端检查独立广告奖励 Developer Product id、15 分钟内存冷却和 in-flight 状态
+3. 广告完成后的奖励 receipt 或付费购买 receipt 都由 `MarketplaceService.ProcessReceipt` 处理
+4. receipt 统一调用 `PotionSystem:GrantAndUsePotion()`，最终写入或延长 `equippedBuff.cash2x`
+5. 真实玩家后续 Flip 通过 `BuffSystem:GetWinsBoost()` 获得 `2x Cash`；概率、streak 和 flip interval 不变
 
 ### 8.5 离开时清理
 
@@ -813,6 +845,8 @@ FlipACoin
 - `runData`
 - `guideData`
 - `settingsData`
+- `potions`
+- `equippedBuff`
 
 其中要特别记住：
 
@@ -873,12 +907,13 @@ FlipACoin
 
 - 主 HUD 绑定读取 Studio 预制节点，不再为统计卡、升级按钮或离座按钮运行时创建兜底资源。
 - `CoinFlipSystem/ui.lua` 绑定 Flip HUD、run upgrade、结果文案和 v3 引导高亮；不直接渲染 Shop / Inventory / Rebirth 面板内容，但会通过系统 UI 辅助方法打开并定位引导目标。
-- `EcoSystem/ui.lua` 绑定 TopbarPlus `Shop` / `Boosts` / `Inventory` 图标、兼容旧 `Buttons.CoinFlipMenu.ShopButton / InventoryButton`，并管理 `Frames.Shop / Inventory`；`Boosts` 复用 Shop 卡片展示 `Products.flipACoin` 和 `GamePasses`，未配置 id 时按钮显示 `Set ID` 且不可点击。
+- `EcoSystem/ui.lua` 绑定 TopbarPlus `Shop` / `Boosts` / `Inventory` 图标、兼容旧 `Buttons.CoinFlipMenu.ShopButton / InventoryButton`，并管理 `Frames.Shop / Inventory`；`Boosts` 复用 Shop 卡片展示 Rewarded Ad、`Products.flipACoin` 和 `GamePasses`。广告不可用或冷却时按钮禁用，付费 id 未配置时按钮显示 `Set ID` 且不可点击。
 - `RebirthSystem/ui.lua` 绑定 TopbarPlus `Rebirth` 图标、兼容旧 `Buttons.CoinFlipMenu.RebirthButton`，并管理 `Frames.Rebirth`。
 - `EffectSystem` 负责桌面 coin flip 表现，`CoinFlipSystem/ui.lua` 只调用它并等待落地回调。
-- 当前 in-play minimal HUD 是 Studio-authored 资源：TopbarPlus 是顶部入口，`CoinFlipMenu` 只保留兼容且玩法态隐藏，`Elements.cash / candy` 保留为 hidden legacy 节点但不再作为右上钱包显示，`CoinFlipHUD` 是全屏透明承载层，左下显示现金 / 连击，右下显示概率 / 速度 / Value / Luck，底部中心显示 `FLIP`、`Auto:Off / Auto:On`、`GuidePrompt` 和短结果提示；`Main.Elements` 只保留 `CoinFlipHUD`、`cash`、`candy`、`ripple`，旧 `Buffs / Rewards / Quests / auto / blockInfo` 和旧 CoinFlip onboarding / spectator / overview 节点已从 Studio 资源中删除。
+- 当前 in-play minimal HUD 是 Studio-authored 资源：TopbarPlus 是顶部入口，`CoinFlipMenu` 只保留兼容且玩法态隐藏，`Elements.cash / candy` 保留为 hidden legacy 节点但不再作为右上钱包显示，`CoinFlipHUD` 是全屏透明承载层，左下显示现金 / 连击，右下显示概率 / 速度 / Value / Luck，底部中心显示 `FLIP`、`Auto:Off / Auto:On`、`GuidePrompt` 和短结果提示；`FlipButton.gamepadKeyImg` 用 `UserInputService:GetImageForKeyCode()` 显示当前输入方式对应的 R2 图片，键鼠端在同一 ImageLabel 内显示 Studio-authored `keyboardKeyText` 紧凑 Space 键帽兜底并放在 `FLIP` 按钮内部左侧，触屏端隐藏，旧 `InputHints` Frame 不再显示；`Main.Elements` 只保留 `CoinFlipHUD`、`cash`、`candy`、`ripple`，旧 `Buffs / Rewards / Quests / auto / blockInfo` 和旧 CoinFlip onboarding / spectator / overview 节点已从 Studio 资源中删除。
 - `Frames.Shop / Inventory / Rebirth / Settings` 的主结构、布局、圆角、描边和文字约束均在 Studio 中维护；Shop / Inventory 的 item 区域是 Studio-authored `ScrollingFrame + Template`，运行时从单个 `Template` clone 商品卡，不再依赖固定 `Item1` 到 `Item12` 卡片池或分页控件；Shop 卡片的 `Art.Image`、Shop Preview 的 `PreviewScene.Icon` 和 Inventory 卡片的 `Icon.Image` 由 `EcoSystem/ui.lua` 绑定到 `Textures.FlipACoinItems` 临时 icon 配置，后续替换图片链接只需改 `src/ReplicatedStorage/configs/Textures.lua`；Shop 商品卡隐藏独立价格标签，底部居中大 `BuyButton` 直接显示价格 / Robux 价格或 `Owned`；运行时代码只绑定按钮、更新图片 / 文本 / selected 状态、打开关闭、重置滚动位置和播放音效。触屏移动端打开面板时通过 `uiController` 套安全区尺寸 / 位置的重排逻辑已临时注释，等待移动端布局重做。
 - `Frames.Shop / Inventory / Rebirth` 打开时会走 `uiController.OpenFrame()` 的轻遮罩，并由 `CoinFlipSystem/ui.lua` 隐藏 gameplay HUD，关闭后再恢复。
+- `uiController` 优先用 `GrowthPanelInputContext` 绑定 `ClosePanel = Escape / ButtonB`；Input Action System 不可用时回退到 `ContextActionService`。
 - 当前游戏具备基础触屏支持；`uiClient.client.lua` 会在触屏设备上禁用 Roblox 默认 `TouchGui`，因为当前玩法不需要移动 / 跳跃；触屏端仍隐藏 keyboard / gamepad 输入提示并把 ready 文案改为 `Tap FLIP`。`CoinFlipSystem/ui.lua` 的 mobile HUD profile 和 portrait 下折叠 Chance / Speed 的逻辑已临时注释，移动端先沿用桌面 / narrow HUD 布局。`uiController.OpenFrame()` 的移动端 growth panel 重排与 viewport 刷新绑定也已临时注释；TopbarPlus 入口点击面积、growth panel 内容挤压和整体观感仍需 Studio / 真机 QA。
 - 旧 `Stats` / `Actions` 容器如果仍存在，只是隐藏兼容遗留，不是当前主 HUD 数据源。
 
@@ -1001,7 +1036,6 @@ FlipACoin
 
 - `BackpackSystem`
 - `BoxSystem`
-- `BuffSystem`
 - `DailySystem`
 - `DoorSystem`
 - `DropSystem`
@@ -1010,7 +1044,6 @@ FlipACoin
 - `GiftSystem`
 - `NPCSystem`
 - `PetSystem`
-- `PotionSystem`
 - `QuestSystem`
 - `SeasonSystem`
 - `SiteSystem`
@@ -1060,6 +1093,6 @@ FlipACoin
 
 如果只用一句工程化的话概括当前仓库：
 
-这是一个已经用旧框架成功跑通“8 人同桌翻硬币”主链路的 Flip A Coin 项目，当前最该相信的是 `SystemMgr + PlayerSystem + TableSeatSystem + FakePlayerSystem + DecorationSystem + CoinFlipSystem + EcoSystem + RebirthSystem + EffectSystem + SettingSystem + AnalyticsSystem + ClientData` 这条线，其余大量目录都应先视为遗留或候选，而不是默认活跃。
+这是一个已经用旧框架成功跑通“8 人同桌翻硬币”主链路的 Flip A Coin 项目，当前最该相信的是 `SystemMgr + PlayerSystem + TableSeatSystem + FakePlayerSystem + DecorationSystem + CoinFlipSystem + EcoSystem + PotionSystem + BuffSystem + RebirthSystem + EffectSystem + SettingSystem + AnalyticsSystem + ClientData` 这条线，其余大量目录都应先视为遗留或候选，而不是默认活跃。
 
 产品方向上，它应被理解为“单桌 8 人弱社交桌面运气游戏”：不要再往多桌大厅、自由走动、复杂观战面板方向扩展；首发重点是进服即坐下、面前一个强 `FLIP` 按钮、短循环升级、streak 情绪曲线、以及轻量同桌存在感。

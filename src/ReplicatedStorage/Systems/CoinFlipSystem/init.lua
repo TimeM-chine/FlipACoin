@@ -122,6 +122,19 @@ local function normalizeFakeRunData(fakeActor)
 	return runData
 end
 
+local function applyCashBuffBonuses(player, bonusStats)
+	local buffSystem = GetSystemMgr().systems.BuffSystem
+	local winsBoost = buffSystem:GetWinsBoost(player)
+	if winsBoost <= 1 then
+		return bonusStats
+	end
+
+	local boostedStats = table.clone(bonusStats)
+	boostedStats.coinMultiplier = (boostedStats.coinMultiplier or 1) * winsBoost
+	boostedStats.premiumCoinMultiplier = (boostedStats.premiumCoinMultiplier or 1) * winsBoost
+	return boostedStats
+end
+
 local function getSeatState(player)
 	local seatState = SystemMgr.systems.TableSeatSystem:GetClientSeatState(player) or {}
 	seatState.seatId = seatState.mySeatId
@@ -142,7 +155,7 @@ local function buildClientState(player)
 	local rebirthSystem = SystemMgr.systems.RebirthSystem
 	local loadoutState = ecoSystem:GetLoadoutState(SENDER, player)
 	local rebirthState = rebirthSystem:GetRebirthState(SENDER, player)
-	local bonusStats = ecoSystem:GetLoadoutBonuses(SENDER, player)
+	local bonusStats = applyCashBuffBonuses(player, ecoSystem:GetLoadoutBonuses(SENDER, player))
 	local derivedStats = Presets.BuildDerivedStats(runData, bonusStats)
 
 	return {
@@ -434,7 +447,7 @@ function CoinFlipSystem:SyncPlayerState(sender, player, extraArgs, useFlipResolv
 	end
 end
 
-function CoinFlipSystem:RequestFlip(sender, player)
+function CoinFlipSystem:RequestFlip(sender, player, args)
 	if not IsServer then
 		return
 	end
@@ -460,7 +473,7 @@ function CoinFlipSystem:RequestFlip(sender, player)
 	end
 
 	local seatId = seatSystem:GetPlayerSeatId(player)
-	local bonusStats = SystemMgr.systems.EcoSystem:GetLoadoutBonuses(SENDER, player)
+	local bonusStats = applyCashBuffBonuses(player, SystemMgr.systems.EcoSystem:GetLoadoutBonuses(SENDER, player))
 	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin)
 	local resolvedFlip = resolveActorFlip(self, {
 		player = player,
@@ -484,6 +497,13 @@ function CoinFlipSystem:RequestFlip(sender, player)
 	seatSystem:RefreshAudienceState(SENDER)
 
 	SystemMgr.systems.AnalyticsSystem:LogCoinFlipResolved(SENDER, player, observedPayload)
+	if typeof(args) == "table" and args.inputSource then
+		SystemMgr.systems.AnalyticsSystem:LogInputAction(SENDER, player, {
+			action = "FlipCoin",
+			source = args.inputSource,
+			inputType = args.inputType,
+		})
+	end
 
 	syncPlayerState(self, player, {
 		result = observedPayload.result,
@@ -494,6 +514,26 @@ function CoinFlipSystem:RequestFlip(sender, player)
 		equippedCoin = equippedCoin,
 		streakMilestone = resolvedFlip.streakMilestone,
 	}, true)
+end
+
+function CoinFlipSystem:ReportInputAction(sender, player, args)
+	if not IsServer then
+		return
+	end
+
+	player = player or sender
+	if sender ~= player or not player:IsDescendantOf(Players) or typeof(args) ~= "table" then
+		return
+	end
+	if args.action ~= "ToggleAutoFlip" then
+		return
+	end
+
+	SystemMgr.systems.AnalyticsSystem:LogInputAction(SENDER, player, {
+		action = args.action,
+		source = typeof(args.source) == "string" and args.source or "unknown",
+		inputType = typeof(args.inputType) == "string" and args.inputType or "unknown",
+	})
 end
 
 function CoinFlipSystem:RequestFakeFlip(sender, fakeActor)

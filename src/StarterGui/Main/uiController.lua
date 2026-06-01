@@ -39,6 +39,7 @@ local SystemMgr
 local responsiveGrowthFrameLayouts = {}
 local responsiveGrowthFrameBound = false
 local responsiveViewportConnection
+local closeInputContext
 local GrowthFrameNames = {
 	Shop = true,
 	Inventory = true,
@@ -238,6 +239,50 @@ function controller.SetNotification(args: { text: string, soundName: string, las
 	end)
 end
 
+local function createCloseInputBinding(action, name, keyCode)
+	local binding = Instance.new("InputBinding")
+	binding.Name = name
+	binding.KeyCode = keyCode
+	binding.Parent = action
+end
+
+local function bindCloseInputAction()
+	if closeInputContext then
+		closeInputContext.Enabled = true
+		return true
+	end
+
+	local context
+	local success = pcall(function()
+		context = Instance.new("InputContext")
+		context.Name = "GrowthPanelInputContext"
+		context.Priority = 3000
+		context.Sink = true
+		context.Parent = Main
+
+		local closeAction = Instance.new("InputAction")
+		closeAction.Name = "ClosePanel"
+		closeAction.Type = Enum.InputActionType.Bool
+		closeAction.Parent = context
+		createCloseInputBinding(closeAction, "KeyboardEscape", Enum.KeyCode.Escape)
+		createCloseInputBinding(closeAction, "GamepadB", Enum.KeyCode.ButtonB)
+		closeAction.Pressed:Connect(function()
+			if frameCache then
+				controller.CloseFrame(frameCache.Name)
+			end
+		end)
+	end)
+	if not success then
+		if context then
+			context:Destroy()
+		end
+		return false
+	end
+
+	closeInputContext = context
+	return true
+end
+
 function controller.OpenFrame(name)
 	local frame: Frame = Frames:FindFirstChild(name)
 	if not frame then
@@ -261,14 +306,15 @@ function controller.OpenFrame(name)
 	frame.Visible = true
 	controller.SetUnitJump(frame)
 
-	CAS:BindActionAtPriority("GAMEPAD_CLOSE_FRAME", function(_, state, input)
-		-- print("GAMEPAD_CLOSE_FRAME", state, input.KeyCode)
-		if state == Enum.UserInputState.Begin then
-			if frameCache then
-				controller.CloseFrame(frameCache.Name)
+	if not bindCloseInputAction() then
+		CAS:BindActionAtPriority("GAMEPAD_CLOSE_FRAME", function(_, state, input)
+			if state == Enum.UserInputState.Begin then
+				if frameCache then
+					controller.CloseFrame(frameCache.Name)
+				end
 			end
-		end
-	end, false, 2, Enum.KeyCode.ButtonB)
+		end, false, 2, Enum.KeyCode.ButtonB, Enum.KeyCode.Escape)
+	end
 
 	for _, unit in hideUnitWhenPush do
 		unit.Visible = false
@@ -316,6 +362,9 @@ function controller.CloseFrame(name)
 	end
 
 	CAS:UnbindAction("GAMEPAD_CLOSE_FRAME")
+	if closeInputContext then
+		closeInputContext.Enabled = false
+	end
 end
 
 function controller.OpenModal(args)

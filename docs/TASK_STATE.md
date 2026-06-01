@@ -1,6 +1,6 @@
 # TASK_STATE
 
-最后更新：2026-05-31
+最后更新：2026-06-02
 
 > 目的：记录当前正在做什么、下一步是什么、关键决策、待验证项与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`；不要把本文件变成长篇历史日志。
 
@@ -38,7 +38,7 @@
 
 - Studio / device QA：按 `docs/ROBLOX_PLATFORM_IMPROVEMENT.md` 覆盖手机 portrait / landscape、平板、桌面键鼠、手柄和双客户端同桌，确认 HUD 响应式布局、安全区、growth panels、Topbar 入口与装扮刷新。
 - Studio Play：填入真实 Developer Product / Game Pass id 后，确认 Boosts 入口能弹出 Robux 购买 prompt；购买 Cash / Rebirth Points / Apex bundle / VIP / 2x Cash / Lucky Charm / Quick Flip 后刷新 HUD、Shop、Inventory、Rebirth 和座位表现。
-- Creator Dashboard：创建 `cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle` 六个 Developer Products 和 `vip / winsX2 / luckyCharm / quickFlip` 四个 Game Pass，并把 id 填回 `EcoSystem/Presets.lua`。
+- Creator Dashboard：创建 `cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle / paidCash2x10m` 七个付费 Developer Products、一个 Rewarded Ads 专用 Developer Product，以及 `vip / winsX2 / luckyCharm / quickFlip` 四个 Game Pass；把付费 product id 填回 `Products.flipACoin`，把广告奖励 product id 填回 `RewardedAds.DevProductId`。
 - Studio Play：新档默认 Cash 为 `9`，入座后看到首次 Flip 引导；首次 Flip 后不再出现旧首次升级引导，后续在达到 Rebirth / Coin 条件时进入对应 v3 引导。
 - Studio Play 双客户端：确认他人 Heads / Tails 落地 pulse 更明显、Heads streak ring 按 streak 扩大、高 streak / milestone 有短 Highlight；`streak1` / `streak2` 资产缺失时 fallback pulse 不阻塞落地回调。
 - Studio Play：确认 `coin1` through `coin10` 资产能按装备显示，新档默认 `Copper R Coin`，旧 Coin id 存档能 reconcile 到 `coin1`。
@@ -57,6 +57,31 @@
 - 可评估极简决策点：高 streak 后出现 `Cash Out` / `Double` / bonus choice，但不要破坏“一键 Flip”的主循环。
 
 ## Done
+
+### 2026-06-02 EffectSystem RenderStepped closure fix
+
+- Outcome: 修复 `EffectSystem:PlayCoinFlipVisual()` 中 `RunService.RenderStepped:Connect(function()` 外层闭包缺失 `end)` 的解析错误，避免 `SystemMgr` require `EffectSystem` 失败。
+- Validation: `git diff --check -- src/ReplicatedStorage/Systems/EffectSystem/init.lua docs/TASK_STATE.md` 通过；Studio MCP Play 后 `require(game.ReplicatedStorage.Systems.SystemMgr).systems.EffectSystem` 返回 table，控制台未再出现 `Expected ')'` 或 `Requested module experienced an error while loading`。
+
+### 2026-06-02 PC flip input icon visual fix
+
+- Outcome: 修复 PC 键鼠端 `FlipButton.gamepadKeyImg` 以白色大块浮在 `FLIP` 按钮上方的问题。运行时现在会按输入方式给 `gamepadKeyImg` 切换样式：键鼠端显示按钮内部左侧的紧凑 `SPACE` 键帽，手柄端显示 R2 图片，触屏端继续隐藏。Studio 预制同步改为默认隐藏、`RelativeXY`、紧凑 offset 尺寸，并把 `keyboardKeyText` 层级抬到父 ImageLabel 上方。顺手修复上一轮遗留的 `EffectSystem` 多余 `end)` 解析风险。
+- Validation: `git diff --check -- src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua src/ReplicatedStorage/Systems/EffectSystem/init.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过；Studio MCP 确认 edit-time `gamepadKeyImg.Visible=false`、`Position={0.15,0},{0.5,0}`、`Size={0,54},{0,30}`、`SizeConstraint=RelativeXY`、`keyboardKeyText.ZIndex=3`。Play 模式未出现新增控制台脚本错误；本轮单客户端 Play 没有自动入座，故用运行态强制显隐截图确认键帽位于 `FLIP` 按钮内部且不再遮挡按钮外区域。
+
+### 2026-06-02 Observed flip SFX / initial camera / flip input icon cleanup
+
+- Outcome: 他人和 fake player 的 `ObservedFlip()` 仍播放 `coinToss` / `coinSpin` / `coinLand`，但不再播放本地 `headsWin` / `tailsLose` 或 streak milestone SFX；自己的 flip 仍播放结算和 `cashReward`。`FirstPersonCamera.RequestInitialTableLook()` 现在会等 loading screen 销毁且本地 Humanoid 已坐下后再消费首次桌面朝向请求，并延长初始强制看桌时间，避免 loading 消失后看到旧默认相机方向。`CoinFlipHUD` 不再显示旧 `InputHints` 文本提示，改用 `FlipButton.gamepadKeyImg` 按最后输入方式显示 R2 图片或 Space 键帽兜底，触屏端隐藏；Studio 预制里已补 `gamepadKeyImg.keyboardKeyText`。
+- Validation: `git diff --check -- src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua src/ReplicatedStorage/Systems/EffectSystem/init.lua src/StarterPlayer/StarterPlayerScripts/Modules/FirstPersonCamera.lua src/StarterGui/Main/uiClient.client.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过；Studio MCP Play 单客户端确认 `InputHints=false`、`gamepadKeyImg=true`、键鼠兜底 `keyboardText=SPACE`、玩家已坐下、相机看向桌面 `lookDot=1.0000` 且 `CameraType=Custom`；控制台未见新增脚本错误，只剩既有 StyleRule `CornerRadius` 警告。`stylua --check` 无法运行，因为 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua；本机未发现 `luau` 命令。多客户端听感仍建议用户在 Studio Team Test 中确认。
+
+### 2026-06-01 Platform input / rewarded potion boost implementation
+
+- Outcome: `PotionSystem` / `BuffSystem` 已注册为 FlipACoin 主线系统，旧 simulator potion 配置重配为 `adCash2x5m` 和 `paidCash2x10m`，统一映射到 `cash2x`；`GrantAndUsePotion()` 走“入库存 -> 立即使用 -> AddBuff -> 同步客户端”链路并移除旧 `QuestSystem` 依赖。Boosts 面板新增 Rewarded Ad 入口和 `paidCash2x10m` 付费 boost；广告奖励用独立 `RewardedAds.DevProductId` 创建 `AdReward`，最终以 `ProcessReceipt` 发放并立即使用，服务端维护 15 分钟内存冷却。真实玩家 Flip 奖励接入 `BuffSystem:GetWinsBoost()`，只影响 Cash 倍率；fake player 不读取 potion / buff。新增 Gameplay / Growth Panel Input Action System 路径并保留 CAS fallback，补充广告、potion、buff、输入来源 analytics；`PROJECT_LOGIC.md` 已同步新职责。
+- Validation: `git diff --check` 通过；活跃系统目录扫描确认旧 `wins1Potion30 / lucky* / power1Potion30 / temporaryBoosts / StoreFrame / CashPotionRewardName` 无残留。Studio MCP Play 单客户端启动无新增脚本错误，控制台只见既有 StyleRule `CornerRadius` 警告；运行态确认 `SystemMgr` 已注册 `PotionSystem` / `BuffSystem`，`adCash2x5m.duration = 300`、`paidCash2x10m.duration = 600`、`cash2x.boost = 1`，且 `CoinFlipGameplayInputContext` 已创建。`stylua --check` 无法运行，因为 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua。真实 Rewarded Ads 需要先在 Creator Dashboard 创建独立广告奖励 Developer Product 并填入 `RewardedAds.DevProductId`，还受平台资格 / no-fill 影响；移动端实机验证按用户要求不纳入本轮。
+
+### 2026-06-01 SFX completion and coin landing burst
+
+- Outcome: Studio-owned `SoundService.SFX` 主线音效已补齐第一版候选 `SoundId`，偏向写实 / 赌博机风 / 短促反馈，并对音量与 `PlaybackSpeed` 做初调；每个补全音效写入 `AudioStyle` / `ReviewNote` 属性方便后续试听替换。新增 Studio-owned `EffectSystem.Assets.coinLandingBurst` 短促落地粒子资产，`EffectSystem` 在硬币落地 pulse 后克隆播放该 burst，Heads 偏金色、Tails 偏橙红；缺失资产时静默跳过。`PROJECT_LOGIC.md` 已同步当前 SFX 和落地 VFX 口径。
+- Validation: Studio MCP 扫描确认 `SoundService.SFX` 直接子音效 `SoundId` 缺失数为 `0`，Play 模式运行态确认 `coinLandingBurst` 存在且为 `Attachment`。MCP 截图检查了 edit-time 基线、Play sanity、连续预览版 burst 和多次 Flip 落地；Flip 流程、落点和 HUD 未见异常。Studio 控制台未见新增 `EffectSystem` / SFX 报错，只剩既有 Studio 服务请求失败和 StyleRule `CornerRadius` 警告。`git diff --check -- src/ReplicatedStorage/Systems/EffectSystem/init.lua src/ReplicatedStorage/Systems/EffectSystem/Presets.lua docs/PROJECT_LOGIC.md docs/TASK_STATE.md` 通过；`stylua --check` 因 Aftman 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行。最终音效听感仍需用户人工试听确认。
 
 ### 2026-05-31 Growth panel stale guide-mask fix
 

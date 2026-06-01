@@ -27,6 +27,12 @@ EcoPresets.LoadoutDefaults = table.freeze({
 	equippedChair = "1",
 })
 
+EcoPresets.RewardedAds = table.freeze({
+	DevProductId = 0,
+	AdPotionName = "adCash2x5m",
+	CooldownSeconds = 15 * 60,
+})
+
 EcoPresets.GrowthShopItems = {
 	coin = table.freeze({
 		{
@@ -360,7 +366,7 @@ EcoPresets.Products = {
 		cashPackSmall = {
 			order = 1,
 			productName = "Cash Pouch",
-			productId = 0,
+			productId = 3596711650,
 			price = 29,
 			grantType = "cash",
 			count = 2_500,
@@ -369,7 +375,7 @@ EcoPresets.Products = {
 		cashPackMedium = {
 			order = 2,
 			productName = "Cash Stack",
-			productId = 0,
+			productId = 3596711733,
 			price = 99,
 			grantType = "cash",
 			count = 15_000,
@@ -378,7 +384,7 @@ EcoPresets.Products = {
 		cashPackLarge = {
 			order = 3,
 			productName = "Cash Vault",
-			productId = 0,
+			productId = 3596711820,
 			price = 399,
 			grantType = "cash",
 			count = 80_000,
@@ -387,7 +393,7 @@ EcoPresets.Products = {
 		rebirthShardSmall = {
 			order = 4,
 			productName = "Rebirth Points x10",
-			productId = 0,
+			productId = 3596711879,
 			price = 99,
 			grantType = "rebirthPoints",
 			count = 10,
@@ -396,7 +402,7 @@ EcoPresets.Products = {
 		rebirthShardLarge = {
 			order = 5,
 			productName = "Rebirth Points x60",
-			productId = 0,
+			productId = 3596711948,
 			price = 399,
 			grantType = "rebirthPoints",
 			count = 60,
@@ -405,7 +411,7 @@ EcoPresets.Products = {
 		apexLoadoutBundle = {
 			order = 6,
 			productName = "Apex Loadout Bundle",
-			productId = 0,
+			productId = 3596712138,
 			price = 599,
 			grantType = "loadoutBundle",
 			description = "Unlock Ancient Ruby Coin, Amethyst Hourglass, and Royal Chaise",
@@ -415,6 +421,15 @@ EcoPresets.Products = {
 				desk = { "8" },
 				chair = { "11" },
 			},
+		},
+		paidCash2x10m = {
+			order = 7,
+			productName = "2x Cash Boost 10m",
+			productId = 3601874164,
+			price = 99,
+			grantType = "potion",
+			potionName = "paidCash2x10m",
+			description = "Use instantly for 2x Cash during the next 10 minutes",
 		},
 	},
 	cardPacks = {
@@ -566,41 +581,16 @@ EcoPresets.Products = {
 		},
 	},
 	potions = {
-		wins1Potion30 = {
+		paidCash2x10m = {
 			order = 1,
-			potionName = "wins1Potion30",
-			productName = "Cash Potion 30min",
-			productId = 3413220957,
-			price = 199,
+			potionName = "paidCash2x10m",
+			productName = "2x Cash Boost 10m",
+			price = 99,
 			winsPrice = 20_000,
-			count = 50,
-			title = "Cash collect +100%",
-			description = "Lasts 30min",
+			count = 1,
+			title = "2x Cash",
+			description = "Lasts 10min",
 			gradientColor = "Yellow",
-		},
-		lucky1Potion15 = {
-			order = 2,
-			potionName = "lucky1Potion15",
-			productName = "Luck Potion 15min",
-			productId = 3413221811,
-			price = 169,
-			winsPrice = 16_000,
-			count = 50,
-			title = "Luck +75%",
-			description = "Lasts 15min",
-			gradientColor = "Green",
-		},
-		lucky2Potion15 = {
-			order = 3,
-			potionName = "lucky2Potion15",
-			productName = "Super Luck Potion 15min",
-			productId = 3413222618,
-			price = 299,
-			winsPrice = 40_000,
-			count = 50,
-			title = "Luck +200%",
-			description = "Lasts 15min",
-			gradientColor = "Purple",
 		},
 	},
 	event = {
@@ -632,21 +622,9 @@ EcoPresets.Products = {
 			},
 			{
 				itemType = ItemType.potion,
-				count = 5,
-				name = "wins1Potion30",
-				text = "Wins Potion",
-			},
-			{
-				itemType = ItemType.potion,
-				count = 5,
-				name = "lucky1Potion30",
-				text = "Lucky Potion",
-			},
-			{
-				itemType = ItemType.potion,
-				count = 5,
-				name = "power1Potion30",
-				text = "Power Potion",
+				count = 1,
+				name = "paidCash2x10m",
+				text = "2x Cash Potion",
 			},
 		},
 	},
@@ -837,7 +815,7 @@ EcoPresets.GamePasses = {
 		order = 1,
 		gradient = "Shiny",
 		title = "VIP",
-		gamePassId = 0,
+		gamePassId = 1854149220,
 		price = 199,
 		description = "+10% Cash, +1% Luck, and VIP loadout unlocks",
 	},
@@ -845,7 +823,7 @@ EcoPresets.GamePasses = {
 		order = 2,
 		gradient = "Gold",
 		title = "2x Cash",
-		gamePassId = 0,
+		gamePassId = 1852463340,
 		price = 299,
 		description = "Double Cash from flip rewards",
 	},
@@ -853,7 +831,7 @@ EcoPresets.GamePasses = {
 		order = 3,
 		gradient = "Green",
 		title = "Lucky Charm",
-		gamePassId = 0,
+		gamePassId = 1852733314,
 		price = 149,
 		description = "+4% Heads chance",
 	},
@@ -861,7 +839,7 @@ EcoPresets.GamePasses = {
 		order = 4,
 		gradient = "Purple",
 		title = "Quick Flip",
-		gamePassId = 0,
+		gamePassId = 1853909293,
 		price = 99,
 		description = "Flip 15% faster",
 	},
@@ -913,8 +891,8 @@ local redeemCodes = {
 		rewards = {
 			{
 				itemType = ItemType.potion,
-				count = 2,
-				name = "power1Potion30",
+				count = 1,
+				name = "paidCash2x10m",
 			},
 		},
 	},

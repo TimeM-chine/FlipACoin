@@ -1,22 +1,17 @@
-local Replicated = game:GetService("ReplicatedStorage")
-
-local Textures = require(Replicated.configs.Textures)
-local GameConfig = require(Replicated.configs.GameConfig)
-
 local PotionPresets = {}
 
 PotionPresets.Potions = {
-	wins1Potion30 = {
-		buffName = "wins1",
-		duration = GameConfig.OneMinute * 30,
+	adCash2x5m = {
+		displayName = "2x Cash Ad Boost",
+		buffName = "cash2x",
+		duration = 300,
+		source = "ad",
 	},
-	lucky1Potion15 = {
-		buffName = "lucky1",
-		duration = GameConfig.OneMinute * 15,
-	},
-	lucky2Potion15 = {
-		buffName = "lucky2",
-		duration = GameConfig.OneMinute * 15,
+	paidCash2x10m = {
+		displayName = "2x Cash Boost",
+		buffName = "cash2x",
+		duration = 600,
+		source = "product",
 	},
 }
 

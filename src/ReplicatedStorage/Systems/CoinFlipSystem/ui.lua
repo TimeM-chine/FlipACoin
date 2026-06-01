@@ -59,7 +59,7 @@ local CenterPanel = Content:WaitForChild("CenterPanel")
 local RightPanel = Content:WaitForChild("RightPanel")
 local RightStatsFrame = RightPanel:WaitForChild("Stats")
 local UpgradeButtons = RightPanel:WaitForChild("UpgradeButtons")
-local InputHints = CenterPanel:WaitForChild("InputHints")
+local InputHints = CenterPanel:FindFirstChild("InputHints")
 
 local function resolveStatLabel(card)
 	return findFirstByNames(card, { "Title", "Label" })
@@ -83,6 +83,8 @@ local FlipButton = CenterPanel:WaitForChild("FlipButton")
 if not FlipButton or not FlipButton:IsA("GuiButton") then
 	error("CoinFlipHUD is missing FlipButton")
 end
+local FlipInputIcon = FlipButton:WaitForChild("gamepadKeyImg")
+local FlipInputKeyboardLabel = FlipInputIcon:FindFirstChild("keyboardKeyText")
 local AutoButton = CenterPanel:WaitForChild("AutoButton")
 if not AutoButton or not AutoButton:IsA("GuiButton") then
 	error("CoinFlipHUD is missing AutoButton")
@@ -119,6 +121,7 @@ local UpgradeTitles = {
 local CoinFlipUi = {}
 local initialized = false
 local flipInputBound = false
+local inputActionContext
 local responsiveLayoutBound = false
 local viewportSizeConnection
 local cameraChangedConnection
@@ -158,6 +161,12 @@ local FAKE_COIN_LOOK_YAW_LIMIT = math.rad(50)
 local FAKE_COIN_LOOK_NECK_PITCH_WEIGHT = 0.7
 local FAKE_COIN_LOOK_NECK_YAW_WEIGHT = 0.72
 local FAKE_COIN_LOOK_WAIST_YAW_WEIGHT = 0.2
+local FLIP_KEYBOARD_KEY = Enum.KeyCode.Space
+local FLIP_GAMEPAD_KEY = Enum.KeyCode.ButtonR2
+local FLIP_KEYBOARD_ICON_POSITION = UDim2.fromScale(0.15, 0.5)
+local FLIP_KEYBOARD_ICON_SIZE = UDim2.fromOffset(54, 30)
+local FLIP_GAMEPAD_ICON_POSITION = UDim2.fromScale(0.16, 0.5)
+local FLIP_GAMEPAD_ICON_SIZE = UDim2.fromOffset(42, 42)
 local fakeCoinLookTokens = {}
 
 local function getRecommendedUpgradeKey()
@@ -358,6 +367,76 @@ local function hideLegacySeatBillboards(seatState)
 	end
 end
 
+local function isGamepadInputType(inputType)
+	return inputType == Enum.UserInputType.Gamepad1
+		or inputType == Enum.UserInputType.Gamepad2
+		or inputType == Enum.UserInputType.Gamepad3
+		or inputType == Enum.UserInputType.Gamepad4
+		or inputType == Enum.UserInputType.Gamepad5
+		or inputType == Enum.UserInputType.Gamepad6
+		or inputType == Enum.UserInputType.Gamepad7
+		or inputType == Enum.UserInputType.Gamepad8
+end
+
+local function getFlipInputIconKeyCode()
+	if UserInputService.TouchEnabled then
+		return nil
+	end
+
+	local lastInputType = UserInputService:GetLastInputType()
+	if isGamepadInputType(lastInputType) or (UserInputService.GamepadEnabled and not UserInputService.KeyboardEnabled) then
+		return FLIP_GAMEPAD_KEY
+	end
+
+	return FLIP_KEYBOARD_KEY
+end
+
+local function refreshFlipInputIcon(canRequestFlip)
+	local keyCode = getFlipInputIconKeyCode()
+	FlipInputIcon.Visible = canRequestFlip == true and keyCode ~= nil
+	if not keyCode then
+		if FlipInputKeyboardLabel and FlipInputKeyboardLabel:IsA("TextLabel") then
+			FlipInputKeyboardLabel.Visible = false
+		end
+		return
+	end
+
+	local image = UserInputService:GetImageForKeyCode(keyCode)
+	local useKeyboardText = image == "" and keyCode == FLIP_KEYBOARD_KEY
+	FlipInputIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+	FlipInputIcon.SizeConstraint = Enum.SizeConstraint.RelativeXY
+	FlipInputIcon.Position = useKeyboardText and FLIP_KEYBOARD_ICON_POSITION or FLIP_GAMEPAD_ICON_POSITION
+	FlipInputIcon.Size = useKeyboardText and FLIP_KEYBOARD_ICON_SIZE or FLIP_GAMEPAD_ICON_SIZE
+	FlipInputIcon.BackgroundTransparency = useKeyboardText and 0.12 or 1
+	FlipInputIcon.BackgroundColor3 = useKeyboardText and Color3.fromRGB(36, 31, 30) or Color3.fromRGB(255, 255, 255)
+	FlipInputIcon.ImageTransparency = useKeyboardText and 1 or 0
+	FlipInputIcon.Image = useKeyboardText and "" or image
+	local iconStroke = FlipInputIcon:FindFirstChildOfClass("UIStroke")
+	if iconStroke then
+		iconStroke.Enabled = useKeyboardText
+		iconStroke.Color = Color3.fromRGB(255, 238, 170)
+		iconStroke.Transparency = 0.18
+		iconStroke.Thickness = 1
+	end
+	if FlipInputKeyboardLabel and FlipInputKeyboardLabel:IsA("TextLabel") then
+		FlipInputKeyboardLabel.Visible = useKeyboardText
+		if useKeyboardText then
+			local keyText = UserInputService:GetStringForKeyCode(keyCode)
+			if keyText == "" or keyText:match("^%s+$") then
+				keyText = keyCode.Name
+			end
+			FlipInputKeyboardLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+			FlipInputKeyboardLabel.Position = UDim2.fromScale(0.5, 0.5)
+			FlipInputKeyboardLabel.Size = UDim2.fromScale(1, 1)
+			FlipInputKeyboardLabel.BackgroundTransparency = 1
+			FlipInputKeyboardLabel.ZIndex = FlipInputIcon.ZIndex + 1
+			FlipInputKeyboardLabel.TextColor3 = Color3.fromRGB(255, 238, 170)
+			FlipInputKeyboardLabel.TextTransparency = 0
+			FlipInputKeyboardLabel.Text = string.upper(keyText)
+		end
+	end
+end
+
 local function applyGameplayVisibility(isVisible)
 	local showHud = isVisible == true and not isGrowthFrameOpen()
 	local canRequestFlip = showHud and not currentFlipInProgress and not awaitingFlipResponse
@@ -369,7 +448,9 @@ local function applyGameplayVisibility(isVisible)
 	RightStatsFrame.Visible = showHud and not currentLayoutIsMobilePortrait
 	UpgradeButtons.Visible = showHud
 	CenterPanel.Visible = showHud
-	InputHints.Visible = canRequestFlip and not UserInputService.TouchEnabled
+	if InputHints and InputHints:IsA("GuiObject") then
+		InputHints.Visible = false
+	end
 	ResultLabel.Visible = showHud
 	FlipButton.Visible = showHud
 	FlipButton.Active = canRequestFlip
@@ -377,6 +458,7 @@ local function applyGameplayVisibility(isVisible)
 	AutoButton.Visible = showHud
 	AutoButton.Active = showHud
 	AutoButton.AutoButtonColor = showHud
+	refreshFlipInputIcon(canRequestFlip)
 	LegacyCashText.Visible = false
 	LegacyRebirthText.Visible = false
 
@@ -443,7 +525,19 @@ local function updateResultText(text, tone)
 	end)
 end
 
-local function requestFlip()
+local function getInputTypeName(inputObject)
+	if inputObject and inputObject.UserInputType then
+		return inputObject.UserInputType.Name
+	end
+
+	return UserInputService:GetLastInputType().Name
+end
+
+local function requestFlip(inputSource, inputObject)
+	if isGrowthFrameOpen() then
+		return false
+	end
+
 	local now = os.clock()
 	if awaitingFlipResponse or now < localFlipCooldownEndsAt then
 		return false
@@ -458,7 +552,10 @@ local function requestFlip()
 	if currentSeatId then
 		applyGameplayVisibility(true)
 	end
-	CoinFlipSystem.Server:RequestFlip()
+	CoinFlipSystem.Server:RequestFlip({
+		inputSource = inputSource or "hud",
+		inputType = getInputTypeName(inputObject),
+	})
 	updateResultText(hadSeatWhenRequested and "Flipping..." or "Checking your seat...", "Neutral")
 	if hadSeatWhenRequested then
 		playSfx("flipPress")
@@ -634,7 +731,7 @@ local function scheduleAutoFlipRequest()
 			return
 		end
 
-		requestFlip()
+		requestFlip("autoFlip")
 	end)
 end
 
@@ -647,8 +744,92 @@ local function handleFlipInput(_, inputState)
 		return Enum.ContextActionResult.Pass
 	end
 
-	requestFlip()
+	requestFlip("contextAction")
 	return Enum.ContextActionResult.Sink
+end
+
+local function updateInputActionContextState()
+	if inputActionContext then
+		inputActionContext.Enabled = not isGrowthFrameOpen()
+	end
+end
+
+local function createInputBinding(action, name, keyCode)
+	local binding = Instance.new("InputBinding")
+	binding.Name = name
+	binding.KeyCode = keyCode
+	binding.Parent = action
+end
+
+local function bindFlipInputIconRefresh()
+	UserInputService.LastInputTypeChanged:Connect(function()
+		applyGameplayVisibility(currentSeatId ~= nil)
+	end)
+	UserInputService.GamepadConnected:Connect(function()
+		applyGameplayVisibility(currentSeatId ~= nil)
+	end)
+	UserInputService.GamepadDisconnected:Connect(function()
+		applyGameplayVisibility(currentSeatId ~= nil)
+	end)
+end
+
+local function bindInputActionSystem()
+	local context
+	local success = pcall(function()
+		context = Instance.new("InputContext")
+		context.Name = "CoinFlipGameplayInputContext"
+		context.Priority = 2000
+		context.Sink = true
+		context.Parent = Main
+
+		local flipAction = Instance.new("InputAction")
+		flipAction.Name = "FlipCoin"
+		flipAction.Type = Enum.InputActionType.Bool
+		flipAction.Parent = context
+		createInputBinding(flipAction, "KeyboardSpace", FLIP_KEYBOARD_KEY)
+		createInputBinding(flipAction, "GamepadR2", FLIP_GAMEPAD_KEY)
+		flipAction.Pressed:Connect(function(inputObject)
+			if UserInputService:GetFocusedTextBox() then
+				return
+			end
+
+			requestFlip("inputAction", inputObject)
+		end)
+
+		local autoAction = Instance.new("InputAction")
+		autoAction.Name = "ToggleAutoFlip"
+		autoAction.Type = Enum.InputActionType.Bool
+		autoAction.Parent = context
+		createInputBinding(autoAction, "GamepadY", Enum.KeyCode.ButtonY)
+		autoAction.Pressed:Connect(function(inputObject)
+			if UserInputService:GetFocusedTextBox() then
+				return
+			end
+
+			CoinFlipSystem.Server:ReportInputAction({
+				action = "ToggleAutoFlip",
+				source = "inputAction",
+				inputType = getInputTypeName(inputObject),
+			})
+			setAutoFlipEnabled(not autoFlipEnabled)
+			if autoFlipEnabled then
+				local didRequestFlip = requestFlip("inputActionAuto", inputObject)
+				if not didRequestFlip and not currentFlipInProgress then
+					scheduleAutoFlipRequest()
+				end
+			end
+		end)
+	end)
+	if not success then
+		if context then
+			context:Destroy()
+		end
+		return false
+	end
+
+	inputActionContext = context
+	updateInputActionContextState()
+	return true
 end
 
 local function bindFlipInput()
@@ -657,13 +838,17 @@ local function bindFlipInput()
 	end
 
 	flipInputBound = true
+	if bindInputActionSystem() then
+		return
+	end
+
 	ContextActionService:BindActionAtPriority(
 		FlipInputActionName,
 		handleFlipInput,
 		false,
 		3,
-		Enum.KeyCode.Space,
-		Enum.KeyCode.ButtonR2
+		FLIP_KEYBOARD_KEY,
+		FLIP_GAMEPAD_KEY
 	)
 end
 
@@ -767,6 +952,7 @@ local function bindGrowthFrameVisibility()
 			if frame.Visible then
 				setAutoFlipEnabled(false)
 			end
+			updateInputActionContextState()
 			applyGameplayVisibility(currentSeatId ~= nil)
 			refreshGuide()
 		end)
@@ -787,15 +973,21 @@ function CoinFlipUi.Init()
 	applyResponsiveLayout()
 	bindResponsiveLayout()
 	bindGrowthFrameVisibility()
+	bindFlipInputIconRefresh()
 	bindFlipInput()
 
 	uiController.SetButtonHoverAndClick(FlipButton, function()
-		requestFlip()
+		requestFlip("hudButton")
 	end)
 	uiController.SetButtonHoverAndClick(AutoButton, function()
+		CoinFlipSystem.Server:ReportInputAction({
+			action = "ToggleAutoFlip",
+			source = "hudAuto",
+			inputType = getInputTypeName(),
+		})
 		setAutoFlipEnabled(not autoFlipEnabled)
 		if autoFlipEnabled then
-			local didRequestFlip = requestFlip()
+			local didRequestFlip = requestFlip("hudAuto")
 			if not didRequestFlip and not currentFlipInProgress then
 				scheduleAutoFlipRequest()
 			end
@@ -1093,9 +1285,15 @@ function CoinFlipUi.ObservedFlip(args)
 			isObserved = true,
 			streak = args.streak or 0,
 			isMilestone = args.streakMilestone ~= nil,
+			playResultSfx = false,
 		},
 		landedCallback = function()
-			EffectSystem:PlayStreakMilestone(nil, nil, args.streakMilestone)
+			local streakMilestone = args.streakMilestone
+			if streakMilestone then
+				streakMilestone = table.clone(streakMilestone)
+				streakMilestone.suppressSfx = true
+			end
+			EffectSystem:PlayStreakMilestone(nil, nil, streakMilestone)
 		end,
 	})
 	if args.isFake then

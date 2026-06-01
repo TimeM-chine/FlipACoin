@@ -289,6 +289,7 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 	local isObservedFlip = visualOptions and visualOptions.isObserved == true
 	local isObservedMilestone = visualOptions and visualOptions.isMilestone == true
 	local observedStreak = visualOptions and (visualOptions.streak or 0) or 0
+	local shouldPlayResultSfx = not visualOptions or visualOptions.playResultSfx ~= false
 	local shouldShowObservedStreakPulse = isObservedFlip
 		and result == "Heads"
 		and (observedStreak >= VisualConfig.StreakPulseMinimum or isObservedMilestone)
@@ -354,6 +355,7 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 		local landingPulseOptions = getLandingPulseOptions(result, isObservedFlip)
 		playSfx("coinLand")
 		playLandingPulse(landingPulse, shadowPos, pulseColor, landingPulseOptions)
+		playCoinLandingBurst(surfaceEndPos, tableNormal, result)
 		if shouldShowObservedStreakPulse then
 			playLandingPulse(streakPulse, shadowPos, VisualConfig.StreakPulseColor, {
 				startSize = VisualConfig.StreakPulseStartSize,
@@ -421,7 +423,9 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 				FirstPersonCamera.ReturnToFirstPerson(visual.focusPart)
 			end
 			visual.shouldFollowCamera = false
-			playSfx(result == "Heads" and "headsWin" or "tailsLose")
+			if shouldPlayResultSfx then
+				playSfx(result == "Heads" and "headsWin" or "tailsLose")
+			end
 			refreshPendingCoinVisual(visual, seatId)
 			if landedCallback then
 				task.delay(VisualConfig.ResultRevealDelay or 0, landedCallback)
@@ -481,7 +485,9 @@ function EffectSystem:PlayStreakMilestone(sender, player, args)
 		return
 	end
 
-	playSfx(args.sfx)
+	if args.suppressSfx ~= true then
+		playSfx(args.sfx)
+	end
 	local playedVfx = playStreakMilestoneVfx(args.seatId, args.vfx, args.lifeTime)
 	if playedVfx then
 		playCoinVisualHighlight(args.seatId, activeCoinFlipVisuals[args.seatId], {
@@ -1440,6 +1446,44 @@ function playTableTapRipple(position, normal)
 		ripple:Destroy()
 	end)
 	Debris:AddItem(ripple, SceneInteractionConfig.TableTapRippleDuration + 0.12)
+end
+
+function playCoinLandingBurst(position, normal, result)
+	local burstAsset = script.Assets:FindFirstChild(VisualConfig.LandingBurstAssetName)
+	if not burstAsset or not burstAsset:IsA("Attachment") then
+		return
+	end
+
+	local holder = Instance.new("Part")
+	holder.Name = "CoinLandingBurst"
+	holder.Anchored = true
+	holder.CanCollide = false
+	holder.CanTouch = false
+	holder.CanQuery = false
+	holder.CastShadow = false
+	holder.Transparency = 1
+	holder.Size = Vector3.new(0.2, 0.2, 0.2)
+	holder.CFrame = getCylinderSurfaceCFrame(position + normal.Unit * VisualConfig.LandingBurstSurfaceGap, normal)
+	holder.Parent = getEffectRuntimeParent()
+
+	local burst = burstAsset:Clone()
+	burst.Parent = holder
+	if result == "Tails" then
+		tintBurstParticles(burst, Color3.fromRGB(255, 163, 112), Color3.fromRGB(255, 96, 65))
+	else
+		tintBurstParticles(burst, Color3.fromRGB(255, 238, 142), Color3.fromRGB(255, 182, 67))
+	end
+
+	EffectSystem:PlayInsideEffects(holder)
+	Debris:AddItem(holder, VisualConfig.LandingBurstLifetime)
+end
+
+function tintBurstParticles(container, primaryColor, secondaryColor)
+	for _, particle in ipairs(container:GetDescendants()) do
+		if particle:IsA("ParticleEmitter") and particle.Name ~= "TableDust" then
+			particle.Color = ColorSequence.new(primaryColor, secondaryColor)
+		end
+	end
 end
 
 function getCylinderSurfaceCFrame(position, normal)

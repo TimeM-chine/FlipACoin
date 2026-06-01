@@ -14,7 +14,8 @@ local FOLLOW_FIELD_OF_VIEW = 68
 local FOLLOW_LERP_ALPHA = 0.34
 local FOLLOW_TARGET_OFFSET = Vector3.new(0, 0.08, 0)
 local DEFAULT_FOLLOW_DURATION = 1.1
-local INITIAL_TABLE_LOOK_HOLD_DURATION = 0.8
+local INITIAL_TABLE_LOOK_HOLD_DURATION = 1.35
+local LOADING_SCREEN_NAME = "LoadingScreen"
 -- X right, Y up, Z back relative to HumanoidRootPart; negative Z moves camera forward.
 local BODY_VIEW_CAMERA_OFFSET = Vector3.new(0, -0.08, -0.28)
 local TABLE_MODEL_NAME = "CoinFlipTable"
@@ -129,6 +130,23 @@ local function getTableCenterPosition()
 	return tableModel:GetPivot().Position
 end
 
+local function isLoadingScreenActive()
+	local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+	local loadingScreen = playerGui and playerGui:FindFirstChild(LOADING_SCREEN_NAME)
+	return loadingScreen ~= nil
+end
+
+local function isReadyForInitialTableLook()
+	if isLoadingScreenActive() then
+		return false
+	end
+	if not currentHumanoid or currentHumanoid.Health <= 0 then
+		return false
+	end
+
+	return currentHumanoid.SeatPart ~= nil
+end
+
 local function getCharacterSystem()
 	if not SystemMgr then
 		SystemMgr = require(Replicated.Systems.SystemMgr)
@@ -240,17 +258,17 @@ local function applyFreeFirstPerson(camera)
 	local upVector = camera.CFrame.UpVector
 	local cameraPosition = getBodyViewCameraPosition(head)
 	local now = os.clock()
-	local tableCenterPosition = initialTableLookPending and getTableCenterPosition() or nil
+	local tableCenterPosition = initialTableLookPending and isReadyForInitialTableLook() and getTableCenterPosition() or nil
 	if tableCenterPosition then
 		local tableLookOffset = tableCenterPosition - cameraPosition
 		if tableLookOffset.Magnitude > 0.001 then
 			initialTableLookVector = tableLookOffset.Unit
 			initialTableLookHoldUntil = now + INITIAL_TABLE_LOOK_HOLD_DURATION
+			initialTableLookPending = false
 		end
-		initialTableLookPending = false
 	end
 	if initialTableLookVector and now <= initialTableLookHoldUntil then
-		lookVector = clampLookToRootYaw(initialTableLookVector)
+		lookVector = initialTableLookVector
 		upVector = Vector3.yAxis
 		camera.CameraType = Enum.CameraType.Scriptable
 	elseif initialTableLookVector and now > initialTableLookHoldUntil then

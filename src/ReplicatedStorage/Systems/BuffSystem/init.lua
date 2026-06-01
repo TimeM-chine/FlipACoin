@@ -82,23 +82,6 @@ function BuffSystem:PlayerAdded(sender, player, args)
 			joinTime = os.time(),
 		}
 
-		for _, plr in ipairs(Players:GetPlayers()) do
-			if plr == player then
-				continue
-			end
-			-- check if friend
-			local isFriend
-			local success, message = pcall(function()
-				isFriend = player:IsFriendsWith(plr.UserId)
-			end)
-
-			if success and isFriend then
-				-- if true then
-				self.players[player.UserId].friendCount += 1
-				self.players[plr.UserId].friendCount += 1
-				self:UpdateFriendBuff(SENDER, plr)
-			end
-		end
 		self:UpdateFriendBuff(SENDER, player)
 
 		local equippedBuff = playerIns:GetOneData(dataKey.equippedBuff)
@@ -141,31 +124,15 @@ function BuffSystem:PlayerRemoving(sender, player, args)
 
 		self.players[player.UserId] = nil
 
-		for _, plr in ipairs(Players:GetPlayers()) do
-			if plr == player then
-				continue
-			end
-			-- check if friend
-			local isFriend
-			local success, message = pcall(function()
-				isFriend = player:IsFriendsWith(plr.UserId)
-			end)
-
-			if success and isFriend then
-				-- if true then
-				if not self.players[plr.UserId] then
-					continue
-				end
-				self.players[plr.UserId].friendCount -= 1
-				self:UpdateFriendBuff(SENDER, plr)
-			end
-		end
 	end
 end
 
 function BuffSystem:UpdateFriendBuff(sender, player, args)
 	if IsServer then
 		if sender ~= SENDER then
+			return
+		end
+		if not self.players[player.UserId] then
 			return
 		end
 		self.Client:UpdateFriendBuff(player, {
@@ -198,6 +165,14 @@ function BuffSystem:AddBuff(sender, player, args)
 		end
 
 		local playerCache = self.players[player.UserId]
+		if not playerCache then
+			playerCache = {
+				friendCount = 0,
+				countDowns = {},
+				joinTime = os.time(),
+			}
+			self.players[player.UserId] = playerCache
+		end
 		if playerCache.countDowns[buffName] then
 			task.cancel(playerCache.countDowns[buffName])
 		end
@@ -214,6 +189,12 @@ function BuffSystem:AddBuff(sender, player, args)
 			duration = equippedBuff[buffName].duration,
 			equippedBuff = equippedBuff,
 		})
+		SystemMgr.systems.AnalyticsSystem:LogBuffActive(SENDER, player, {
+			buffName = buffName,
+			duration = duration,
+			source = args.source,
+			potionId = args.potionId,
+		})
 	else
 		ClientData:SetOneData(dataKey.equippedBuff, args.equippedBuff)
 		BuffUi.AddBuff(args)
@@ -223,6 +204,9 @@ end
 ---- [[ Server ]] ----
 function BuffSystem:GetWinsBoost(player)
 	local playerIns = PlayerServerClass.GetIns(player)
+	if not playerIns then
+		return 1
+	end
 	local equippedBuff = playerIns:GetOneData(dataKey.equippedBuff)
 	local boost = 1
 	for name, status in equippedBuff do
@@ -231,16 +215,14 @@ function BuffSystem:GetWinsBoost(player)
 		end
 	end
 
-	-- local playerCache = self.players[player.UserId]
-	-- if playerCache.friendCount > 0 then
-	-- 	boost += BuffPresets.Buffs.friend.boost * playerCache.friendCount
-	-- end
-
 	return boost
 end
 
 function BuffSystem:GetLuckyBoost(player)
 	local playerIns = PlayerServerClass.GetIns(player)
+	if not playerIns then
+		return 1
+	end
 	local equippedBuff = playerIns:GetOneData(dataKey.equippedBuff)
 	local boost = 1
 	for name, status in equippedBuff do
@@ -256,6 +238,9 @@ function BuffSystem:GetLuckyBoost(player)
 	end
 
 	local playerCache = self.players[player.UserId]
+	if not playerCache then
+		return boost
+	end
 	local playTime = os.time() - playerCache.joinTime
 	boost += playTime / GameConfig.OneMinute * 0.01
 

@@ -81,7 +81,7 @@ end
 -- 	end)
 -- end
 
-if UserInputService.GamepadEnabled then
+if UserInputService.GamepadEnabled and not UserInputService.TouchEnabled then
 	for _, des in PlayerGui.Main:GetDescendants() do
 		if des.Name == "gamepadKeyImg" then
 			des.Visible = true

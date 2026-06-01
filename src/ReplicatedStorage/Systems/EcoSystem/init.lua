@@ -6,10 +6,10 @@
 --Last Modified: 2024-05-17 7:59:06
 --]]
 ---- services ----
-local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 ---- requires ----
 local EcoPresets = require(script.Presets)
@@ -26,9 +26,13 @@ local IsServer = RunService:IsServer()
 local SENDER, SystemMgr
 
 ---- server variables ----
-local PlayerServerClass, purchaseHistoryStore, DataStoreService, GlobalDataModule, AnalyticsService
+local PlayerServerClass, purchaseHistoryStore, DataStoreService, GlobalDataModule, AnalyticsService, AdService
 local productFunctions = {}
 local gamePassFunctions = {}
+local rewardedAdCooldowns = {}
+local rewardedAdInFlight = {}
+local rewardedAdAvailabilityReports = {}
+local rewardedAdProductRegistered = false
 
 ---- client variables ----
 local LocalPlayer, ClientData
@@ -39,6 +43,8 @@ local EcoSystem: Types.System = {
 	whiteList = {
 		"GetLoadoutState",
 		"GetLoadoutBonuses",
+		"GrantPotionProduct",
+		"GetRewardedAdState",
 	},
 	players = {},
 	tasks = {},
@@ -57,6 +63,7 @@ if IsServer then
 	purchaseHistoryStore = DataStoreService:GetDataStore("PurchaseHistory")
 	GlobalDataModule = require(ServerStorage.modules.GlobalDataModule)
 	AnalyticsService = game:GetService("AnalyticsService")
+	AdService = game:GetService("AdService")
 else
 	EcoSystem.Server = setmetatable({}, EcoSystem)
 	LocalPlayer = Players.LocalPlayer
@@ -246,6 +253,54 @@ local function isStoreIdConfigured(id)
 	return typeof(id) == "number" and id > 0
 end
 
+local function getRewardedAdReward()
+	return AdService:CreateAdRewardFromDevProductId(EcoPresets.RewardedAds.DevProductId)
+end
+
+local function markRewardedAdCooldown(player)
+	local now = os.time()
+	if (rewardedAdCooldowns[player.UserId] or 0) <= now then
+		rewardedAdCooldowns[player.UserId] = now + EcoPresets.RewardedAds.CooldownSeconds
+	end
+end
+
+local function buildRewardedAdState(player)
+	local now = os.time()
+	local cooldownEndsAt = rewardedAdCooldowns[player.UserId] or 0
+	local cooldownRemaining = math.max(cooldownEndsAt - now, 0)
+	if not rewardedAdProductRegistered then
+		return {
+			available = false,
+			reason = "rewardNotConfigured",
+			cooldownEndsAt = cooldownEndsAt,
+			cooldownRemaining = cooldownRemaining,
+		}
+	end
+	if rewardedAdInFlight[player.UserId] then
+		return {
+			available = false,
+			reason = "inFlight",
+			cooldownEndsAt = cooldownEndsAt,
+			cooldownRemaining = cooldownRemaining,
+		}
+	end
+	if cooldownRemaining > 0 then
+		return {
+			available = false,
+			reason = "cooldown",
+			cooldownEndsAt = cooldownEndsAt,
+			cooldownRemaining = cooldownRemaining,
+		}
+	end
+
+	return {
+		available = true,
+		reason = "ready",
+		cooldownEndsAt = cooldownEndsAt,
+		cooldownRemaining = cooldownRemaining,
+	}
+end
+
 local function applyLoadoutUnlocks(playerIns, unlocks)
 	if typeof(unlocks) ~= "table" then
 		return false
@@ -367,6 +422,9 @@ function EcoSystem:Init()
 				end
 			elseif key == "potions" then
 				for pdName, productInfo in pairs(products) do
+					if not isStoreIdConfigured(productInfo.productId) then
+						continue
+					end
 					productFunctions[productInfo.productId] = function(receiptInfo, player)
 						SystemMgr.systems.PotionSystem:AddPotion(SENDER, player, {
 							potionName = productInfo.potionName,
@@ -496,6 +554,36 @@ function EcoSystem:Init()
 				end
 			end
 		end
+		local rewardedAdProductId = EcoPresets.RewardedAds.DevProductId
+		if isStoreIdConfigured(rewardedAdProductId) then
+			if productFunctions[rewardedAdProductId] then
+				warn("[EcoSystem] Rewarded ad DevProductId must be unique.")
+			else
+				rewardedAdProductRegistered = true
+				productFunctions[rewardedAdProductId] = function(receiptInfo, player)
+					markRewardedAdCooldown(player)
+					rewardedAdInFlight[player.UserId] = nil
+					local granted = SystemMgr.systems.PotionSystem:GrantAndUsePotion(SENDER, player, {
+						potionName = EcoPresets.RewardedAds.AdPotionName,
+						count = 1,
+						source = "ad",
+					})
+					if granted then
+						SystemMgr.systems.AnalyticsSystem:LogRewardedAd(SENDER, player, {
+							stage = "complete",
+							result = "granted",
+							reason = EcoPresets.RewardedAds.AdPotionName,
+						})
+						refreshPlayerAfterPremiumChange(player, {
+							purchasedItem = EcoPresets.RewardedAds.AdPotionName,
+							equippedCategory = "boost",
+						})
+						self.Client:SyncRewardedAdState(player, buildRewardedAdState(player))
+					end
+					return granted
+				end
+			end
+		end
 		---- [[ game pass ]] ----
 		for gamePassName, gamePassConfig in EcoPresets.GamePasses do
 			if not isStoreIdConfigured(gamePassConfig.gamePassId) then
@@ -554,6 +642,7 @@ function EcoSystem:PlayerAdded(sender, player, args)
 			gamePasses = playerIns:GetOneData(dataKey.gamePasses),
 			wins = playerIns:GetOneData(dataKey.wins),
 			loadoutState = self:GetLoadoutState(SENDER, player),
+			rewardedAdState = self:GetRewardedAdState(SENDER, player),
 			limitedPets = GlobalDataModule.GetMemoryStore("LimitedPets"),
 		}
 		self.Client:PlayerAdded(player, args)
@@ -569,6 +658,18 @@ function EcoSystem:PlayerAdded(sender, player, args)
 		end
 
 		EcoUi.SyncLoadoutState(args)
+	end
+end
+
+function EcoSystem:PlayerRemoving(sender, player)
+	if IsServer then
+		if sender ~= SENDER then
+			return
+		end
+
+		rewardedAdCooldowns[player.UserId] = nil
+		rewardedAdInFlight[player.UserId] = nil
+		rewardedAdAvailabilityReports[player.UserId] = nil
 	end
 end
 
@@ -903,6 +1004,21 @@ function EcoSystem:GrantFlipACoinProduct(sender, player, args)
 		return true
 	end
 
+	if grantType == "potion" then
+		local granted = self:GrantPotionProduct(SENDER, player, {
+			productKey = productKey,
+			productInfo = productInfo,
+			source = "product",
+		})
+		if granted then
+			refreshPlayerAfterPremiumChange(player, {
+				purchasedItem = productKey,
+				equippedCategory = "boost",
+			})
+		end
+		return granted
+	end
+
 	if grantType == "loadoutBundle" then
 		local unlocked = applyLoadoutUnlocks(playerIns, productInfo.unlocks)
 		if unlocked then
@@ -934,6 +1050,169 @@ function EcoSystem:GrantFlipACoinProduct(sender, player, args)
 
 	warn(`[EcoSystem] Unsupported FlipACoin product grant type: {tostring(grantType)}`)
 	return false
+end
+
+function EcoSystem:GetRewardedAdState(sender, player)
+	if not IsServer then
+		return nil
+	end
+	if sender ~= SENDER then
+		return nil
+	end
+	if not player or not player:IsDescendantOf(Players) then
+		return nil
+	end
+
+	return buildRewardedAdState(player)
+end
+
+function EcoSystem:SyncRewardedAdState(sender, player, args)
+	if IsServer then
+		return
+	end
+
+	EcoUi.SyncRewardedAdState(args)
+end
+
+function EcoSystem:GrantPotionProduct(sender, player, args)
+	if not IsServer then
+		return false
+	end
+	if sender ~= SENDER then
+		return false
+	end
+	if typeof(args) ~= "table" or typeof(args.productInfo) ~= "table" then
+		return false
+	end
+
+	local potionName = args.productInfo.potionName
+	if typeof(potionName) ~= "string" then
+		return false
+	end
+
+	local granted = SystemMgr.systems.PotionSystem:GrantAndUsePotion(SENDER, player, {
+		potionName = potionName,
+		count = 1,
+		source = args.source or "product",
+	})
+	if granted then
+		SystemMgr.systems.AnalyticsSystem:LogShopItemPurchased(SENDER, player, {
+			category = "boost",
+			itemId = args.productKey or potionName,
+			rarity = "Robux",
+			cost = args.productInfo.price or 0,
+		})
+	end
+
+	return granted
+end
+
+function EcoSystem:RequestRewardedCashPotionAd(sender, player)
+	if not IsServer then
+		return
+	end
+
+	player = player or sender
+	if sender ~= player or not player:IsDescendantOf(Players) then
+		return
+	end
+
+	local adState = buildRewardedAdState(player)
+	self.Client:SyncRewardedAdState(player, adState)
+	SystemMgr.systems.AnalyticsSystem:LogRewardedAd(SENDER, player, {
+		stage = "availability",
+		result = adState.available and "available" or "unavailable",
+		reason = adState.reason,
+	})
+	if not adState.available then
+		return
+	end
+
+	rewardedAdInFlight[player.UserId] = true
+	self.Client:SyncRewardedAdState(player, buildRewardedAdState(player))
+	SystemMgr.systems.AnalyticsSystem:LogRewardedAd(SENDER, player, {
+		stage = "start",
+		result = "requested",
+		reason = "ready",
+	})
+	local success, result = pcall(function()
+		local reward = getRewardedAdReward()
+		return AdService:ShowRewardedVideoAdAsync(player, reward)
+	end)
+	if not player:IsDescendantOf(Players) then
+		return
+	end
+	if not success then
+		rewardedAdInFlight[player.UserId] = nil
+		SystemMgr.systems.AnalyticsSystem:LogRewardedAd(SENDER, player, {
+			stage = "failed",
+			result = "showError",
+			reason = "showError",
+		})
+		self.Client:SyncRewardedAdState(player, buildRewardedAdState(player))
+		return
+	end
+
+	if result ~= Enum.ShowAdResult.ShowCompleted then
+		rewardedAdInFlight[player.UserId] = nil
+		SystemMgr.systems.AnalyticsSystem:LogRewardedAd(SENDER, player, {
+			stage = "failed",
+			result = result and result.Name or "unknown",
+			reason = "notCompleted",
+		})
+		self.Client:SyncRewardedAdState(player, buildRewardedAdState(player))
+		return
+	end
+
+	rewardedAdInFlight[player.UserId] = nil
+	markRewardedAdCooldown(player)
+	SystemMgr.systems.AnalyticsSystem:LogRewardedAd(SENDER, player, {
+		stage = "completed",
+		result = "awaitingReceipt",
+		reason = "receipt",
+	})
+	self.Client:SyncRewardedAdState(player, buildRewardedAdState(player))
+end
+
+function EcoSystem:ReportRewardedAdAvailability(sender, player, args)
+	if not IsServer then
+		return
+	end
+
+	player = player or sender
+	if sender ~= player or not player:IsDescendantOf(Players) or typeof(args) ~= "table" then
+		return
+	end
+	local now = os.clock()
+	if now - (rewardedAdAvailabilityReports[player.UserId] or 0) < 2 then
+		return
+	end
+	rewardedAdAvailabilityReports[player.UserId] = now
+
+	SystemMgr.systems.AnalyticsSystem:LogRewardedAd(SENDER, player, {
+		stage = "availability",
+		result = args.available == true and "available" or "unavailable",
+		reason = typeof(args.reason) == "string" and args.reason or "unknown",
+	})
+end
+
+function EcoSystem:RequestRewardedAdState(sender, player)
+	if not IsServer then
+		return
+	end
+
+	player = player or sender
+	if sender ~= player or not player:IsDescendantOf(Players) then
+		return
+	end
+
+	local adState = buildRewardedAdState(player)
+	self.Client:SyncRewardedAdState(player, adState)
+	SystemMgr.systems.AnalyticsSystem:LogRewardedAd(SENDER, player, {
+		stage = "panelOpen",
+		result = adState.available and "available" or "unavailable",
+		reason = adState.reason,
+	})
 end
 
 function EcoSystem:GiveItem(sender, player, args: { itemType: string, count: number, name: string, reason: string })
