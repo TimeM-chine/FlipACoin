@@ -117,6 +117,12 @@ local UpgradeTitles = {
 	speedLevel = "Speed",
 	biasLevel = "Luck",
 }
+local UpgradeTips = {
+	valueLevel = "More Cash per Heads.",
+	comboLevel = "Bigger payouts as your round streak grows.",
+	speedLevel = "Flip again sooner.",
+	biasLevel = "More chance to flip Heads.",
+}
 
 local CoinFlipUi = {}
 local initialized = false
@@ -157,6 +163,7 @@ local AUTO_BUTTON_OFF_COLOR = Color3.fromRGB(255, 255, 255)
 local FAKE_COIN_LOOK_DURATION = 1.02
 local FAKE_COIN_LOOK_RESTORE_DURATION = 0.18
 local FAKE_COIN_LOOK_PITCH_LIMIT = math.rad(35)
+local FAKE_COIN_LOOK_UP_PITCH_LIMIT = math.rad(18)
 local FAKE_COIN_LOOK_YAW_LIMIT = math.rad(50)
 local FAKE_COIN_LOOK_NECK_PITCH_WEIGHT = 0.7
 local FAKE_COIN_LOOK_NECK_YAW_WEIGHT = 0.72
@@ -167,21 +174,16 @@ local FLIP_KEYBOARD_ICON_POSITION = UDim2.fromScale(0.15, 0.5)
 local FLIP_KEYBOARD_ICON_SIZE = UDim2.fromOffset(54, 30)
 local FLIP_GAMEPAD_ICON_POSITION = UDim2.fromScale(0.16, 0.5)
 local FLIP_GAMEPAD_ICON_SIZE = UDim2.fromOffset(42, 42)
+local GUIDE_PROMPT_ZINDEX = 130
 local fakeCoinLookTokens = {}
 
-local function getRecommendedUpgradeKey()
-	local runData = currentRunSnapshot.runData or {}
-	local nextCosts = currentRunSnapshot.nextCosts or Presets.GetNextCosts(runData)
-	local cash = currentRunSnapshot.cash or 0
-
-	for _, upgradeKey in ipairs(Presets.UpgradeOrder or {}) do
-		local cost = nextCosts[upgradeKey]
-		if cost and cash >= cost then
-			return upgradeKey
-		end
+local function getGuideUpgradeKey(onboarding)
+	local upgradeKey = onboarding and onboarding.targetUpgradeKey
+	if UpgradeMap[upgradeKey] then
+		return upgradeKey
 	end
 
-	return nil
+	return "valueLevel"
 end
 
 local function isGrowthFrameOpen()
@@ -195,13 +197,13 @@ local function isGrowthFrameOpen()
 end
 
 local function pulseRecommendedUpgrade(onboarding)
-	if not onboarding or onboarding.currentStep ~= "buyUpgrade" then
+	if not onboarding or onboarding.currentStep ~= "buyUpgrade" or onboarding.canBuyTargetUpgrade ~= true then
 		lastUpgradePromptKey = nil
 		return
 	end
 
-	local upgradeKey = getRecommendedUpgradeKey()
-	if not upgradeKey or lastUpgradePromptKey == upgradeKey then
+	local upgradeKey = getGuideUpgradeKey(onboarding)
+	if lastUpgradePromptKey == upgradeKey then
 		return
 	end
 
@@ -525,6 +527,40 @@ local function updateResultText(text, tone)
 	end)
 end
 
+local function buildResultCopy(args)
+	local reward = args.reward or 0
+	local rewardCopy = `+$ {Util.FormatNumber(reward, true)}`
+	local coinCount = args.coinCount or 1
+	local headsCount = args.headsCount or (args.result == "Heads" and 1 or 0)
+	local roundSuccess = args.roundSuccess == true or args.result == "Heads"
+
+	if coinCount <= 1 then
+		if roundSuccess then
+			return `Heads! {rewardCopy}`, "Heads"
+		end
+		if reward > 0 then
+			return `Tails! {rewardCopy}`, "Tails"
+		end
+
+		return "Tails! Streak reset.", "Tails"
+	end
+
+	if roundSuccess then
+		local comboName = args.comboName
+		if comboName and comboName ~= "Heads" then
+			return `{headsCount}/{coinCount} Heads! {comboName} {rewardCopy}`, "Heads"
+		end
+
+		return `{headsCount}/{coinCount} Heads! {rewardCopy}`, "Heads"
+	end
+
+	if reward > 0 then
+		return `{headsCount}/{coinCount} Heads. Streak reset. {rewardCopy}`, "Tails"
+	end
+
+	return `{headsCount}/{coinCount} Heads. Streak reset.`, "Tails"
+end
+
 local function getInputTypeName(inputObject)
 	if inputObject and inputObject.UserInputType then
 		return inputObject.UserInputType.Name
@@ -590,6 +626,15 @@ local function clearGuideHighlight()
 	currentGuideFrame = nil
 end
 
+local function applyGuidePromptZIndex()
+	GuidePrompt.ZIndex = GUIDE_PROMPT_ZINDEX
+	for _, descendant in ipairs(GuidePrompt:GetDescendants()) do
+		if descendant:IsA("GuiObject") then
+			descendant.ZIndex = GUIDE_PROMPT_ZINDEX + 1
+		end
+	end
+end
+
 local function setGuideHighlight(button, frame)
 	local resolvedFrame = frame or button
 	if currentGuideButton == button and currentGuideFrame == resolvedFrame then
@@ -611,6 +656,12 @@ local function getGuideCopy(onboarding)
 	if stepKey == "firstFlip" then
 		return "Heads pay Cash. Streaks boost your payout.", "FLIP"
 	end
+	if stepKey == "buyUpgrade" then
+		if onboarding.canBuyTargetUpgrade == true then
+			return "Upgrade Value to make Heads pay more.", "UPGRADE"
+		end
+		return "Flip until Value is ready.", "FLIP"
+	end
 	if stepKey == "rebirth" then
 		return "Rebirth turns this run into permanent points.", "REBIRTH"
 	end
@@ -631,6 +682,13 @@ local function openCurrentGuideTarget()
 
 	local stepKey = currentOnboarding.currentStep
 	if stepKey == "firstFlip" then
+		requestFlip()
+		return FlipButton
+	end
+	if stepKey == "buyUpgrade" then
+		if currentOnboarding.canBuyTargetUpgrade == true then
+			return UpgradeMap[getGuideUpgradeKey(currentOnboarding)]
+		end
 		requestFlip()
 		return FlipButton
 	end
@@ -670,6 +728,7 @@ local function refreshGuide()
 	GuideMessage.Text = message
 	GuideActionButton.Text = actionText
 	GuideActionButton.Visible = true
+	applyGuidePromptZIndex()
 
 	local stepKey = currentOnboarding.currentStep
 	if stepKey == "rebirth" and RebirthFrame.Visible then
@@ -702,6 +761,16 @@ local function refreshGuide()
 		GuideActionButton.Visible = false
 		GuidePrompt.Visible = Hud.Visible
 		setGuideHighlight(FlipButton)
+		return
+	end
+	if stepKey == "buyUpgrade" then
+		GuideActionButton.Visible = false
+		GuidePrompt.Visible = Hud.Visible
+		if currentOnboarding.canBuyTargetUpgrade == true then
+			setGuideHighlight(UpgradeMap[getGuideUpgradeKey(currentOnboarding)])
+		else
+			setGuideHighlight(FlipButton)
+		end
 		return
 	end
 
@@ -998,13 +1067,20 @@ function CoinFlipUi.Init()
 		openCurrentGuideTarget()
 		refreshGuide()
 	end)
+	uiController.SetOneLineTip(StreakCard, {
+		text = "Round streak: successful flips in a row.",
+	})
 
 	for upgradeKey, button in pairs(UpgradeMap) do
+		button.Selectable = true
 		uiController.SetButtonHoverAndClick(button, function()
 			CoinFlipSystem.Server:BuyUpgrade({
 				upgradeType = upgradeKey,
 			})
 		end)
+		uiController.SetOneLineTip(button, {
+			text = UpgradeTips[upgradeKey],
+		})
 	end
 end
 
@@ -1029,6 +1105,7 @@ function CoinFlipUi.SyncRunState(args)
 	local isSeated = currentSeatId ~= nil
 	currentFlipInterval = (args.derivedStats and args.derivedStats.flipInterval) or currentFlipInterval
 	local cash = args.cash or args.wins or 0
+	local previousCoinCount = currentRunSnapshot.derivedStats.coinCount or 1
 	currentRunSnapshot = {
 		cash = cash,
 		runData = args.runData or {},
@@ -1071,6 +1148,10 @@ function CoinFlipUi.SyncRunState(args)
 	if isSeated and ResultLabel.Text == "Waiting for seat assignment..." then
 		updateResultText(getReadyPrompt(), "Neutral")
 	end
+	local coinCount = args.derivedStats.coinCount or 1
+	if args.rebirthUpgradePurchased == "polishedStart" and coinCount > previousCoinCount then
+		updateResultText(`Coin Spread unlocked {coinCount} coins per flip.`, "Heads")
+	end
 
 	return true
 end
@@ -1081,6 +1162,8 @@ function CoinFlipUi.FlipResolved(args)
 	EffectSystem:PlayCoinFlipVisual(nil, nil, {
 		seatId = args.seatState and args.seatState.seatId,
 		result = args.result,
+		coinCount = args.coinCount,
+		coinResults = args.coinResults,
 		coinId = args.equippedCoin or (args.loadoutState and args.loadoutState.equippedCoin),
 		shouldFollowCamera = not autoFlipEnabled,
 		landedCallback = function()
@@ -1088,16 +1171,10 @@ function CoinFlipUi.FlipResolved(args)
 			CoinFlipUi.SyncRunState(args)
 			applyGameplayVisibility(currentSeatId ~= nil)
 
-			if args.result == "Heads" then
-				updateResultText(`Heads! +$ {Util.FormatNumber(args.reward or 0, true)}`, "Heads")
-				if (args.reward or 0) > 0 then
-					playSfx("cashReward")
-				end
-			elseif (args.reward or 0) > 0 then
-				updateResultText(`Tails! +$ {Util.FormatNumber(args.reward, true)}`, "Tails")
+			local resultCopy, resultTone = buildResultCopy(args)
+			updateResultText(resultCopy, resultTone)
+			if (args.reward or 0) > 0 then
 				playSfx("cashReward")
-			else
-				updateResultText("Tails! Streak reset.", "Tails")
 			end
 
 			EffectSystem:PlayStreakMilestone(nil, nil, args.streakMilestone)
@@ -1251,7 +1328,7 @@ local function playFakeActorCoinLook(fakeId, focusPart)
 		local pitch = math.clamp(
 			math.atan2(target.Y, horizontalMagnitude),
 			-FAKE_COIN_LOOK_PITCH_LIMIT,
-			FAKE_COIN_LOOK_PITCH_LIMIT
+			FAKE_COIN_LOOK_UP_PITCH_LIMIT
 		)
 		local yaw = math.clamp(math.atan2(-target.X, -target.Z), -FAKE_COIN_LOOK_YAW_LIMIT, FAKE_COIN_LOOK_YAW_LIMIT)
 		local blend = math.clamp(alpha / 0.12, 0, 1)
@@ -1279,6 +1356,8 @@ function CoinFlipUi.ObservedFlip(args)
 	local visual = EffectSystem:PlayCoinFlipVisual(nil, nil, {
 		seatId = args.seatId,
 		result = args.result,
+		coinCount = args.coinCount,
+		coinResults = args.coinResults,
 		coinId = args.equippedCoin,
 		shouldFollowCamera = false,
 		visualOptions = {

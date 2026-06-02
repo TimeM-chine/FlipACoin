@@ -1,10 +1,12 @@
 local Replicated = game:GetService("ReplicatedStorage")
 
 local Keys = require(Replicated.configs.Keys)
+local CoinFlipPresets = require(script.Parent.Parent.Presets)
 local EcoPresets = require(Replicated.Systems.EcoSystem.Presets)
 local RebirthPresets = require(Replicated.Systems.RebirthSystem.Presets)
 
 local dataKey = Keys.DataKey
+local TARGET_UPGRADE_KEY = "valueLevel"
 
 local Onboarding = {}
 
@@ -15,6 +17,13 @@ Onboarding.StepOrder = table.freeze({
 		title = "Flip your first coin",
 		analyticsStep = 3,
 		analyticsName = "coinflip_first_flip",
+	},
+	{
+		key = "buyUpgrade",
+		label = "Upgrade",
+		title = "Upgrade Value",
+		analyticsStep = 4,
+		analyticsName = "coinflip_buy_value_upgrade",
 	},
 	{
 		key = "rebirth",
@@ -45,8 +54,10 @@ for _, step in ipairs(Onboarding.StepOrder) do
 end
 
 local DefaultState = table.freeze({
-	version = 3,
+	version = 4,
 	firstFlipDone = false,
+	firstUpgradeDone = false,
+	firstUpgradeKey = nil,
 	rebirthDone = false,
 	coinPurchased = false,
 	coinEquipped = false,
@@ -99,6 +110,25 @@ local function hasAnyFlipProgress(playerIns)
 	return typeof(runData) == "table" and (runData.flipsThisRun or 0) > 0
 end
 
+local function getFirstRunUpgradeKey(playerIns)
+	local runData = playerIns:GetOneData(dataKey.runData)
+	if typeof(runData) ~= "table" then
+		return nil
+	end
+
+	for _, upgradeKey in ipairs(CoinFlipPresets.UpgradeOrder) do
+		if (runData[upgradeKey] or 0) > 0 then
+			return upgradeKey
+		end
+	end
+
+	return nil
+end
+
+local function hasRebirthProgress(playerIns)
+	return (playerIns:GetOneData(dataKey.rebirth) or 0) > 0
+end
+
 function Onboarding.GetCoinPurchaseTarget(playerIns)
 	local ownedCoins = getOwnedCoins(playerIns)
 	local cash = playerIns:GetOneData(dataKey.wins) or 0
@@ -133,7 +163,7 @@ function Onboarding.CanRebirth(playerIns)
 end
 
 local function isStateComplete(state)
-	return state.firstFlipDone and state.rebirthDone and state.coinEquipped
+	return state.firstFlipDone and state.firstUpgradeDone and state.rebirthDone and state.coinEquipped
 end
 
 local function persistState(playerIns, guideData, state)
@@ -145,11 +175,28 @@ local function migrateState(playerIns, state)
 	local migratedState = cloneDefaultState()
 	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin)
 	local ownedCoinId = getFirstOwnedNonDefaultCoinId(playerIns)
+	local firstUpgradeKey = getFirstRunUpgradeKey(playerIns)
 
-	if state.completed == true or state.firstFlip == true or (state.flipCount or 0) >= 1 or hasAnyFlipProgress(playerIns) then
+	if state.completed == true then
+		migratedState.firstFlipDone = true
+		migratedState.firstUpgradeDone = true
+		migratedState.firstUpgradeKey = firstUpgradeKey or TARGET_UPGRADE_KEY
+		migratedState.rebirthDone = true
+		migratedState.coinPurchased = true
+		migratedState.coinPurchasedItemId = if isNonDefaultCoin(equippedCoin) then equippedCoin else ownedCoinId
+		migratedState.coinEquipped = true
+		migratedState.completed = true
+		return migratedState
+	end
+
+	if state.firstFlip == true or (state.flipCount or 0) >= 1 or hasAnyFlipProgress(playerIns) then
 		migratedState.firstFlipDone = true
 	end
-	if (playerIns:GetOneData(dataKey.rebirth) or 0) > 0 then
+	if firstUpgradeKey or hasRebirthProgress(playerIns) then
+		migratedState.firstUpgradeDone = true
+		migratedState.firstUpgradeKey = firstUpgradeKey or TARGET_UPGRADE_KEY
+	end
+	if hasRebirthProgress(playerIns) then
 		migratedState.rebirthDone = true
 	end
 	if isNonDefaultCoin(equippedCoin) then
@@ -169,12 +216,21 @@ local function applyLiveProgress(playerIns, state)
 	local changed = false
 	local equippedCoin = playerIns:GetOneData(dataKey.equippedCoin)
 	local ownedCoinId = getFirstOwnedNonDefaultCoinId(playerIns)
+	local firstUpgradeKey = getFirstRunUpgradeKey(playerIns)
 
 	if not state.firstFlipDone and hasAnyFlipProgress(playerIns) then
 		state.firstFlipDone = true
 		changed = true
 	end
-	if not state.rebirthDone and (playerIns:GetOneData(dataKey.rebirth) or 0) > 0 then
+	if not state.firstUpgradeDone and (firstUpgradeKey or hasRebirthProgress(playerIns)) then
+		state.firstUpgradeDone = true
+		state.firstUpgradeKey = firstUpgradeKey or TARGET_UPGRADE_KEY
+		changed = true
+	elseif state.firstUpgradeDone and typeof(state.firstUpgradeKey) ~= "string" and firstUpgradeKey then
+		state.firstUpgradeKey = firstUpgradeKey
+		changed = true
+	end
+	if not state.rebirthDone and hasRebirthProgress(playerIns) then
 		state.rebirthDone = true
 		changed = true
 	end
@@ -207,6 +263,9 @@ function Onboarding.IsStepComplete(state, stepKey)
 	if stepKey == "firstFlip" then
 		return state.firstFlipDone == true
 	end
+	if stepKey == "buyUpgrade" then
+		return state.firstUpgradeDone == true
+	end
 	if stepKey == "rebirth" then
 		return state.rebirthDone == true
 	end
@@ -233,6 +292,9 @@ end
 function Onboarding.GetCurrentStepKey(playerIns, state)
 	if not state.firstFlipDone then
 		return "firstFlip"
+	end
+	if not state.firstUpgradeDone then
+		return "buyUpgrade"
 	end
 	if not state.rebirthDone then
 		return "rebirth"
@@ -276,6 +338,9 @@ function Onboarding.BuildActionText(state, context)
 	if stepKey == "firstFlip" then
 		return "First Flip"
 	end
+	if stepKey == "buyUpgrade" then
+		return state.canBuyTargetUpgrade and "Upgrade Value" or "Earn Value"
+	end
 	if stepKey == "rebirth" then
 		return state.shouldGuide and "Rebirth Ready" or "Build Rebirth"
 	end
@@ -301,6 +366,9 @@ function Onboarding.BuildHeadSecondaryText(state, context)
 
 	if stepKey == "firstFlip" then
 		return "Tap FLIP"
+	end
+	if stepKey == "buyUpgrade" then
+		return state.canBuyTargetUpgrade and "Upgrade Value" or "Earn Value"
 	end
 	if stepKey == "rebirth" then
 		return state.shouldGuide and "Use Rebirth" or "Build Cash"
@@ -334,6 +402,14 @@ function Onboarding.EnsureState(playerIns)
 	else
 		if typeof(state.firstFlipDone) ~= "boolean" then
 			state.firstFlipDone = false
+			needsSave = true
+		end
+		if typeof(state.firstUpgradeDone) ~= "boolean" then
+			state.firstUpgradeDone = false
+			needsSave = true
+		end
+		if state.firstUpgradeKey ~= nil and typeof(state.firstUpgradeKey) ~= "string" then
+			state.firstUpgradeKey = nil
 			needsSave = true
 		end
 		if typeof(state.rebirthDone) ~= "boolean" then
@@ -373,10 +449,15 @@ function Onboarding.BuildState(playerIns)
 	local _, state = Onboarding.EnsureState(playerIns)
 	local currentStepKey = Onboarding.GetCurrentStepKey(playerIns, state)
 	local currentStep = currentStepKey and StepLookup[currentStepKey] or nil
+	local runData = playerIns:GetOneData(dataKey.runData)
+	local targetUpgradeLevel = if typeof(runData) == "table" then runData[TARGET_UPGRADE_KEY] or 0 else 0
+	local targetUpgradeCost = CoinFlipPresets.GetUpgradeCost(TARGET_UPGRADE_KEY, targetUpgradeLevel)
+	local cash = playerIns:GetOneData(dataKey.wins) or 0
 	local purchaseTarget = Onboarding.GetCoinPurchaseTarget(playerIns)
 	local equipTarget = Onboarding.GetCoinEquipTarget(playerIns, state)
 	local canRebirth = Onboarding.CanRebirth(playerIns)
 	local shouldGuide = currentStepKey == "firstFlip"
+		or currentStepKey == "buyUpgrade"
 		or (currentStepKey == "rebirth" and canRebirth)
 		or (currentStepKey == "coinBuy" and purchaseTarget ~= nil)
 		or (currentStepKey == "coinEquip" and equipTarget ~= nil)
@@ -400,6 +481,10 @@ function Onboarding.BuildState(playerIns)
 		totalSteps = #Onboarding.StepOrder,
 		shouldGuide = shouldGuide,
 		canRebirth = canRebirth,
+		targetUpgradeKey = TARGET_UPGRADE_KEY,
+		targetUpgradeName = CoinFlipPresets.GetUpgradeDisplayName(TARGET_UPGRADE_KEY),
+		targetUpgradeCost = targetUpgradeCost,
+		canBuyTargetUpgrade = targetUpgradeCost ~= nil and cash >= targetUpgradeCost,
 		targetCoinId = targetCoin and targetCoin.id or nil,
 		targetCoinName = targetCoin and getCoinDisplayName(targetCoin.id) or nil,
 		targetCoinCost = targetCoin and targetCoin.cost or nil,
@@ -421,6 +506,19 @@ function Onboarding.ApplyAction(playerIns, action, context)
 			state.firstFlipDone = true
 			changed = true
 			table.insert(milestones, StepLookup.firstFlip)
+		end
+	elseif action == "buyUpgrade" then
+		local upgradeKey = context and context.upgradeKey
+		if typeof(upgradeKey) == "string" and upgradeKey ~= "" then
+			if not state.firstUpgradeDone then
+				state.firstUpgradeDone = true
+				state.firstUpgradeKey = upgradeKey
+				changed = true
+				table.insert(milestones, StepLookup.buyUpgrade)
+			elseif typeof(state.firstUpgradeKey) ~= "string" then
+				state.firstUpgradeKey = upgradeKey
+				changed = true
+			end
 		end
 	elseif action == "rebirth" then
 		if not state.rebirthDone then

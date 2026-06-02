@@ -284,20 +284,17 @@ local function resolveActorFlip(self, actor)
 	local bonusStats = actor.bonusStats
 	local playerState = if actor.isFake then nil else getPlayerState(self, actor.player)
 	local hiddenChanceBonus = playerState and getFirstRebirthAssistBonus(actor.playerIns, playerState) or 0
-	local isHeads = math.random() < Presets.GetRollHeadsChance(runData, bonusStats, hiddenChanceBonus)
+	local outcome = Presets.BuildRoundOutcome(runData, bonusStats, hiddenChanceBonus)
 	local reward = 0
 	local isBestStreak = false
 	local bestStreak
 
 	runData.flipsThisRun += 1
-	if isHeads then
+	if outcome.roundSuccess then
 		if playerState then
 			playerState.firstRebirthTailsStreak = 0
 		end
 		runData.currentStreak += 1
-		runData.headsThisRun += 1
-		reward = Presets.GetHeadsReward(runData, bonusStats)
-		runData.cashEarnedThisRun += reward
 		runData.bestStreakThisRun = math.max(runData.bestStreakThisRun, runData.currentStreak)
 		if actor.isFake then
 			local previousBestStreak = if actor.fakeActor
@@ -321,11 +318,14 @@ local function resolveActorFlip(self, actor)
 				playerState.firstRebirthTailsStreak = 0
 			end
 		end
-		reward = Presets.GetTailsReward(bonusStats)
-		if reward > 0 then
-			runData.cashEarnedThisRun += reward
-		end
 		runData.currentStreak = 0
+	end
+	runData.headsThisRun += outcome.headsCount
+	outcome.roundStreak = runData.currentStreak
+	reward = Presets.GetRoundReward(runData, bonusStats, outcome)
+	outcome.reward = reward
+	if reward > 0 then
+		runData.cashEarnedThisRun += reward
 	end
 
 	if not actor.isFake then
@@ -339,8 +339,10 @@ local function resolveActorFlip(self, actor)
 			})
 			playerIns:SetOneData(dataKey.lifetimeCashEarned, playerIns:GetOneData(dataKey.lifetimeCashEarned) + reward)
 		end
-		if isHeads then
-			playerIns:SetOneData(dataKey.lifetimeHeads, playerIns:GetOneData(dataKey.lifetimeHeads) + 1)
+		if outcome.headsCount > 0 then
+			playerIns:SetOneData(dataKey.lifetimeHeads, playerIns:GetOneData(dataKey.lifetimeHeads) + outcome.headsCount)
+		end
+		if outcome.roundSuccess then
 			playerIns:SetOneData(dataKey.bestStreak, bestStreak)
 		end
 		playerIns:SetOneData(dataKey.runData, runData)
@@ -349,9 +351,19 @@ local function resolveActorFlip(self, actor)
 	local observedPayload = {
 		userId = actor.userId,
 		seatId = actor.seatId,
-		result = isHeads and "Heads" or "Tails",
+		result = outcome.roundSuccess and "Heads" or "Tails",
 		reward = reward,
 		streak = runData.currentStreak,
+		coinCount = outcome.coinCount,
+		coinResults = outcome.coinResults,
+		headsCount = outcome.headsCount,
+		tailsCount = outcome.tailsCount,
+		roundSuccess = outcome.roundSuccess,
+		successThreshold = outcome.successThreshold,
+		roundStreak = outcome.roundStreak,
+		perfect = outcome.perfect,
+		comboName = outcome.comboName,
+		comboMultiplier = outcome.comboMultiplier,
 		isBestStreak = isBestStreak,
 		bestStreak = bestStreak,
 		bestStreakThisRun = runData.bestStreakThisRun,
@@ -509,6 +521,16 @@ function CoinFlipSystem:RequestFlip(sender, player, args)
 		result = observedPayload.result,
 		reward = resolvedFlip.reward,
 		streak = runData.currentStreak,
+		coinCount = observedPayload.coinCount,
+		coinResults = observedPayload.coinResults,
+		headsCount = observedPayload.headsCount,
+		tailsCount = observedPayload.tailsCount,
+		roundSuccess = observedPayload.roundSuccess,
+		successThreshold = observedPayload.successThreshold,
+		roundStreak = observedPayload.roundStreak,
+		perfect = observedPayload.perfect,
+		comboName = observedPayload.comboName,
+		comboMultiplier = observedPayload.comboMultiplier,
 		isBestStreak = observedPayload.isBestStreak,
 		bestStreak = observedPayload.bestStreak,
 		equippedCoin = equippedCoin,
@@ -634,6 +656,9 @@ function CoinFlipSystem:BuyUpgrade(sender, player, args)
 		newLevel = runData[upgradeKey],
 		cost = cost,
 		cashAfterPurchase = playerIns:GetOneData(dataKey.wins),
+	})
+	applyOnboardingAction(self, player, "buyUpgrade", {
+		upgradeKey = upgradeKey,
 	})
 
 	seatSystem:RegisterActivity(SENDER, player)

@@ -35,6 +35,7 @@ local AnalyticsSystem: Types.System = {
 		"_CashBand",
 		"_ClampEventValue",
 		"_LogCustomEvent",
+		"_RoundOutcomeField",
 		"_StreakBand",
 		"_StringField",
 	},
@@ -80,7 +81,7 @@ function AnalyticsSystem:LogCoinFlipResolved(sender, player, args)
 	local reward = args and args.reward or 0
 	local streak = args and args.streak or 0
 	local result = args and args.result or "Unknown"
-	local fields = self:_BuildFields(result, self:_StreakBand(streak), args and args.equippedCoin)
+	local fields = self:_BuildFields(result, self:_RoundOutcomeField(args), args and args.equippedCoin)
 	self:_LogCustomEvent(player, "coinflip_flip_resolved", reward, fields)
 
 	local streakMilestone = args and args.streakMilestone
@@ -289,6 +290,21 @@ function AnalyticsSystem:_LogCustomEvent(player, eventName, value, fields)
 	if not success then
 		warn(`[AnalyticsSystem] Failed to log {eventName}: {result}`)
 	end
+end
+
+function AnalyticsSystem:_RoundOutcomeField(args)
+	if typeof(args) ~= "table" then
+		return "round_unknown"
+	end
+
+	local coinCount = tonumber(args.coinCount) or 1
+	local headsCount = tonumber(args.headsCount)
+	if not headsCount then
+		headsCount = if args.result == "Heads" then 1 else 0
+	end
+	local roundState = if args.roundSuccess == true or args.result == "Heads" then "success" else "reset"
+
+	return `c{coinCount}_h{headsCount}_{roundState}_s{self:_StreakBand(args.streak)}`
 end
 
 function AnalyticsSystem:_StreakBand(streak)

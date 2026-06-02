@@ -17,6 +17,7 @@
 - `FRAMEWORK.md` 是 SystemMgr 框架参考，也是编码习惯的权威来源。
 - `PROJECT_LOGIC.md` 是当前 Flip A Coin 项目地图和运行事实来源。
 - `TASK_STATE.md` 是实时任务看板、决策、验证记录和 backlog。
+- `docs/archive/` 是历史完成记录、旧计划和 stale 参考内容，只在追溯旧决策时读取。
 - `AGENTS.md` 是跨工具工作契约；维护文档或改代码时都要遵守。
 
 ## 快速护栏

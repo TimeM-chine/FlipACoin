@@ -50,14 +50,17 @@ local Main = PlayerGui:WaitForChild("Main")
 local Frames = Main:WaitForChild("Frames")
 local MaskFrame = Frames:WaitForChild("Mask")
 local Elements = Main:WaitForChild("Elements")
-local ripple = Elements:WaitForChild("ripple")
+local rippleTemplate = Elements:WaitForChild("ripple")
 local frameCache, modalFrame
+local guideRipple
+local guideRippleTween
+local guideRippleToken = 0
 
-local rippleTween = TweenService:Create(ripple, TweenInfo.new(0.7), { Size = UDim2.new(0, 0, 0, 0) })
+local rippleTween = TweenService:Create(rippleTemplate, TweenInfo.new(0.7), { Size = UDim2.new(0, 0, 0, 0) })
 rippleTween:Play()
 rippleTween.Completed:Connect(function()
 	task.wait(0.3)
-	ripple.Size = UDim2.fromScale(1, 1)
+	rippleTemplate.Size = UDim2.fromScale(1, 1)
 	rippleTween:Play()
 end)
 
@@ -455,8 +458,37 @@ function controller.SetGuideButton(btn, frame)
 		MaskFrame.ZIndex = 100
 		MaskFrame.BackgroundTransparency = 0.5
 		MaskFrame.Visible = true
-		ripple.Visible = true
-		ripple.Parent = btn
+		if guideRipple and guideRipple.Parent then
+			guideRipple:Destroy()
+		end
+		if guideRippleTween then
+			guideRippleTween:Cancel()
+			guideRippleTween = nil
+		end
+		guideRippleToken += 1
+		guideRipple = rippleTemplate:Clone()
+		guideRipple.Size = UDim2.fromScale(1, 1)
+		guideRipple.Visible = true
+		guideRipple.Parent = btn
+		local currentRipple = guideRipple
+		local currentToken = guideRippleToken
+		local function playGuideRippleTween()
+			if guideRipple ~= currentRipple or guideRippleToken ~= currentToken or not currentRipple.Parent then
+				return
+			end
+			currentRipple.Size = UDim2.fromScale(1, 1)
+			guideRippleTween = TweenService:Create(currentRipple, TweenInfo.new(0.7), {
+				Size = UDim2.new(0, 0, 0, 0),
+			})
+			guideRippleTween:Play()
+			guideRippleTween.Completed:Once(function()
+				if guideRipple ~= currentRipple or guideRippleToken ~= currentToken or not currentRipple.Parent then
+					return
+				end
+				task.delay(0.3, playGuideRippleTween)
+			end)
+		end
+		playGuideRippleTween()
 
 		frame:SetAttribute("OriginalZIndex", frame.ZIndex)
 		frame.ZIndex += MaskFrame.ZIndex
@@ -469,19 +501,28 @@ function controller.SetGuideButton(btn, frame)
 	else
 		if guideButton then
 			-- Main.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
-			ripple.Visible = false
-			ripple.Parent = Elements
-			for _, des in guideFrame:GetDescendants() do
-				if des:IsA("GuiObject") then
-					local orig = des:GetAttribute("OriginalZIndex")
-					if orig then
-						des.ZIndex = orig
+			guideRippleToken += 1
+			if guideRippleTween then
+				guideRippleTween:Cancel()
+				guideRippleTween = nil
+			end
+			if guideRipple and guideRipple.Parent then
+				guideRipple:Destroy()
+			end
+			guideRipple = nil
+			if guideFrame and guideFrame.Parent then
+				for _, des in guideFrame:GetDescendants() do
+					if des:IsA("GuiObject") then
+						local orig = des:GetAttribute("OriginalZIndex")
+						if orig then
+							des.ZIndex = orig
+						end
 					end
 				end
-			end
-			local orig = guideFrame:GetAttribute("OriginalZIndex")
-			if orig then
-				guideFrame.ZIndex = orig
+				local orig = guideFrame:GetAttribute("OriginalZIndex")
+				if orig then
+					guideFrame.ZIndex = orig
+				end
 			end
 		end
 		if frameCache and frameCache.Visible then
@@ -797,7 +838,8 @@ function controller.HideUnitWhenPush(unit)
 end
 
 function controller.RippleMouse()
-	local assets = Elements.ripple:Clone()
+	local assets = rippleTemplate:Clone()
+	assets.Size = UDim2.fromScale(1, 1)
 	assets.Visible = true
 
 	local mouse = LocalPlayer:GetMouse()
@@ -835,6 +877,7 @@ function controller.ClearScrollChildren(scroll)
 end
 
 local TipConnections = {}
+local TipFrames = {}
 function controller.SetHoverFrame(
 	frame,
 	args: { frameName: string, title: string, rarity: string, infoList: { string } }
@@ -855,6 +898,10 @@ function controller.SetHoverFrame(
 
 		if tipFrame.Visible then
 			tipFrame.Visible = false
+		end
+		if TipFrames[frame] and TipFrames[frame].Parent then
+			TipFrames[frame]:Destroy()
+			TipFrames[frame] = nil
 		end
 	end
 
@@ -911,94 +958,121 @@ function controller.SetHoverFrame(
 end
 
 function controller.SetOneLineTip(frame, args)
-	local tipFrame = args.frameName or "OneLineTip"
+	local tipFrameName = args.frameName or "OneLineTip"
 	local ToolTips = PlayerGui.ToolTips
-
 	local text = args.text
-
-	tipFrame = ToolTips:FindFirstChild(tipFrame):Clone()
+	local tipFrame = ToolTips:FindFirstChild(tipFrameName):Clone()
 	tipFrame:WaitForChild("TextLabel").Text = text
 	tipFrame.Parent = ToolTips
 
 	if TipConnections[frame] then
 		for _, conn in pairs(TipConnections[frame]) do
-			TipConnections[frame][_]:Disconnect()
-			conn = nil
+			conn:Disconnect()
 		end
-
-		if tipFrame.Visible then
-			tipFrame.Visible = false
+		TipConnections[frame] = nil
+		if TipFrames[frame] and TipFrames[frame].Parent then
+			TipFrames[frame]:Destroy()
+			TipFrames[frame] = nil
 		end
 	end
 
 	local conns = {}
-	conns.MouseEnter = frame.MouseEnter:Connect(function()
+	local isVisible = false
+
+	local function positionTip(screenPosition)
+		local viewport = workspace.CurrentCamera.ViewportSize
+		local textLabel = tipFrame:WaitForChild("TextLabel")
+		local tipWidth = textLabel.TextBounds.X + 20
+		local tipHeight = textLabel.TextBounds.Y + 10
+		local offsetX = viewport.X * 0.01
+		local offsetY = -(viewport.Y * 0.03)
+		local desiredX = screenPosition.X + offsetX
+		local desiredY = screenPosition.Y + offsetY
+
+		if desiredX + tipWidth > viewport.X then
+			desiredX = screenPosition.X - tipWidth - offsetX
+		end
+		if desiredX < 0 then
+			desiredX = 5
+		end
+		if desiredY + tipHeight > viewport.Y then
+			desiredY = screenPosition.Y - tipHeight + offsetY
+		end
+		if desiredY < 0 then
+			desiredY = 5
+		end
+
+		tipFrame.AnchorPoint = Vector2.new(0, 0)
+		tipFrame.Position = UDim2.fromOffset(desiredX, desiredY)
+	end
+
+	local function showTip(screenPosition)
+		isVisible = true
 		tipFrame.Visible = true
 		tipFrame:WaitForChild("UIScale").Scale = 0
-		tipFrame.Visible = true
-		tipFrame.AnchorPoint = Vector2.new(0, 0)
+		positionTip(screenPosition)
 		TweenService:Create(tipFrame.UIScale, TweenInfo.new(0.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
 			Scale = 1,
 		}):Play()
+	end
 
-		conns.InputChange = UserInputService.InputChanged:Connect(function(inputObj)
-			if
-				inputObj.UserInputType == Enum.UserInputType.MouseMovement
-				or inputObj.UserInputType == Enum.UserInputType.Touch
-			then
-				-- Get screen size and tip frame size
-				local viewport = workspace.CurrentCamera.ViewportSize
-				local mouseX = inputObj.Position.X
-				local mouseY = inputObj.Position.Y
+	local function hideTip()
+		if not isVisible then
+			return
+		end
+		isVisible = false
+		controller.ScaleUnit(tipFrame, 0).Completed:Wait()
+		tipFrame.Visible = false
+	end
 
-				-- Wait for the tip frame to load properly
-				local textLabel = tipFrame:WaitForChild("TextLabel")
+	conns.MouseEnter = frame.MouseEnter:Connect(function()
+		showTip(UserInputService:GetMouseLocation())
+	end)
+	conns.MouseLeave = frame.MouseLeave:Connect(hideTip)
+	conns.InputBegan = frame.InputBegan:Connect(function(inputObj)
+		if inputObj.UserInputType == Enum.UserInputType.Touch then
+			showTip(Vector2.new(inputObj.Position.X, inputObj.Position.Y))
+		end
+	end)
+	conns.InputEnded = frame.InputEnded:Connect(function(inputObj)
+		if inputObj.UserInputType == Enum.UserInputType.Touch then
+			hideTip()
+		end
+	end)
+	conns.InputChange = UserInputService.InputChanged:Connect(function(inputObj)
+		if not isVisible then
+			return
+		end
+		if
+			inputObj.UserInputType == Enum.UserInputType.MouseMovement
+			or inputObj.UserInputType == Enum.UserInputType.Touch
+		then
+			positionTip(Vector2.new(inputObj.Position.X, inputObj.Position.Y))
+		end
+	end)
+	conns.SelectionGained = frame.SelectionGained:Connect(function()
+		local center = frame.AbsolutePosition + frame.AbsoluteSize * 0.5
+		showTip(center)
+	end)
+	conns.SelectionLost = frame.SelectionLost:Connect(hideTip)
+	conns.AncestryChanged = frame.AncestryChanged:Connect(function(_, parent)
+		if parent then
+			return
+		end
 
-				-- Calculate tip frame size
-				local tipWidth = textLabel.TextBounds.X + 20 -- Add padding
-				local tipHeight = textLabel.TextBounds.Y + 10 -- Add padding
-
-				-- Calculate desired position with offset
-				local offsetX = viewport.X * 0.01 -- 0.01 scale to offset
-				local offsetY = -(viewport.Y * 0.03) -- -0.03 scale to offset
-
-				local desiredX = mouseX + offsetX
-				local desiredY = mouseY + offsetY
-
-				-- Check boundaries and adjust position
-				-- Right edge check
-				if desiredX + tipWidth > viewport.X then
-					desiredX = mouseX - tipWidth - offsetX -- Position to left of cursor
-				end
-
-				-- Left edge check
-				if desiredX < 0 then
-					desiredX = 5 -- Small margin from left edge
-				end
-
-				-- Bottom edge check
-				if desiredY + tipHeight > viewport.Y then
-					desiredY = mouseY - tipHeight + offsetY -- Position above cursor
-				end
-
-				-- Top edge check
-				if desiredY < 0 then
-					desiredY = 5 -- Small margin from top edge
-				end
-
-				tipFrame.Position = UDim2.fromOffset(desiredX, desiredY)
-			end
-		end)
-
-		conns.MouseLeave = frame.MouseLeave:Connect(function()
-			conns.InputChange:Disconnect()
-			conns.MouseLeave:Disconnect()
-			controller.ScaleUnit(tipFrame, 0).Completed:Wait()
-			tipFrame.Visible = false
-		end)
+		hideTip()
+		for _, conn in pairs(conns) do
+			conn:Disconnect()
+		end
+		if tipFrame.Parent then
+			tipFrame:Destroy()
+		end
+		TipConnections[frame] = nil
+		TipFrames[frame] = nil
 	end)
 
 	TipConnections[frame] = conns
+	TipFrames[frame] = tipFrame
 	return tipFrame
 end
 

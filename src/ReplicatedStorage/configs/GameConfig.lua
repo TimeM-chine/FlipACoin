@@ -10,6 +10,7 @@ GameConfig.UpdateLog = {
 }
 
 local IsDebug = true
+GameConfig.isAlphaTest = true
 GameConfig.IsDebug = RunService:IsStudio() and IsDebug
 
 GameConfig.GroupId = 679281254 -- Beginning-of-Autumn
@@ -108,17 +109,47 @@ GameConfig.FlipACoin = {
 	SeatCount = 8,
 	AfkKickSeconds = 120,
 	AnnouncementStreaks = { 4, 6, 8, 10 },
-	BaseHeadsChance = 0.23,
+	BaseHeadsChance = 0.30,
 	MaxHeadsChance = 0.60,
-	BaseReward = 7,
-	BaseTailsReward = 1,
+	BaseReward = 10,
+	BaseTailsReward = 2,
 	BaseFlipInterval = 1.60,
 	MinFlipInterval = 0.85,
-	ValueGrowth = 1.19,
-	ComboBaseStep = 0.18,
-	ComboStepPerLevel = 0.04,
+	ValueGrowth = 1.28,
+	ComboBaseStep = 0.25,
+	ComboStepPerLevel = 0.06,
 	SpeedDecay = 0.95,
 	BiasStep = 0.025,
+	CoinCountByLevel = {
+		{ minLevel = 0, count = 1 },
+		{ minLevel = 1, count = 2 },
+		{ minLevel = 2, count = 3 },
+		{ minLevel = 3, count = 4 },
+		{ minLevel = 4, count = 5 },
+	},
+	SuccessThresholdByCoinCount = {
+		[1] = 1,
+		[2] = 1,
+		[3] = 2,
+		[4] = 2,
+		[5] = 3,
+	},
+	ComboMultiplierByHeadsCount = {
+		[0] = 0,
+		[1] = 1,
+		[2] = 1.2,
+		[3] = 1.75,
+		[4] = 2.6,
+		[5] = 4,
+	},
+	ComboNamesByHeadsCount = {
+		[0] = "No Heads",
+		[1] = "Heads",
+		[2] = "Pair",
+		[3] = "Triple",
+		[4] = "Four Heads",
+		[5] = "Jackpot",
+	},
 	FirstRebirthAssist = {
 		BaseBonus = 0.07,
 		TailsBonusStep = 0.04,

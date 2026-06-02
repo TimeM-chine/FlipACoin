@@ -212,6 +212,7 @@ function FakePlayerSystem:CreateFakeActor(args)
 		local equippedChair = getRandomShopItemId("chair")
 		local runData = table.clone(CoinFlipPresets.RunDataDefaults)
 		runData.biasLevel = math.random(Presets.FakeBiasLevelMin, Presets.FakeBiasLevelMax)
+		runData.coinCountLevel = math.random(Presets.FakeCoinCountLevelMin, Presets.FakeCoinCountLevelMax)
 		local now = os.clock()
 		local fakeActor = {
 			isFake = true,

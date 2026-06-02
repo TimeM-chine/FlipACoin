@@ -1860,6 +1860,7 @@ RebirthPresets.RunDataDefaults = table.freeze({
 	comboLevel = 0,
 	speedLevel = 0,
 	biasLevel = 0,
+	coinCountLevel = 0,
 	currentStreak = 0,
 	bestStreakThisRun = 0,
 	cashEarnedThisRun = 0,
@@ -1872,6 +1873,7 @@ RebirthPresets.RunUpgradeOrder = table.freeze({
 	"comboLevel",
 	"speedLevel",
 	"biasLevel",
+	"coinCountLevel",
 })
 
 RebirthPresets.FlipACoin = {
@@ -1880,15 +1882,16 @@ RebirthPresets.FlipACoin = {
 		CashPerPoint = 250,
 		MaxPointGain = 8,
 		CashAfterReset = 30,
-		BiasLevelsPerRebirth = 1,
-		MaxRebirthBiasLevel = 3,
+		BiasLevelsPerRebirth = 0,
+		MaxRebirthBiasLevel = 0,
 	},
 	Upgrades = {
 		polishedStart = {
-			displayName = "Polished Start",
-			description = "+1 Value level after each rebirth",
-			runDataKey = "valueLevel",
-			runDataStep = 1,
+			displayName = "Coin Spread",
+			description = "More coins per flip.",
+			runDataSteps = {
+				coinCountLevel = 1,
+			},
 			costBase = 1,
 			costGrowth = 2,
 			maxLevel = 5,
@@ -1959,16 +1962,17 @@ end
 function RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree, rebirthCount)
 	local baseline = table.clone(RebirthPresets.RunDataDefaults)
 	rebirthTree = rebirthTree or {}
-	baseline.biasLevel += math.min(
-		rebirthCount or 0,
-		RebirthPresets.FlipACoin.Rebirth.MaxRebirthBiasLevel
-	) * RebirthPresets.FlipACoin.Rebirth.BiasLevelsPerRebirth
 
 	for _, upgradeKey in ipairs(RebirthPresets.FlipACoin.UpgradeOrder) do
 		local config = RebirthPresets.GetFlipACoinUpgradeConfig(upgradeKey)
 		local level = rebirthTree[upgradeKey] or 0
 		if config and config.runDataKey then
 			baseline[config.runDataKey] += level * config.runDataStep
+		end
+		if config and config.runDataSteps then
+			for runDataKey, step in pairs(config.runDataSteps) do
+				baseline[runDataKey] += level * step
+			end
 		end
 	end
 

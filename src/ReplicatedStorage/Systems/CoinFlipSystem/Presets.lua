@@ -11,6 +11,7 @@ Presets.RunDataDefaults = table.freeze({
 	comboLevel = 0,
 	speedLevel = 0,
 	biasLevel = 0,
+	coinCountLevel = 0,
 	currentStreak = 0,
 	bestStreakThisRun = 0,
 	cashEarnedThisRun = 0,
@@ -116,6 +117,63 @@ function Presets.GetRollHeadsChance(runData, bonusStats, hiddenChanceBonus)
 	)
 end
 
+function Presets.GetCoinCount(runData, bonusStats)
+	local coinCount = 1
+
+	for _, config in ipairs(FlipConfig.CoinCountByLevel) do
+		if runData.coinCountLevel >= config.minLevel then
+			coinCount = config.count
+		end
+	end
+
+	return coinCount
+end
+
+function Presets.GetRoundSuccessThreshold(coinCount)
+	return FlipConfig.SuccessThresholdByCoinCount[coinCount]
+end
+
+function Presets.RollCoinResults(runData, bonusStats, hiddenChanceBonus)
+	local coinCount = Presets.GetCoinCount(runData, bonusStats)
+	local rollHeadsChance = Presets.GetRollHeadsChance(runData, bonusStats, hiddenChanceBonus)
+	local coinResults = {}
+	local headsCount = 0
+
+	for coinIndex = 1, coinCount do
+		local result = if math.random() < rollHeadsChance then "Heads" else "Tails"
+		coinResults[coinIndex] = result
+		if result == "Heads" then
+			headsCount += 1
+		end
+	end
+
+	return {
+		coinCount = coinCount,
+		coinResults = coinResults,
+		headsCount = headsCount,
+		tailsCount = coinCount - headsCount,
+	}
+end
+
+function Presets.BuildRoundOutcome(runData, bonusStats, hiddenChanceBonus)
+	local roll = Presets.RollCoinResults(runData, bonusStats, hiddenChanceBonus)
+	local successThreshold = Presets.GetRoundSuccessThreshold(roll.coinCount)
+	local roundSuccess = roll.headsCount >= successThreshold
+	local perfect = roll.headsCount == roll.coinCount
+
+	return {
+		coinCount = roll.coinCount,
+		coinResults = roll.coinResults,
+		headsCount = roll.headsCount,
+		tailsCount = roll.tailsCount,
+		roundSuccess = roundSuccess,
+		successThreshold = successThreshold,
+		perfect = perfect,
+		comboName = Presets.GetComboName(roll.headsCount, roll.coinCount, perfect),
+		comboMultiplier = Presets.GetComboMultiplier(roll.headsCount),
+	}
+end
+
 function Presets.GetFlipInterval(runData, bonusStats)
 	local flipIntervalMultiplier = bonusStats and bonusStats.flipIntervalMultiplier or 1
 	return math.max(
@@ -132,6 +190,19 @@ function Presets.GetValueMultiplier(runData)
 	return FlipConfig.ValueGrowth ^ runData.valueLevel
 end
 
+function Presets.GetComboMultiplier(headsCount)
+	return FlipConfig.ComboMultiplierByHeadsCount[headsCount]
+end
+
+function Presets.GetComboName(headsCount, coinCount, perfect)
+	local comboName = FlipConfig.ComboNamesByHeadsCount[headsCount]
+	if perfect and coinCount >= 3 then
+		return `Perfect {comboName}`
+	end
+
+	return comboName
+end
+
 function Presets.GetHeadsReward(runData, bonusStats)
 	local comboMultiplier = 1 + math.max(runData.currentStreak - 1, 0) * Presets.GetComboStep(runData)
 	local coinMultiplier = bonusStats and bonusStats.coinMultiplier or 1
@@ -141,6 +212,24 @@ end
 function Presets.GetTailsReward(bonusStats)
 	local premiumCoinMultiplier = bonusStats and bonusStats.premiumCoinMultiplier or 1
 	return math.round((FlipConfig.BaseTailsReward or 0) * premiumCoinMultiplier)
+end
+
+function Presets.GetRoundReward(runData, bonusStats, outcome)
+	local coinMultiplier = bonusStats and bonusStats.coinMultiplier or 1
+	local premiumCoinMultiplier = bonusStats and bonusStats.premiumCoinMultiplier or 1
+	local perHeadReward = FlipConfig.BaseReward * Presets.GetValueMultiplier(runData) * coinMultiplier
+
+	if outcome.headsCount > 0 then
+		local headsReward = perHeadReward * outcome.headsCount
+		if outcome.roundSuccess then
+			local streakMultiplier = 1 + math.max(runData.currentStreak - 1, 0) * Presets.GetComboStep(runData)
+			return math.round(headsReward * streakMultiplier * outcome.comboMultiplier)
+		end
+
+		return math.round(headsReward)
+	end
+
+	return math.round((FlipConfig.BaseTailsReward or 0) * outcome.tailsCount * premiumCoinMultiplier)
 end
 
 function Presets.GetNextCosts(runData)
@@ -159,11 +248,15 @@ function Presets.GetNextCosts(runData)
 end
 
 function Presets.BuildDerivedStats(runData, bonusStats)
+	local coinCount = Presets.GetCoinCount(runData, bonusStats)
+
 	return {
 		headsChance = Presets.GetHeadsChance(runData, bonusStats),
 		flipInterval = Presets.GetFlipInterval(runData, bonusStats),
 		comboStep = Presets.GetComboStep(runData),
 		valueMultiplier = Presets.GetValueMultiplier(runData),
+		coinCount = coinCount,
+		successThreshold = Presets.GetRoundSuccessThreshold(coinCount),
 		coinMultiplier = bonusStats and bonusStats.coinMultiplier or 1,
 		premiumCoinMultiplier = bonusStats and bonusStats.premiumCoinMultiplier or 1,
 		luckBonus = bonusStats and bonusStats.luckBonus or 0,

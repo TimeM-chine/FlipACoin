@@ -16,3 +16,4 @@ Then open `default.project.json` in Roblox Studio or build a place file with Roj
 - `docs/TASK_STATE.md` for current work
 - `docs/PROJECT_LOGIC.md` for project facts
 - `docs/FRAMEWORK.md` for framework rules
+- `docs/archive/` for completed historical task logs and stale reference notes

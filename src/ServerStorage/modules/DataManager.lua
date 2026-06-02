@@ -33,7 +33,10 @@ local DataManager = {}
 local function PlayerAdded(player)
 	local profile = ProfileStore:LoadProfileAsync("Player_" .. player.UserId)
 	if profile ~= nil then
-		if GameConfig.IsDebug then
+		if GameConfig.isAlphaTest then
+			warn("------ [[ Alpha test mode, using default data ]] ------")
+			profile.Data = TableModule.DeepCopy(DEFAULT_DATA)
+		elseif GameConfig.IsDebug then
 			warn("------ [[ Debug mode, using debug data ]] ------")
 			profile.Data = TableModule.DeepCopy(DEBUG_DATA)
 		end

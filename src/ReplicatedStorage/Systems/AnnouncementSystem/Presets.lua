@@ -53,11 +53,11 @@ Presets.BestStreakEffect = {
 }
 
 function Presets.BuildText(player, streak)
-	return `{player.DisplayName} hit {streak} heads in a row!`
+	return `{player.DisplayName} hit {streak} successful flips in a row!`
 end
 
 function Presets.BuildBestStreakText(player, streak)
-	return `{player.DisplayName} set a new best streak: {streak}!`
+	return `{player.DisplayName} set a new round streak: {streak}!`
 end
 
 return Presets

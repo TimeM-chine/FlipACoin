@@ -66,7 +66,7 @@ local function updateRebirthPanel()
 	RebirthPointGain.Value.Text = `+{pointGain} now | {rebirthPoints} banked`
 	RebirthResetPreview.Title.Text = "Reset preview"
 	RebirthResetPreview.Desc.Text =
-		`Cash resets to $ {Util.FormatNumber(cashAfterReset, true)} and run upgrades restart from permanent perks. Need $ {Util.FormatNumber(
+		`Cash resets to $ {Util.FormatNumber(cashAfterReset, true)}. Run stats reset to Rebirth upgrade baselines. Need $ {Util.FormatNumber(
 			minCash,
 			true
 		)} minimum.`
@@ -81,8 +81,13 @@ local function updateRebirthPanel()
 		upgradesByKey[entry.key] = entry
 	end
 
+	for _, card in ipairs(RebirthPerkCards) do
+		card.Visible = false
+	end
+
 	for index, upgradeKey in ipairs(RebirthPresets.FlipACoin.UpgradeOrder) do
 		local card = RebirthPerkCards[index]
+		card.Visible = true
 		local config = RebirthPresets.GetFlipACoinUpgradeConfig(upgradeKey)
 		local entry = upgradesByKey[upgradeKey]
 			or {
@@ -92,10 +97,11 @@ local function updateRebirthPanel()
 			}
 		card.Title.Text = config.displayName
 		card.Desc.Text = config.description
-		card.Chip.Text = `Lv.{entry.level}/{entry.maxLevel}`
 		if entry.cost then
-			setButtonText(card.UpgradeButton, `{entry.cost} RP`, rebirthPoints >= entry.cost)
+			card.Chip.Text = `Lv.{entry.level}/{entry.maxLevel} | Cost {entry.cost} RP`
+			setButtonText(card.UpgradeButton, `Upgrade ({entry.cost} RP)`, rebirthPoints >= entry.cost)
 		else
+			card.Chip.Text = `Lv.{entry.level}/{entry.maxLevel} | MAX`
 			setButtonText(card.UpgradeButton, "MAX", false)
 		end
 	end

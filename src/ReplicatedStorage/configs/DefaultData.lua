@@ -110,6 +110,7 @@ local DefaultData = {
 		comboLevel = 0,
 		speedLevel = 0,
 		biasLevel = 0,
+		coinCountLevel = 0,
 		currentStreak = 0,
 		bestStreakThisRun = 0,
 		cashEarnedThisRun = 0,
