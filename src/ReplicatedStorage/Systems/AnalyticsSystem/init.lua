@@ -10,6 +10,7 @@ local Types = require(Replicated.configs.Types)
 local IsServer = RunService:IsServer()
 local SENDER, SystemMgr
 local CustomFieldKeys = Enum.AnalyticsCustomFieldKeys
+local FlipCountMilestones = { 10, 25, 50, 100, 250, 500 }
 
 ---- server variables ----
 local AnalyticsService
@@ -23,17 +24,28 @@ local AnalyticsSystem: Types.System = {
 		"LogRunUpgradePurchased",
 		"LogShopItemPurchased",
 		"LogItemEquipped",
+		"LogGamePassGranted",
 		"LogRewardedAd",
 		"LogPotionGranted",
 		"LogPotionUsed",
 		"LogBuffActive",
 		"LogInputAction",
+		"LogProfileXp",
+		"LogDailyGoalCompleted",
+		"LogTableJackpot",
+		"LogEdgeStand",
 		"LogRebirth",
 		"LogRebirthUpgradePurchased",
+		"PlayerAdded",
+		"PlayerRemoving",
 		"_BuildFields",
+		"_AccountAgeBand",
 		"_CanLog",
 		"_CashBand",
 		"_ClampEventValue",
+		"_DurationBand",
+		"_EnsureSession",
+		"_LogFlipProgress",
 		"_LogCustomEvent",
 		"_RoundOutcomeField",
 		"_StreakBand",
@@ -64,6 +76,35 @@ function AnalyticsSystem:Init()
 	GetSystemMgr()
 end
 
+function AnalyticsSystem:PlayerAdded(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	local session = self:_EnsureSession(player)
+	self:_LogCustomEvent(player, "coinflip_session_start", 1, self:_BuildFields("join", self:_AccountAgeBand(player.AccountAge)))
+end
+
+function AnalyticsSystem:PlayerRemoving(sender, player, args)
+	if not IsServer or sender ~= SENDER then
+		return
+	end
+
+	local session = self.players[player.UserId]
+	if not session then
+		return
+	end
+
+	local duration = math.max(math.floor(os.clock() - session.startedAt), 0)
+	self:_LogCustomEvent(
+		player,
+		"coinflip_session_end",
+		duration,
+		self:_BuildFields(self:_DurationBand(duration), session.flipCount or 0, session.lastMilestone or 0)
+	)
+	self.players[player.UserId] = nil
+end
+
 function AnalyticsSystem:LogSeatAssigned(sender, player, args)
 	if not self:_CanLog(sender, player) then
 		return
@@ -83,6 +124,7 @@ function AnalyticsSystem:LogCoinFlipResolved(sender, player, args)
 	local result = args and args.result or "Unknown"
 	local fields = self:_BuildFields(result, self:_RoundOutcomeField(args), args and args.equippedCoin)
 	self:_LogCustomEvent(player, "coinflip_flip_resolved", reward, fields)
+	self:_LogFlipProgress(player, args)
 
 	local streakMilestone = args and args.streakMilestone
 	if streakMilestone then
@@ -126,6 +168,19 @@ function AnalyticsSystem:LogItemEquipped(sender, player, args)
 		"coinflip_item_equip",
 		1,
 		self:_BuildFields(args and args.category, args and args.itemId, args and args.source)
+	)
+end
+
+function AnalyticsSystem:LogGamePassGranted(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	self:_LogCustomEvent(
+		player,
+		"coinflip_gamepass_granted",
+		args and args.price or 0,
+		self:_BuildFields(args and args.gamePassName, args and args.source, args and args.effect)
 	)
 end
 
@@ -194,6 +249,58 @@ function AnalyticsSystem:LogInputAction(sender, player, args)
 	)
 end
 
+function AnalyticsSystem:LogProfileXp(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	self:_LogCustomEvent(
+		player,
+		"coinflip_profile_xp",
+		args and args.expGained or 0,
+		self:_BuildFields(args and args.level, args and args.levelsGained, args and args.outcome)
+	)
+end
+
+function AnalyticsSystem:LogDailyGoalCompleted(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	self:_LogCustomEvent(
+		player,
+		"coinflip_daily_goal_completed",
+		args and args.reward or 0,
+		self:_BuildFields(args and args.goalId, args and args.day, args and args.reward)
+	)
+end
+
+function AnalyticsSystem:LogTableJackpot(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	self:_LogCustomEvent(
+		player,
+		"coinflip_table_jackpot",
+		args and args.reward or 0,
+		self:_BuildFields(args and args.source, args and args.comboKey, args and args.recipientCount)
+	)
+end
+
+function AnalyticsSystem:LogEdgeStand(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	self:_LogCustomEvent(
+		player,
+		"coinflip_edge_stand",
+		args and args.bonusReward or 0,
+		self:_BuildFields(args and args.coinCount, args and args.failureStreak, args and args.pityActive)
+	)
+end
+
 function AnalyticsSystem:LogRebirth(sender, player, args)
 	if not self:_CanLog(sender, player) then
 		return
@@ -238,6 +345,27 @@ function AnalyticsSystem:_BuildFields(field01, field02, field03)
 	return fields
 end
 
+function AnalyticsSystem:_AccountAgeBand(accountAge)
+	local days = tonumber(accountAge) or 0
+	if days < 1 then
+		return "0d"
+	end
+	if days < 7 then
+		return "1_6d"
+	end
+	if days < 30 then
+		return "7_29d"
+	end
+	if days < 180 then
+		return "30_179d"
+	end
+	if days < 365 then
+		return "180_364d"
+	end
+
+	return "365d_plus"
+end
+
 function AnalyticsSystem:_CanLog(sender, player)
 	if not IsServer then
 		return false
@@ -279,6 +407,74 @@ function AnalyticsSystem:_ClampEventValue(value)
 	return numberValue
 end
 
+function AnalyticsSystem:_DurationBand(seconds)
+	local duration = tonumber(seconds) or 0
+	if duration < 10 then
+		return "0_9s"
+	end
+	if duration < 30 then
+		return "10_29s"
+	end
+	if duration < 60 then
+		return "30_59s"
+	end
+	if duration < 180 then
+		return "1_2m"
+	end
+	if duration < 600 then
+		return "3_9m"
+	end
+	if duration < 1800 then
+		return "10_29m"
+	end
+
+	return "30m_plus"
+end
+
+function AnalyticsSystem:_EnsureSession(player)
+	local session = self.players[player.UserId]
+	if not session then
+		session = {
+			startedAt = os.clock(),
+			flipCount = 0,
+			lastMilestone = 0,
+			milestones = {},
+		}
+		self.players[player.UserId] = session
+	end
+
+	return session
+end
+
+function AnalyticsSystem:_LogFlipProgress(player, args)
+	local session = self:_EnsureSession(player)
+	session.flipCount += 1
+
+	local elapsed = math.max(math.floor(os.clock() - session.startedAt), 0)
+	if not session.firstFlipLogged then
+		self:_LogCustomEvent(
+			player,
+			"coinflip_first_flip_latency",
+			elapsed,
+			self:_BuildFields(self:_DurationBand(elapsed), self:_RoundOutcomeField(args), args and args.equippedCoin)
+		)
+		session.firstFlipLogged = true
+	end
+
+	for _, milestone in ipairs(FlipCountMilestones) do
+		if session.flipCount >= milestone and not session.milestones[milestone] then
+			session.milestones[milestone] = true
+			session.lastMilestone = milestone
+			self:_LogCustomEvent(
+				player,
+				"coinflip_flip_count_milestone",
+				milestone,
+				self:_BuildFields(milestone, self:_DurationBand(elapsed), self:_RoundOutcomeField(args))
+			)
+		end
+	end
+end
+
 function AnalyticsSystem:_LogCustomEvent(player, eventName, value, fields)
 	if not AnalyticsService then
 		return
@@ -303,8 +499,29 @@ function AnalyticsSystem:_RoundOutcomeField(args)
 		headsCount = if args.result == "Heads" then 1 else 0
 	end
 	local roundState = if args.roundSuccess == true or args.result == "Heads" then "success" else "reset"
+	local comboKey = args.comboKey
+	if typeof(comboKey) ~= "string" then
+		if headsCount >= 5 then
+			comboKey = "jackpot"
+		elseif args.perfect == true and coinCount >= 3 then
+			comboKey = "perfect"
+		elseif headsCount >= 4 then
+			comboKey = "fourHeads"
+		elseif headsCount >= 3 then
+			comboKey = "triple"
+		elseif headsCount >= 2 then
+			comboKey = "pair"
+		elseif headsCount >= 1 then
+			comboKey = "heads"
+		else
+			comboKey = "none"
+		end
+	end
 
-	return `c{coinCount}_h{headsCount}_{roundState}_s{self:_StreakBand(args.streak)}`
+	local pityState = if args.pityActive == true then "pity" else "normal"
+	local edgeState = if args.edgeStand == true then "edge" else "normal"
+	local luckyState = if args.luckyCoinReroll == true then "lucky" else "normal"
+	return `c{coinCount}_h{headsCount}_{roundState}_s{self:_StreakBand(args.streak)}_{comboKey}_{pityState}_{edgeState}_{luckyState}`
 end
 
 function AnalyticsSystem:_StreakBand(streak)

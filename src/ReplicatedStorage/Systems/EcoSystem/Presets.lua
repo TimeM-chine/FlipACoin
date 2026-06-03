@@ -110,6 +110,9 @@ EcoPresets.GrowthShopItems = {
 			stats = {
 				coinMultiplier = 2.15,
 				luckBonus = 0.05,
+				edgeStandChanceBonus = 0.005,
+				perfectRewardMultiplierBonus = 0.04,
+				tailsRerollChance = 0.015,
 			},
 		},
 		{
@@ -121,6 +124,9 @@ EcoPresets.GrowthShopItems = {
 			stats = {
 				coinMultiplier = 2.6,
 				luckBonus = 0.07,
+				edgeStandChanceBonus = 0.01,
+				perfectRewardMultiplierBonus = 0.07,
+				tailsRerollChance = 0.025,
 			},
 		},
 		{
@@ -132,6 +138,9 @@ EcoPresets.GrowthShopItems = {
 			stats = {
 				coinMultiplier = 3.2,
 				luckBonus = 0.09,
+				edgeStandChanceBonus = 0.015,
+				perfectRewardMultiplierBonus = 0.1,
+				tailsRerollChance = 0.035,
 			},
 		},
 		{
@@ -143,6 +152,9 @@ EcoPresets.GrowthShopItems = {
 			stats = {
 				coinMultiplier = 3.8,
 				luckBonus = 0.11,
+				edgeStandChanceBonus = 0.02,
+				perfectRewardMultiplierBonus = 0.14,
+				tailsRerollChance = 0.05,
 			},
 		},
 	}),
@@ -942,6 +954,9 @@ function EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDeskSetup, equippe
 		coinMultiplier = 1,
 		premiumCoinMultiplier = 1,
 		luckBonus = 0,
+		edgeStandChanceBonus = 0,
+		perfectRewardMultiplierBonus = 0,
+		tailsRerollChance = 0,
 		flipIntervalMultiplier = 1,
 	}
 	local equippedItems = {
@@ -954,6 +969,9 @@ function EcoPresets.BuildLoadoutBonuses(equippedCoin, equippedDeskSetup, equippe
 		if item and item.stats then
 			bonuses.coinMultiplier *= item.stats.coinMultiplier or 1
 			bonuses.luckBonus += item.stats.luckBonus or 0
+			bonuses.edgeStandChanceBonus += item.stats.edgeStandChanceBonus or 0
+			bonuses.perfectRewardMultiplierBonus += item.stats.perfectRewardMultiplierBonus or 0
+			bonuses.tailsRerollChance += item.stats.tailsRerollChance or 0
 		end
 	end
 

@@ -72,7 +72,6 @@ end
 
 ---- [[ Handle ]] ----
 function processReceipt(receiptInfo)
-	print(`playerId {receiptInfo.PlayerId} is purchasing {receiptInfo.ProductId}.`)
 	-- GAModule:ProcessReceiptCallback(receiptInfo)
 	-- check whether player bought this product before
 	local playerProductKey = receiptInfo.PlayerId .. "_" .. receiptInfo.PurchaseId
@@ -105,10 +104,7 @@ function processReceipt(receiptInfo)
 	local result
 	success, result = pcall(handler, receiptInfo, player)
 	if not success or not result then
-		warn("Error occurred while processing a product purchase")
-		print("\nProductId:", receiptInfo.ProductId)
-		print("\nPlayer:", player)
-		print("\nResult", result)
+		warn(`[EcoSystem] Error processing product {receiptInfo.ProductId} for {player.Name}: {tostring(result)}`)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
@@ -124,7 +120,6 @@ function processReceipt(receiptInfo)
 end
 
 function gamePassPurchaseFinished(player, purchasedPassID, purchaseSuccess)
-	print("buy gamePass ", player, purchasedPassID, purchaseSuccess)
 	if purchaseSuccess and purchasedPassID then
 		local func = gamePassFunctions[purchasedPassID]
 		if not func then
@@ -247,6 +242,14 @@ local function refreshDecoration(player, category)
 	if category == "desk" or category == "chair" then
 		SystemMgr.systems.DecorationSystem:RefreshPlayerDecoration(SENDER, player)
 	end
+end
+
+local function notifyLoadoutChanged(player, actionText, item)
+	SystemMgr.systems.GuiSystem:SetNotification(SENDER, player, {
+		text = `{actionText} {item.displayName}`,
+		lastTime = 2.4,
+		textColor = Color3.fromRGB(255, 224, 158),
+	})
 end
 
 local function isStoreIdConfigured(id)
@@ -596,6 +599,7 @@ function EcoSystem:Init()
 				self:BuyGamePass(SENDER, player, {
 					gamePasses = passes,
 					gamePassName = gamePassName,
+					source = "purchase",
 				})
 			end
 		end
@@ -627,6 +631,7 @@ function EcoSystem:PlayerAdded(sender, player, args)
 					self:BuyGamePass(SENDER, player, {
 						gamePasses = passes,
 						gamePassName = gamePassName,
+						source = "ownershipSync",
 					})
 				end)
 			end
@@ -863,6 +868,7 @@ function EcoSystem:RequestShopPurchase(sender, player, args)
 			rarity = item.rarity,
 			cost = item.cost,
 		})
+		notifyLoadoutChanged(player, "Purchased", item)
 		if category == "coin" then
 			SystemMgr.systems.CoinFlipSystem:HandleGuideCoinPurchased(SENDER, player, {
 				itemId = item.id,
@@ -908,6 +914,7 @@ function EcoSystem:RequestEquipItem(sender, player, args)
 		playerIns:SetOneData(equippedKey, item.id)
 		refreshCashDisplays(player)
 		refreshDecoration(player, category)
+		notifyLoadoutChanged(player, "Equipped", item)
 		SystemMgr.systems.AnalyticsSystem:LogItemEquipped(SENDER, player, {
 			category = category,
 			itemId = item.id,
@@ -1340,6 +1347,7 @@ function EcoSystem:BuyGamePass(sender, player, args)
 			return
 		end
 		local gamePassName = args.gamePassName
+		local gamePassConfig = EcoPresets.GamePasses[gamePassName]
 		local effect = EcoPresets.GamePassEffects[gamePassName]
 		local playerIns = PlayerServerClass.GetIns(player)
 		if playerIns and effect and effect.unlocks then
@@ -1354,6 +1362,12 @@ function EcoSystem:BuyGamePass(sender, player, args)
 		refreshPlayerAfterPremiumChange(player, {
 			gamePassPurchased = gamePassName,
 			equippedCategory = "boost",
+		})
+		SystemMgr.systems.AnalyticsSystem:LogGamePassGranted(SENDER, player, {
+			gamePassName = gamePassName,
+			source = args.source or "unknown",
+			effect = gamePassConfig.title,
+			price = gamePassConfig.price,
 		})
 	else
 		ClientData:SetOneData(dataKey.gamePasses, args.gamePasses)

@@ -25,6 +25,7 @@ local SENDER, SystemMgr
 
 ---- server variables ----
 local PlayerServerClass
+local tableReactionCooldowns = {}
 
 ---- client variables ----
 local LocalPlayer
@@ -55,6 +56,7 @@ local EffectSystem: Types.System = {
 		"PlayCoinFlipVisual",
 		"PlayStreakMilestone",
 		"RefreshPersistentSeatCoins",
+		"PlayerRemoving",
 	},
 	players = {},
 	IsLoaded = false,
@@ -85,6 +87,18 @@ function EffectSystem:Init()
 		FirstPersonCamera =
 			require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Modules"):WaitForChild("FirstPersonCamera"))
 		setupSceneInteractions()
+	end
+end
+
+function EffectSystem:PlayerRemoving(sender, player)
+	if IsServer then
+		if sender ~= SENDER then
+			return
+		end
+
+		tableReactionCooldowns[player.UserId] = nil
+	else
+		--
 	end
 end
 
@@ -149,6 +163,54 @@ function EffectSystem:PlayEffects(sender, player, args)
 		Debris:AddItem(effectP, lifeTime)
 		return effectP
 	end
+end
+
+function EffectSystem:RequestTableReaction(sender, player, args)
+	if IsServer then
+		player = player or sender
+		if sender ~= player or not player or not player:IsA("Player") or not player:IsDescendantOf(Players) then
+			return
+		end
+
+		local seatId = SystemMgr.systems.TableSeatSystem:GetPlayerSeatId(player)
+		if not seatId then
+			return
+		end
+
+		local now = os.clock()
+		if now - (tableReactionCooldowns[player.UserId] or 0) < SceneInteractionConfig.TableReactionCooldown then
+			return
+		end
+		tableReactionCooldowns[player.UserId] = now
+
+		self.AllClients:PlayTableReaction({
+			unreliable = true,
+			seatId = seatId,
+			actorUserId = player.UserId,
+		})
+	else
+		--
+	end
+end
+
+function EffectSystem:PlayTableReaction(sender, player, args)
+	if IsServer then
+		return
+	end
+	if typeof(args) ~= "table" or args.actorUserId == LocalPlayer.UserId then
+		return
+	end
+	if typeof(args.seatId) ~= "string" then
+		return
+	end
+
+	local _, _, tableNormal, surfaceEndPos = getFlipPositions(args.seatId)
+	if not tableNormal or not surfaceEndPos then
+		return
+	end
+
+	playSfx(SceneInteractionConfig.TableTapSoundName)
+	playTableTapRipple(surfaceEndPos, tableNormal)
 end
 
 ---- [[ Client ]] ----
@@ -258,6 +320,7 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 	local baseCoinSize = getCoinObjectSize(coinObject)
 	local baseShadowSize = shadow.Size
 	local result = args.result == "Tails" and "Tails" or "Heads"
+	local edgeStand = args.edgeStand == true
 	local restSpinRadians = getRandomRestSpinRadians()
 	local finalRotation = math.rad(VisualConfig.SpinTurns * 360) + (result == "Tails" and math.pi or 0)
 	local airborneRotation = finalRotation
@@ -269,7 +332,9 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 		end
 		return
 	end
-	local flatWorldRot = buildFlatCoinWorldRotation(tableNormal, flipAxisWorld, result, restSpinRadians)
+	local flatWorldRot = if edgeStand
+		then buildEdgeStandCoinWorldRotation(tableNormal, flipAxisWorld, restSpinRadians)
+		else buildFlatCoinWorldRotation(tableNormal, flipAxisWorld, result, restSpinRadians)
 	local endPosFlat = resolveFlatLandWorldPosition(surfaceEndPos, tableNormal, flatWorldRot, visual.coin)
 	startPos = endPosFlat
 	endPos = endPosFlat
@@ -293,6 +358,7 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 	local isObservedFlip = visualOptions and visualOptions.isObserved == true
 	local isObservedMilestone = visualOptions and visualOptions.isMilestone == true
 	local observedStreak = visualOptions and (visualOptions.streak or 0) or 0
+	local edgeStandCoinIndex = args.edgeStand == true and args.edgeStandCoinIndex or nil
 	local shouldPlayResultSfx = not visualOptions or visualOptions.playResultSfx ~= false
 	local shouldShowObservedStreakPulse = isObservedFlip
 		and result == "Heads"
@@ -300,6 +366,7 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 	local shouldShowObservedHighlight = isObservedFlip
 		and not isObservedMilestone
 		and observedStreak >= VisualConfig.ObservedHighlightMinimum
+	local shouldShowEdgeStandHighlight = edgeStand
 
 	local startWorldRot =
 		buildAirborneCoinWorldRotation(tableNormal, flipAxisWorld, bankReference, 0, finalRotation, 0, flatWorldRot)
@@ -375,6 +442,15 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 				outlineColor = VisualConfig.ObservedHighlightOutlineColor,
 				fillTransparency = VisualConfig.ObservedHighlightFillTransparency,
 				outlineTransparency = VisualConfig.ObservedHighlightOutlineTransparency,
+			})
+		end
+		if shouldShowEdgeStandHighlight then
+			playCoinVisualHighlight(seatId, visual, {
+				duration = VisualConfig.MilestoneHighlightDuration,
+				fillColor = VisualConfig.MilestoneHighlightFillColor,
+				outlineColor = VisualConfig.MilestoneHighlightOutlineColor,
+				fillTransparency = VisualConfig.MilestoneHighlightFillTransparency,
+				outlineTransparency = VisualConfig.MilestoneHighlightOutlineTransparency,
 			})
 		end
 
@@ -476,6 +552,7 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 
 		applyTemporaryMultiCoinScale(coinVisual, coinCount)
 		local result = getVisualCoinResult(args, coinIndex)
+		local edgeStand = coinIndex == edgeStandCoinIndex
 		local restSpinRadians = getRandomRestSpinRadians()
 		local finalRotation = math.rad(VisualConfig.SpinTurns * 360) + (result == "Tails" and math.pi or 0)
 		local startPos, endPos, tableNormal, surfaceEndPos, flipAxisWorld =
@@ -491,7 +568,9 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 
 		local baseCoinSize = getCoinObjectSize(coinVisual.coin)
 		local baseShadowSize = coinVisual.shadow.Size
-		local flatWorldRot = buildFlatCoinWorldRotation(tableNormal, flipAxisWorld, result, restSpinRadians)
+		local flatWorldRot = if edgeStand
+			then buildEdgeStandCoinWorldRotation(tableNormal, flipAxisWorld, restSpinRadians)
+			else buildFlatCoinWorldRotation(tableNormal, flipAxisWorld, result, restSpinRadians)
 		local endPosFlat = resolveFlatLandWorldPosition(surfaceEndPos, tableNormal, flatWorldRot, coinVisual.coin)
 		local travel = endPosFlat - startPos
 		local arcHeight = math.max(VisualConfig.ArcHeight, travel.Magnitude * VisualConfig.ArcHeightTravelFactor)
@@ -525,6 +604,7 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 			baseCoinSize = baseCoinSize,
 			baseShadowSize = baseShadowSize,
 			shadowPos = shadowPos,
+			edgeStand = edgeStand,
 			isPrimary = coinVisual == visual,
 		})
 	end
@@ -581,8 +661,11 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 			local coinCFrame = CFrame.new(position) * coinWorldRot
 			pivotCoinVisual(state.coinVisual, coinCFrame)
 			state.coinVisual.shadow.CFrame = CFrame.new(position.X, state.shadowPos.Y, position.Z) * CoinVisualBaseRot
-			state.coinVisual.shadow.Size =
-				Vector3.new(state.baseShadowSize.X, state.baseCoinSize.Y * shadowScale, state.baseCoinSize.Z * shadowScale)
+			state.coinVisual.shadow.Size = Vector3.new(
+				state.baseShadowSize.X,
+				state.baseCoinSize.Y * shadowScale,
+				state.baseCoinSize.Z * shadowScale
+			)
 			state.coinVisual.shadow.Transparency = shadowTransparency
 		end
 
@@ -599,15 +682,29 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 			local landingPulseOptions = getLandingPulseOptions(state.result, isObservedFlip)
 			playLandingPulse(state.coinVisual.landingPulse, state.shadowPos, pulseColor, landingPulseOptions)
 			playCoinLandingBurst(state.surfaceEndPos, state.tableNormal, state.result)
+			if state.edgeStand then
+				playCoinVisualHighlight(seatId, state.coinVisual, {
+					duration = VisualConfig.MilestoneHighlightDuration,
+					fillColor = VisualConfig.MilestoneHighlightFillColor,
+					outlineColor = VisualConfig.MilestoneHighlightOutlineColor,
+					fillTransparency = VisualConfig.MilestoneHighlightFillTransparency,
+					outlineTransparency = VisualConfig.MilestoneHighlightOutlineTransparency,
+				})
+			end
 		end
 		if shouldShowObservedStreakPulse then
 			local primaryState = getPrimaryMultiCoinState(states)
-			playLandingPulse(primaryState.coinVisual.streakPulse, primaryState.shadowPos, VisualConfig.StreakPulseColor, {
-				startSize = VisualConfig.StreakPulseStartSize,
-				endSize = getObservedStreakPulseEndSize(observedStreak),
-				duration = VisualConfig.StreakPulseDuration,
-				transparency = 0.22,
-			})
+			playLandingPulse(
+				primaryState.coinVisual.streakPulse,
+				primaryState.shadowPos,
+				VisualConfig.StreakPulseColor,
+				{
+					startSize = VisualConfig.StreakPulseStartSize,
+					endSize = getObservedStreakPulseEndSize(observedStreak),
+					duration = VisualConfig.StreakPulseDuration,
+					transparency = 0.22,
+				}
+			)
 		end
 		if shouldShowObservedHighlight then
 			playCoinVisualHighlight(seatId, visual, {
@@ -770,7 +867,9 @@ function EffectSystem:PlayStreakMilestone(sender, player, args)
 	else
 		playStreakMilestoneFallback(args.seatId, args.streak)
 	end
-	playConfiguredCameraShake(args.cameraShake)
+	if args.suppressCameraShake ~= true then
+		playConfiguredCameraShake(args.cameraShake)
+	end
 end
 
 function getTableModel()
@@ -963,12 +1062,7 @@ function getFlipPositions(seatId, coinIndex, coinCount)
 	local landingAnchorPosition = landingAnchor and getAnchorPosition(landingAnchor)
 	local surfaceEndPos = centerPos + (outward * VisualConfig.LandingRadius)
 	if dynamicSeatCFrame then
-		surfaceEndPos = getDynamicCoinLandingSurfacePosition(
-			dynamicSeatCFrame,
-			tableTop,
-			tableNormal,
-			surfaceCenter
-		)
+		surfaceEndPos = getDynamicCoinLandingSurfacePosition(dynamicSeatCFrame, tableTop, tableNormal, surfaceCenter)
 	elseif landingAnchorPosition then
 		surfaceEndPos = landingAnchorPosition - tableNormal * (landingAnchorPosition - surfaceCenter):Dot(tableNormal)
 	end
@@ -1008,10 +1102,7 @@ function getFanSurfaceEndPosition(actorStartPos, centerSurfaceEndPos, tableNorma
 	end
 
 	local maxIndexOffset = math.max((coinCount - 1) * 0.5, 1)
-	local angleStep = math.min(
-		VisualConfig.MultiCoinFanAngleStep,
-		VisualConfig.MultiCoinFanMaxAngle / maxIndexOffset
-	)
+	local angleStep = math.min(VisualConfig.MultiCoinFanAngleStep, VisualConfig.MultiCoinFanMaxAngle / maxIndexOffset)
 	local angleOffset = (coinIndex - ((coinCount + 1) * 0.5)) * angleStep
 	local rotatedAxis = CFrame.fromAxisAngle(n, angleOffset):VectorToWorldSpace(centerAxis.Unit)
 	return actorSurfacePos + rotatedAxis * centerAxis.Magnitude
@@ -1020,7 +1111,8 @@ end
 function getDynamicCoinLandingSurfacePosition(seatCFrame, tableTop, tableNormal, surfaceCenter)
 	local inward = seatCFrame.LookVector - tableNormal * seatCFrame.LookVector:Dot(tableNormal)
 	if inward.Magnitude < 0.001 then
-		inward = (surfaceCenter - seatCFrame.Position) - tableNormal * (surfaceCenter - seatCFrame.Position):Dot(tableNormal)
+		inward = (surfaceCenter - seatCFrame.Position)
+			- tableNormal * (surfaceCenter - seatCFrame.Position):Dot(tableNormal)
 	end
 	if inward.Magnitude < 0.001 then
 		inward = tableTop.CFrame.LookVector
@@ -1391,10 +1483,7 @@ function getEquippedCoinAsset(coinId)
 
 	local assetFolder = getCoinAssetFolder()
 	if not assetFolder then
-		warnMissingCoinAsset(
-			coinId,
-			`Missing CoinFlipSystem.Assets.{CoinAssetFolderName}; using default coin visual.`
-		)
+		warnMissingCoinAsset(coinId, `Missing CoinFlipSystem.Assets.{CoinAssetFolderName}; using default coin visual.`)
 		return nil
 	end
 
@@ -1517,6 +1606,22 @@ function buildFlatCoinWorldRotation(tableNormal, flipAxisWorld, flipResult, rest
 	if flipResult == "Tails" then
 		basis = basis * CFrame.fromAxisAngle(u, math.pi)
 	end
+	return CFrame.fromAxisAngle(n, restSpinRadians or 0) * basis
+end
+
+function buildEdgeStandCoinWorldRotation(tableNormal, flipAxisWorld, restSpinRadians)
+	local n = tableNormal.Unit
+	local u = projectVectorToPlane(flipAxisWorld, n)
+	if u.Magnitude < 1e-4 then
+		u = n:Cross(Vector3.xAxis)
+	end
+	if u.Magnitude < 1e-4 then
+		u = n:Cross(Vector3.zAxis)
+	end
+
+	local yThickness = u.Unit * VisualConfig.FlatThicknessLocalSign
+	local z = n:Cross(yThickness).Unit
+	local basis = CFrame.fromMatrix(Vector3.zero, n, yThickness, z)
 	return CFrame.fromAxisAngle(n, restSpinRadians or 0) * basis
 end
 
@@ -1660,10 +1765,11 @@ function playHighlightFlash(target, options)
 		or VisualConfig.ObservedHighlightOutlineTransparency
 	highlight.Parent = getEffectRuntimeParent()
 
-	local tween = TweenService:Create(highlight, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		FillTransparency = 1,
-		OutlineTransparency = 1,
-	})
+	local tween =
+		TweenService:Create(highlight, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			FillTransparency = 1,
+			OutlineTransparency = 1,
+		})
 	tween:Play()
 	tween.Completed:Once(function()
 		highlight:Destroy()
@@ -1694,7 +1800,10 @@ function setupSceneInteractions()
 		if gameProcessedEvent then
 			return
 		end
-		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+		if
+			input.UserInputType ~= Enum.UserInputType.MouseButton1
+			and input.UserInputType ~= Enum.UserInputType.Touch
+		then
 			return
 		end
 
@@ -1856,7 +1965,8 @@ function getDecorationBottomShakeFrame(decorationModel, modelCFrame, normal)
 		for x = -1, 1, 2 do
 			for y = -1, 1, 2 do
 				for z = -1, 1, 2 do
-					local corner = part.CFrame:PointToWorldSpace(Vector3.new(halfSize.X * x, halfSize.Y * y, halfSize.Z * z))
+					local corner =
+						part.CFrame:PointToWorldSpace(Vector3.new(halfSize.X * x, halfSize.Y * y, halfSize.Z * z))
 					local xProjection = corner:Dot(xAxis)
 					local zProjection = corner:Dot(zAxis)
 					minX = math.min(minX, xProjection)
@@ -1890,6 +2000,7 @@ function playTableTapInteraction(position, normal)
 
 	playSfx(SceneInteractionConfig.TableTapSoundName)
 	playTableTapRipple(position, normal)
+	EffectSystem.Server:RequestTableReaction()
 end
 
 function playTableTapRipple(position, normal)

@@ -64,6 +64,7 @@ local function getPlayerState(self, player)
 		playerState = {
 			nextFlipAt = 0,
 			firstRebirthTailsStreak = 0,
+			badLuckPityFailures = 0,
 			stateVersion = 0,
 		}
 		self.players[player.UserId] = playerState
@@ -135,6 +136,53 @@ local function applyCashBuffBonuses(player, bonusStats)
 	return boostedStats
 end
 
+local function normalizeDailyGoals(playerIns)
+	local dailyClaim = playerIns:GetOneData(dataKey.dailyClaim)
+	local currentDay = Presets.GetDailyGoalDay()
+	local dailyGoals, changed = Presets.NormalizeDailyGoals(dailyClaim, currentDay)
+	if changed then
+		playerIns:SetOneData(dataKey.dailyClaim, dailyClaim)
+	end
+
+	return dailyClaim, dailyGoals
+end
+
+local function applyDailyGoalProgress(player, playerIns, outcome, runData)
+	local dailyClaim, dailyGoals = normalizeDailyGoals(playerIns)
+	local completedGoals, changed = Presets.ApplyDailyGoalProgress(dailyGoals, outcome, runData)
+	local rewardTotal = 0
+
+	for _, goal in ipairs(completedGoals) do
+		rewardTotal += goal.reward
+		SystemMgr.systems.EcoSystem:AddResource(SENDER, player, {
+			resourceType = dataKey.wins,
+			count = goal.reward,
+			reason = "dailyGoal",
+		})
+		SystemMgr.systems.GuiSystem:SetNotification(SENDER, player, {
+			text = `Daily goal complete: {goal.displayName} +$ {goal.reward}`,
+			lastTime = 3,
+			soundName = "notification",
+			textColor = Color3.fromRGB(255, 224, 158),
+		})
+		SystemMgr.systems.AnalyticsSystem:LogDailyGoalCompleted(SENDER, player, {
+			goalId = goal.id,
+			reward = goal.reward,
+			day = dailyGoals.day,
+		})
+	end
+
+	if changed then
+		playerIns:SetOneData(dataKey.dailyClaim, dailyClaim)
+	end
+
+	return {
+		dailyClaim = dailyClaim,
+		completedGoals = completedGoals,
+		rewardTotal = rewardTotal,
+	}
+end
+
 local function getSeatState(player)
 	local seatState = SystemMgr.systems.TableSeatSystem:GetClientSeatState(player) or {}
 	seatState.seatId = seatState.mySeatId
@@ -157,6 +205,7 @@ local function buildClientState(player)
 	local rebirthState = rebirthSystem:GetRebirthState(SENDER, player)
 	local bonusStats = applyCashBuffBonuses(player, ecoSystem:GetLoadoutBonuses(SENDER, player))
 	local derivedStats = Presets.BuildDerivedStats(runData, bonusStats)
+	local dailyClaim = normalizeDailyGoals(playerIns)
 
 	return {
 		cash = wins,
@@ -164,6 +213,7 @@ local function buildClientState(player)
 		runData = table.clone(runData),
 		derivedStats = derivedStats,
 		nextCosts = Presets.GetNextCosts(runData),
+		dailyClaim = dailyClaim,
 		seatState = getSeatState(player),
 		onboarding = Onboarding.BuildState(playerIns),
 		loadoutState = loadoutState,
@@ -266,6 +316,52 @@ local function emitObservedFlip(self, player, args)
 	end
 end
 
+local function grantTableJackpotRewards(actor, outcome)
+	local audienceReward = Presets.GetTableJackpotAudienceReward(outcome)
+	if actor.isFake or audienceReward <= 0 then
+		return {
+			audienceReward = 0,
+			recipientCount = 0,
+		}
+	end
+
+	local recipientCount = 0
+	for _, audiencePlayer in ipairs(SystemMgr.systems.TableSeatSystem:GetTablePlayers(actor.seatId)) do
+		if audiencePlayer ~= actor.player and audiencePlayer:IsDescendantOf(Players) and GetPlayerIns(audiencePlayer, false) then
+			recipientCount += 1
+			SystemMgr.systems.EcoSystem:AddResource(SENDER, audiencePlayer, {
+				resourceType = dataKey.wins,
+				count = audienceReward,
+				reason = "tableJackpot",
+			})
+			SystemMgr.systems.GuiSystem:SetNotification(SENDER, audiencePlayer, {
+				text = `Table Jackpot: {actor.player.DisplayName} shared +$ {audienceReward}`,
+				lastTime = Presets.GetTableJackpotNotificationDuration(),
+				soundName = "notification",
+				textColor = Color3.fromRGB(255, 224, 158),
+			})
+			SystemMgr.systems.AnalyticsSystem:LogTableJackpot(SENDER, audiencePlayer, {
+				source = "received",
+				comboKey = outcome.comboKey,
+				recipientCount = 1,
+				reward = audienceReward,
+			})
+		end
+	end
+
+	SystemMgr.systems.AnalyticsSystem:LogTableJackpot(SENDER, actor.player, {
+		source = "triggered",
+		comboKey = outcome.comboKey,
+		recipientCount = recipientCount,
+		reward = audienceReward * recipientCount,
+	})
+
+	return {
+		audienceReward = audienceReward,
+		recipientCount = recipientCount,
+	}
+end
+
 local function getFirstRebirthAssistBonus(playerIns, playerState)
 	if playerIns:GetOneData(dataKey.rebirth) ~= 0 then
 		playerState.firstRebirthTailsStreak = 0
@@ -279,20 +375,70 @@ local function getFirstRebirthAssistBonus(playerIns, playerState)
 	)
 end
 
+local function getHiddenChanceAssist(playerIns, playerState)
+	local firstRebirthAssistBonus = getFirstRebirthAssistBonus(playerIns, playerState)
+	local pityFailureStreak = playerState.badLuckPityFailures or 0
+	local pityBonus = Presets.GetBadLuckPityBonus(pityFailureStreak)
+	local hiddenChanceMax
+
+	if firstRebirthAssistBonus > 0 then
+		hiddenChanceMax = Presets.GetFirstRebirthAssistMaxHeadsChance()
+	end
+	if pityBonus > 0 then
+		hiddenChanceMax = math.max(hiddenChanceMax or 0, Presets.GetBadLuckPityMaxHeadsChance())
+	end
+
+	return {
+		bonus = firstRebirthAssistBonus + pityBonus,
+		maxHeadsChance = hiddenChanceMax,
+		firstRebirthAssistActive = firstRebirthAssistBonus > 0,
+		pityActive = pityBonus > 0,
+		pityFailureStreak = pityFailureStreak,
+	}
+end
+
 local function resolveActorFlip(self, actor)
 	local runData = actor.isFake and normalizeFakeRunData(actor) or normalizeRunData(actor.playerIns)
 	local bonusStats = actor.bonusStats
 	local playerState = if actor.isFake then nil else getPlayerState(self, actor.player)
-	local hiddenChanceBonus = playerState and getFirstRebirthAssistBonus(actor.playerIns, playerState) or 0
-	local outcome = Presets.BuildRoundOutcome(runData, bonusStats, hiddenChanceBonus)
+	local hiddenChanceAssist = playerState and getHiddenChanceAssist(actor.playerIns, playerState) or nil
+	local hiddenChanceBonus = hiddenChanceAssist and hiddenChanceAssist.bonus or 0
+	local hiddenChanceMax = hiddenChanceAssist and hiddenChanceAssist.maxHeadsChance or nil
+	local outcome = Presets.BuildRoundOutcome(runData, bonusStats, hiddenChanceBonus, hiddenChanceMax)
+	local edgeStandChance = 0
+	if playerState then
+		edgeStandChance = Presets.GetEdgeStandChance(
+			outcome,
+			hiddenChanceAssist and hiddenChanceAssist.pityActive == true,
+			hiddenChanceAssist and hiddenChanceAssist.pityFailureStreak or 0,
+			bonusStats
+		)
+	end
 	local reward = 0
 	local isBestStreak = false
 	local bestStreak
+	local profileXpGain = 0
+	local profileProgress
+	local dailyGoalReward = 0
+	local dailyGoalCompletions = {}
+	local dailyClaim
+	local tableJackpot = {
+		audienceReward = 0,
+		recipientCount = 0,
+	}
+
+	if edgeStandChance > 0 and math.random() < edgeStandChance then
+		outcome.edgeStand = true
+		outcome.edgeStandChance = edgeStandChance
+		outcome.edgeStandBonusReward = Presets.GetEdgeStandBonusReward()
+		outcome.edgeStandCoinIndex = Presets.GetEdgeStandCoinIndex(outcome)
+	end
 
 	runData.flipsThisRun += 1
 	if outcome.roundSuccess then
 		if playerState then
 			playerState.firstRebirthTailsStreak = 0
+			playerState.badLuckPityFailures = 0
 		end
 		runData.currentStreak += 1
 		runData.bestStreakThisRun = math.max(runData.bestStreakThisRun, runData.currentStreak)
@@ -310,19 +456,32 @@ local function resolveActorFlip(self, actor)
 			isBestStreak = runData.currentStreak > previousBestStreak
 			bestStreak = math.max(previousBestStreak, runData.currentStreak)
 		end
-	else
+	elseif outcome.edgeStand then
 		if playerState then
-			if hiddenChanceBonus > 0 then
+			if hiddenChanceAssist and hiddenChanceAssist.firstRebirthAssistActive then
 				playerState.firstRebirthTailsStreak += 1
 			else
 				playerState.firstRebirthTailsStreak = 0
 			end
+			playerState.badLuckPityFailures = (playerState.badLuckPityFailures or 0) + 1
+		end
+	else
+		if playerState then
+			if hiddenChanceAssist and hiddenChanceAssist.firstRebirthAssistActive then
+				playerState.firstRebirthTailsStreak += 1
+			else
+				playerState.firstRebirthTailsStreak = 0
+			end
+			playerState.badLuckPityFailures = (playerState.badLuckPityFailures or 0) + 1
 		end
 		runData.currentStreak = 0
 	end
 	runData.headsThisRun += outcome.headsCount
 	outcome.roundStreak = runData.currentStreak
 	reward = Presets.GetRoundReward(runData, bonusStats, outcome)
+	if outcome.edgeStand then
+		reward += outcome.edgeStandBonusReward or 0
+	end
 	outcome.reward = reward
 	if reward > 0 then
 		runData.cashEarnedThisRun += reward
@@ -346,6 +505,18 @@ local function resolveActorFlip(self, actor)
 			playerIns:SetOneData(dataKey.bestStreak, bestStreak)
 		end
 		playerIns:SetOneData(dataKey.runData, runData)
+		profileXpGain = Presets.GetProfileXpReward(outcome)
+		if profileXpGain > 0 then
+			profileProgress = SystemMgr.systems.PlayerSystem:AddExp(SENDER, actor.player, {
+				exp = profileXpGain,
+				reason = "flip",
+			})
+		end
+		local dailyGoalProgress = applyDailyGoalProgress(actor.player, playerIns, outcome, runData)
+		dailyClaim = dailyGoalProgress.dailyClaim
+		dailyGoalCompletions = dailyGoalProgress.completedGoals
+		dailyGoalReward = dailyGoalProgress.rewardTotal
+		tableJackpot = grantTableJackpotRewards(actor, outcome)
 	end
 
 	local observedPayload = {
@@ -362,8 +533,29 @@ local function resolveActorFlip(self, actor)
 		successThreshold = outcome.successThreshold,
 		roundStreak = outcome.roundStreak,
 		perfect = outcome.perfect,
+		comboKey = outcome.comboKey,
+		comboTier = outcome.comboTier,
 		comboName = outcome.comboName,
 		comboMultiplier = outcome.comboMultiplier,
+		luckyCoinReroll = outcome.luckyCoinReroll == true,
+		luckyCoinRerollChance = outcome.luckyCoinRerollChance or 0,
+		luckyCoinRerollCoinIndex = outcome.luckyCoinRerollCoinIndex,
+		luckyCoinRerollResult = outcome.luckyCoinRerollResult,
+		profileXpGain = profileXpGain,
+		profileLevel = profileProgress and profileProgress.level,
+		profileExp = profileProgress and profileProgress.exp,
+		profileLevelsGained = profileProgress and profileProgress.levelsGained or 0,
+		dailyClaim = dailyClaim,
+		dailyGoalCompletions = dailyGoalCompletions,
+		dailyGoalReward = dailyGoalReward,
+		tableJackpotAudienceReward = tableJackpot.audienceReward,
+		tableJackpotRecipientCount = tableJackpot.recipientCount,
+		edgeStand = outcome.edgeStand == true,
+		edgeStandChance = outcome.edgeStandChance or 0,
+		edgeStandBonusReward = outcome.edgeStandBonusReward or 0,
+		edgeStandCoinIndex = outcome.edgeStandCoinIndex,
+		pityActive = hiddenChanceAssist and hiddenChanceAssist.pityActive == true,
+		pityFailureStreak = hiddenChanceAssist and hiddenChanceAssist.pityFailureStreak or 0,
 		isBestStreak = isBestStreak,
 		bestStreak = bestStreak,
 		bestStreakThisRun = runData.bestStreakThisRun,
@@ -371,26 +563,32 @@ local function resolveActorFlip(self, actor)
 		isFake = actor.isFake == true,
 		fakeId = actor.fakeId,
 	}
-	local streakMilestone = SystemMgr.systems.AnnouncementSystem:BuildBestStreakPayload(
+	local announcementSystem = SystemMgr.systems.AnnouncementSystem
+	local streakMilestone = announcementSystem:BuildBestStreakPayload(
 		SENDER,
 		actor.announcementActor,
 		observedPayload
-	) or SystemMgr.systems.AnnouncementSystem:BuildStreakMilestonePayload(
+	) or announcementSystem:BuildStreakMilestonePayload(
 		SENDER,
 		actor.announcementActor,
 		observedPayload
 	)
+	local comboMilestone = announcementSystem:BuildComboMilestonePayload(SENDER, actor.announcementActor, observedPayload)
 	if streakMilestone then
 		observedPayload.streakMilestone = streakMilestone
 	end
+	if comboMilestone then
+		observedPayload.comboMilestone = comboMilestone
+	end
 
 	emitObservedFlip(self, actor.player, observedPayload)
-	SystemMgr.systems.AnnouncementSystem:HandleFlipResolved(SENDER, actor.announcementActor, observedPayload)
+	announcementSystem:HandleFlipResolved(SENDER, actor.announcementActor, observedPayload)
 
 	return {
 		runData = runData,
 		reward = reward,
 		streakMilestone = streakMilestone,
+		comboMilestone = comboMilestone,
 		observedPayload = observedPayload,
 	}
 end
@@ -509,6 +707,22 @@ function CoinFlipSystem:RequestFlip(sender, player, args)
 	seatSystem:RefreshAudienceState(SENDER)
 
 	SystemMgr.systems.AnalyticsSystem:LogCoinFlipResolved(SENDER, player, observedPayload)
+	if observedPayload.edgeStand then
+		SystemMgr.systems.AnalyticsSystem:LogEdgeStand(SENDER, player, {
+			bonusReward = observedPayload.edgeStandBonusReward,
+			coinCount = observedPayload.coinCount,
+			failureStreak = observedPayload.pityFailureStreak,
+			pityActive = observedPayload.pityActive,
+		})
+	end
+	if observedPayload.profileXpGain > 0 then
+		SystemMgr.systems.AnalyticsSystem:LogProfileXp(SENDER, player, {
+			expGained = observedPayload.profileXpGain,
+			level = observedPayload.profileLevel,
+			levelsGained = observedPayload.profileLevelsGained,
+			outcome = observedPayload.comboKey,
+		})
+	end
 	if typeof(args) == "table" and args.inputSource then
 		SystemMgr.systems.AnalyticsSystem:LogInputAction(SENDER, player, {
 			action = "FlipCoin",
@@ -529,12 +743,32 @@ function CoinFlipSystem:RequestFlip(sender, player, args)
 		successThreshold = observedPayload.successThreshold,
 		roundStreak = observedPayload.roundStreak,
 		perfect = observedPayload.perfect,
+		comboKey = observedPayload.comboKey,
+		comboTier = observedPayload.comboTier,
 		comboName = observedPayload.comboName,
 		comboMultiplier = observedPayload.comboMultiplier,
+		luckyCoinReroll = observedPayload.luckyCoinReroll,
+		luckyCoinRerollChance = observedPayload.luckyCoinRerollChance,
+		luckyCoinRerollCoinIndex = observedPayload.luckyCoinRerollCoinIndex,
+		luckyCoinRerollResult = observedPayload.luckyCoinRerollResult,
+		profileXpGain = observedPayload.profileXpGain,
+		profileLevel = observedPayload.profileLevel,
+		profileExp = observedPayload.profileExp,
+		profileLevelsGained = observedPayload.profileLevelsGained,
+		dailyClaim = observedPayload.dailyClaim,
+		dailyGoalCompletions = observedPayload.dailyGoalCompletions,
+		dailyGoalReward = observedPayload.dailyGoalReward,
+		tableJackpotAudienceReward = observedPayload.tableJackpotAudienceReward,
+		tableJackpotRecipientCount = observedPayload.tableJackpotRecipientCount,
+		edgeStand = observedPayload.edgeStand,
+		edgeStandChance = observedPayload.edgeStandChance,
+		edgeStandBonusReward = observedPayload.edgeStandBonusReward,
+		edgeStandCoinIndex = observedPayload.edgeStandCoinIndex,
 		isBestStreak = observedPayload.isBestStreak,
 		bestStreak = observedPayload.bestStreak,
 		equippedCoin = equippedCoin,
 		streakMilestone = resolvedFlip.streakMilestone,
+		comboMilestone = resolvedFlip.comboMilestone,
 	}, true)
 end
 

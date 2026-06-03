@@ -530,9 +530,17 @@ end
 local function buildResultCopy(args)
 	local reward = args.reward or 0
 	local rewardCopy = `+$ {Util.FormatNumber(reward, true)}`
+	local tableJackpotCopy = ""
+	if (args.tableJackpotAudienceReward or 0) > 0 and (args.tableJackpotRecipientCount or 0) > 0 then
+		tableJackpotCopy = ` Table +$ {Util.FormatNumber(args.tableJackpotAudienceReward, true)}`
+	end
 	local coinCount = args.coinCount or 1
 	local headsCount = args.headsCount or (args.result == "Heads" and 1 or 0)
 	local roundSuccess = args.roundSuccess == true or args.result == "Heads"
+
+	if args.edgeStand == true then
+		return `Edge Stand! Streak saved. {rewardCopy}`, "Heads"
+	end
 
 	if coinCount <= 1 then
 		if roundSuccess then
@@ -547,6 +555,12 @@ local function buildResultCopy(args)
 
 	if roundSuccess then
 		local comboName = args.comboName
+		if args.comboKey == "jackpot" then
+			return `Jackpot! {headsCount}/{coinCount} Heads {rewardCopy}{tableJackpotCopy}`, "Heads"
+		end
+		if args.comboKey == "perfect" then
+			return `{comboName}! {headsCount}/{coinCount} Heads {rewardCopy}`, "Heads"
+		end
 		if comboName and comboName ~= "Heads" then
 			return `{headsCount}/{coinCount} Heads! {comboName} {rewardCopy}`, "Heads"
 		end
@@ -559,6 +573,16 @@ local function buildResultCopy(args)
 	end
 
 	return `{headsCount}/{coinCount} Heads. Streak reset.`, "Tails"
+end
+
+local function getCelebrationMilestone(args)
+	if args.comboMilestone and (args.comboMilestone.comboTier or 0) >= 4 then
+		if not args.streakMilestone or args.streakMilestone.kind ~= "bestStreak" then
+			return args.comboMilestone
+		end
+	end
+
+	return args.streakMilestone or args.comboMilestone
 end
 
 local function getInputTypeName(inputObject)
@@ -1114,6 +1138,9 @@ function CoinFlipUi.SyncRunState(args)
 	}
 	ClientData:SetOneData(dataKey.wins, cash)
 	ClientData:SetOneData(dataKey.runData, args.runData)
+	if args.dailyClaim then
+		ClientData:SetOneData(dataKey.dailyClaim, args.dailyClaim)
+	end
 	if args.loadoutState then
 		ClientData:SetOneData("loadoutState", args.loadoutState)
 		ClientData:SetOneData(dataKey.equippedCoin, args.loadoutState.equippedCoin)
@@ -1164,6 +1191,8 @@ function CoinFlipUi.FlipResolved(args)
 		result = args.result,
 		coinCount = args.coinCount,
 		coinResults = args.coinResults,
+		edgeStand = args.edgeStand,
+		edgeStandCoinIndex = args.edgeStandCoinIndex,
 		coinId = args.equippedCoin or (args.loadoutState and args.loadoutState.equippedCoin),
 		shouldFollowCamera = not autoFlipEnabled,
 		landedCallback = function()
@@ -1177,7 +1206,7 @@ function CoinFlipUi.FlipResolved(args)
 				playSfx("cashReward")
 			end
 
-			EffectSystem:PlayStreakMilestone(nil, nil, args.streakMilestone)
+			EffectSystem:PlayStreakMilestone(nil, nil, getCelebrationMilestone(args))
 			scheduleAutoFlipRequest()
 		end,
 	})
@@ -1358,21 +1387,24 @@ function CoinFlipUi.ObservedFlip(args)
 		result = args.result,
 		coinCount = args.coinCount,
 		coinResults = args.coinResults,
+		edgeStand = args.edgeStand,
+		edgeStandCoinIndex = args.edgeStandCoinIndex,
 		coinId = args.equippedCoin,
 		shouldFollowCamera = false,
 		visualOptions = {
 			isObserved = true,
 			streak = args.streak or 0,
-			isMilestone = args.streakMilestone ~= nil,
+			isMilestone = getCelebrationMilestone(args) ~= nil,
 			playResultSfx = false,
 		},
 		landedCallback = function()
-			local streakMilestone = args.streakMilestone
-			if streakMilestone then
-				streakMilestone = table.clone(streakMilestone)
-				streakMilestone.suppressSfx = true
+			local celebrationMilestone = getCelebrationMilestone(args)
+			if celebrationMilestone then
+				celebrationMilestone = table.clone(celebrationMilestone)
+				celebrationMilestone.suppressSfx = true
+				celebrationMilestone.suppressCameraShake = true
 			end
-			EffectSystem:PlayStreakMilestone(nil, nil, streakMilestone)
+			EffectSystem:PlayStreakMilestone(nil, nil, celebrationMilestone)
 		end,
 	})
 	if args.isFake then

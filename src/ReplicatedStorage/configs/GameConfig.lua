@@ -9,8 +9,8 @@ GameConfig.UpdateLog = {
 	"🐛 BUG FIXES",
 }
 
-local IsDebug = true
-GameConfig.isAlphaTest = true
+local IsDebug = false
+GameConfig.isAlphaTest = false
 GameConfig.IsDebug = RunService:IsStudio() and IsDebug
 
 GameConfig.GroupId = 679281254 -- Beginning-of-Autumn
@@ -154,6 +154,56 @@ GameConfig.FlipACoin = {
 		BaseBonus = 0.07,
 		TailsBonusStep = 0.04,
 		MaxHeadsChance = 0.45,
+	},
+	BadLuckPity = {
+		FailureThreshold = 3,
+		ChanceBonusStep = 0.05,
+		MaxChanceBonus = 0.18,
+		MaxHeadsChance = 0.55,
+	},
+	EdgeStand = {
+		FailureStreakMinimum = 2,
+		BaseChance = 0.015,
+		PityChanceBonus = 0.08,
+		MaxChance = 0.12,
+		BonusReward = 8,
+	},
+	TableJackpot = {
+		CoinCount = 5,
+		HeadsCount = 5,
+		AudienceReward = 15,
+		NotificationDuration = 2.8,
+	},
+	ProfileXp = {
+		BasePerFlip = 2,
+		PerHead = 2,
+		RoundSuccessBonus = 3,
+		PerfectBonus = 4,
+		JackpotBonus = 6,
+		MaxPerFlip = 24,
+	},
+	DailyGoals = {
+		{
+			id = "flip10",
+			displayName = "Flip 10 times",
+			metric = "flips",
+			target = 10,
+			reward = 30,
+		},
+		{
+			id = "heads15",
+			displayName = "Flip 15 Heads",
+			metric = "heads",
+			target = 15,
+			reward = 60,
+		},
+		{
+			id = "streak3",
+			displayName = "Reach a 3 streak",
+			metric = "streak",
+			target = 3,
+			reward = 75,
+		},
 	},
 	UpgradeConfigs = {
 		valueLevel = {

@@ -1,6 +1,6 @@
 # PROJECT_LOGIC
 
-更新时间：2026-06-02
+更新时间：2026-06-04
 
 ## 1. 这份文档的定位
 
@@ -445,12 +445,13 @@ FlipACoin
 
 - 检查玩家是否已入座
 - 处理 `RequestFlip`
-- 处理 `RequestFakeFlip`，让假玩家复用同一套 actor flip 结算、结果 payload、best-streak / streak milestone 优先级和桌面广播
+- 处理 `RequestFakeFlip`，让假玩家复用同一套 actor flip 结算、结果 payload、best-streak / streak / combo milestone 优先级和桌面广播
 - 按 `GameConfig.FlipACoin` 计算正面概率、每轮金币数、成功阈值、奖励、速度
 - 从 `runData.coinCountLevel` 派生本轮 `coinCount`：`0 -> 1`、`1 -> 2`、`2 -> 3`、`3 -> 4`、`4+ -> 5`；`coinCountLevel` 由 Rebirth 永久升级 `Coin Spread` 写入本局 baseline，`Value` 只影响每个 Heads 的 Cash 倍率
-- 每轮独立 roll `coinResults`，payload 会带 `coinCount / headsCount / tailsCount / roundSuccess / successThreshold / perfect / comboName / comboMultiplier`；旧 `result` 字段继续兼容，成功轮为 `"Heads"`，失败轮为 `"Tails"`
+- 每轮独立 roll `coinResults`，payload 会带 `coinCount / headsCount / tailsCount / roundSuccess / successThreshold / perfect / comboKey / comboTier / comboName / comboMultiplier`；高价值组合还会带 `comboMilestone` 供落地弱反馈使用；旧 `result` 字段继续兼容，成功轮为 `"Heads"`，失败轮为 `"Tails"`
 - `currentStreak` 当前语义是 `Round Streak`：连续多少轮达到成功阈值；多金币 Heads 数不会逐枚增加 streak
-- 从 `EcoSystem` 读取当前 Coin / Desk Setup / Chair 加成，用于修正正面概率和 Cash 倍率
+- 真实玩家有服务端内存级 `BadLuckPity`：连续失败达到阈值后，下一轮 roll 获得隐藏正面率加成；成功轮清零，失败轮递增，不写持久化、不显示 UI，也不改变 round streak 成败阈值
+- 从 `EcoSystem` 读取当前 Coin / Desk Setup / Chair 加成，用于修正正面概率、Cash 倍率和 Edge Stand 触发率
 - 真实玩家额外叠加 `BuffSystem:GetWinsBoost()` 到 Cash multiplier；`cash2x` 只影响 Cash 奖励，不改变 Heads 概率、streak 判定或 flip interval
 - 写入 `runData`
 - 维护首局 `coinFlipOnboarding` 引导状态
@@ -459,7 +460,7 @@ FlipACoin
 - 广播本次 flip 给同桌玩家，用于低噪音桌面反馈
 - 假玩家 flip 只广播 observed payload 和更新 fake run state，不写 `wins / lifetime* / onboarding / analytics`，也不读取 potion / buff
 - 客户端收到假玩家 `ObservedFlip` 时会仅在本机临时驱动该 fake Rig 的头部看向硬币，复用真实玩家 Flip 期间看硬币的表现意图，但不改变真实玩家相机；向上 pitch 使用较低上限，避免抛硬币阶段过度抬头；当前 rig 使用 `AnimationConstraint.Transform`，旧 `Motor6D` rig 使用 `C0`
-- 驱动 best-streak / streak 播报；同一次 flip 同时命中新纪录和普通 milestone 时只播放 `bestStreak`
+- 驱动 best-streak / streak / combo 播报与落地庆祝；同一次 flip 同时命中新纪录和普通 milestone 时只播放 `bestStreak`，Jackpot / Perfect 这类高阶 combo 高于普通 streak milestone，但不盖过 `bestStreak`
 - 处理升级购买
 - 编排 `SyncPlayerState()`，把 HUD 状态同步给自己，同时把 loadout / rebirth 状态推给对应系统 UI
 
@@ -473,7 +474,7 @@ FlipACoin
 - 提供 Auto Flip 切换：客户端按当前 flip 间隔复用同一 `RequestFlip` 入口循环请求，服务端仍负责座位和冷却校验
 - 优先用 Input Action System 建 `CoinFlipGameplayInputContext`：`FlipCoin = Space / ButtonR2`、`ToggleAutoFlip = ButtonY`；打开 Shop / Inventory / Rebirth 时禁用 gameplay context。Input Action 实例不可用时回退到既有 `ContextActionService`
 - 展示同桌玩家的轻量状态 / streak / flip 结果
-- 请求 `EffectSystem` 播放 coin flip 可视表现，并在落地回调里更新结果文案
+- 请求 `EffectSystem` 播放 coin flip 可视表现，并在落地回调里更新结果文案；结果文案会对 Jackpot / Perfect 组合给更明确的一行反馈，但不新增 HUD prefab
 
 关键玩法数据：
 
@@ -500,7 +501,7 @@ FlipACoin
 
 当前首发成长配置按职责拆分：
 
-- `EcoSystem/Presets.lua`：首发 Coin / Desk Setup / Chair 商品、价格、稀有度 / 角色、Cash 倍率和 luck 加成；FlipACoin Developer Product / Game Pass 占位 id 与付费效果配置
+- `EcoSystem/Presets.lua`：首发 Coin / Desk Setup / Chair 商品、价格、稀有度 / 角色、Cash 倍率、luck 加成，以及当前 Lucky Coin 词条小步的 Edge Stand chance / Perfect reward / Tails reroll 加成；FlipACoin Developer Product / Game Pass 占位 id 与付费效果配置
 - `RebirthSystem/Presets.lua`：重生最低 Cash、Cash 到点数换算、单次点数上限、重生后 Cash，以及当前 Rebirth 面板启用的 `Coin Spread / Chain Start / Quick Start / Lucky Start` 四个永久升级；重生次数本身不再自动给起始 Luck，`Coin Spread` 只提高多 Coin 数量，不再顺带提高起始 Value
 - `EffectSystem/Presets.lua`：桌面硬币飞行、水平轴翻面、多金币扇形落点角度、落地随机平铺朝向收敛、自己 / 他人落地脉冲、落地短促粒子 burst、streak ring、milestone fallback 和上次结果保留表现
 
@@ -518,9 +519,13 @@ FlipACoin
 - 每个座位的持久硬币记录上一轮落地结果和桌面随机 yaw；seat state 刷新、idle 重摆或换装后仍展示上一轮 Heads / Tails 和落地方向，不重置成默认正面
 - Phase 3 世界多金币视觉已上线：`CoinFlipSystem/ui.lua` 把 `coinCount / coinResults` 传给 `EffectSystem:PlayCoinFlipVisual()`；`coinCount > 1` 时本地显示多枚硬币扇形抛出，落地后多枚硬币会继续留在桌面上，直到该座位下一次 Flip、隐藏或换装清理，让玩家看清每枚 coin 的 Heads / Tails 结果。HUD 仍不新增 `CoinResultRow` prefab，多金币详细结果继续通过现有 `ResultLabel` 显示。
 - Phase 0 正反馈调参后，`GameConfig.FlipACoin` 当前关键数值为：`BaseHeadsChance = 0.30`、`BaseReward = 10`、`BaseTailsReward = 2`、`ValueGrowth = 1.28`、`ComboBaseStep = 0.25`、`ComboStepPerLevel = 0.06`；Phase 1 新增 `CoinCountByLevel`、`SuccessThresholdByCoinCount`、`ComboMultiplierByHeadsCount` 和 `ComboNamesByHeadsCount`；多金币数量现由 Rebirth `Coin Spread` 控制。
-- 多金币奖励当前规则：成功轮使用本轮 Heads 基础奖励乘以 round streak 倍率和 heads-count combo 倍率；失败但 `headsCount > 0` 时发放 Heads 基础奖励并重置 streak；全 Tails 时按 `BaseTailsReward * tailsCount * premiumCoinMultiplier` 发放保底
+- 多金币奖励当前规则：成功轮使用本轮 Heads 基础奖励乘以 round streak 倍率和 heads-count combo 倍率，combo 倍率表为 `1H = 1.00`、`2H = 1.20`、`3H = 1.75`、`4H = 2.60`、`5H = 4.00`；失败但 `headsCount > 0` 时发放 Heads 基础奖励并重置 streak；全 Tails 时按 `BaseTailsReward * tailsCount * premiumCoinMultiplier` 发放保底。`comboKey` 分为 `heads / pair / triple / fourHeads / perfect / jackpot`，Triple 及以上可生成 combo milestone，Jackpot 才发全桌文字通知。`TableJackpot` 小步已接入：真实玩家 `5/5 Heads` 时，服务端给同桌其他真实玩家各发 `$15` Cash 和轻 notification，fake player 不触发共享奖励，不新增 UI / 资产 / 持久字段；触发者 ResultLabel 会在 Jackpot 文案后追加本轮 Table bonus。`EdgeStand` 小步已接入：真实玩家失败轮在连续失败压力下低概率触发，被选中 Tails coin 竖立落桌，当前 round streak 不清零并获得 `$8` bonus；该事件不把失败改成成功、不增加 streak、不写持久化，fake player 不触发。Lucky Coin trait 小步已接入：当前配置贡献者是高阶 Coin `coin7` 到 `coin10`，通过 `EcoPresets.BuildLoadoutBonuses()` 汇总 `edgeStandChanceBonus`、`perfectRewardMultiplierBonus` 与 `tailsRerollChance`；`edgeStandChanceBonus` 叠加到 `Presets.GetEdgeStandChance()` 且仍受 `GameConfig.FlipACoin.EdgeStand.MaxChance` 上限约束；`perfectRewardMultiplierBonus` 只在 `comboKey == "perfect"` 或 `"jackpot"` 的成功轮提高奖励；`tailsRerollChance` 在服务端 outcome 构建阶段每轮最多重掷 1 个 Tails 一次，重掷后的最终结果再参与 round success、reward、Table Jackpot 和 Edge Stand 判断。Lucky Coin 词条不新增 UI / 资产 / 持久字段，也不改变 round streak 语义。
 - 新档默认 `wins = 9`（UI 展示为 Cash）；首个 `Value` 升级成本是 `12`，`BaseTailsReward = 2`，所以完成 `2` 次 Flip 后即使全是 Tails 也能买第一次升级；老玩家现金不迁移
 - `rebirth == 0` 且 Cash 未达到首个 rebirth 门槛的真实玩家有服务端隐形首局保护：实际 flip 正面率额外获得 `+7%`，连续 Tails 后每次再加 `+4%`，实际保护上限 `45%`；HUD `Chance` 仍显示不含该隐形保护的正常概率
+- Phase 5 第一小步已上线 `BadLuckPity`：当前配置为 `FailureThreshold = 3`、`ChanceBonusStep = 0.05`、`MaxChanceBonus = 0.18`、`MaxHeadsChance = 0.55`。该补偿只影响服务端 roll 的隐藏正面率，payload 用 `pityActive / pityFailureStreak` 标记本轮是否吃到补偿，Analytics compact outcome 末尾追加 `pity / normal`
+- Profile XP 已接入 Flip 主循环：真实玩家每次 Flip 后按 `GameConfig.FlipACoin.ProfileXp` 获得持久化 `exp / level` 进度，当前数值为 `BasePerFlip = 2`、`PerHead = 2`、`RoundSuccessBonus = 3`、`PerfectBonus = 4`、`JackpotBonus = 6`、`MaxPerFlip = 24`。该成长层复用 `PlayerSystem:AddExp()` 和 `PlayerLevel` 升级表，不新增手机 UI、不影响 Cash、round streak、Rebirth 或 fake player 表演；Analytics 记录 `coinflip_profile_xp`。
+- Flip 专属轻量每日目标已接入主循环，不启用旧 `DailySystem / QuestSystem`。真实玩家每日按服务器日自动重置 `dailyClaim.flipACoinGoals`，当前目标为 `Flip 10 times` 奖励 `$30`、`Flip 15 Heads` 奖励 `$60`、`Reach a 3 streak` 奖励 `$75`；达成即自动通过 `EcoSystem:AddResource()` 发 Cash、用 `GuiSystem:SetNotification()` 做轻提示，并记录 `coinflip_daily_goal_completed`。fake player 不推进每日目标。
+- P3 首发核心埋点已补一层内存 session 追踪：真实玩家进服记录 `coinflip_session_start`，离服记录 `coinflip_session_end`，首次真实 Flip 记录 `coinflip_first_flip_latency`，并在单次会话达到 `10 / 25 / 50 / 100 / 250 / 500` 次 Flip 时记录 `coinflip_flip_count_milestone`。这层不新增 profile 字段，fake player 不参与。
 
 当前额外要记住：
 
@@ -560,13 +565,14 @@ FlipACoin
 - `wins` / Cash 的统一加减入口仍走 `EcoSystem:AddResource()`
 - `RequestShopPurchase()` 处理 Coin / Desk Setup / Chair 购买，只写入 owned；已拥有商品在 Shop 只显示 `Owned`，装备切换与 Shop 解耦
 - `RequestEquipItem()` 处理 Inventory 装备切换，不重复扣 Cash
+- Shop 购买成功和 Inventory 装备成功后会通过 `GuiSystem:SetNotification()` 给本人短反馈；客户端 `EcoSystem/ui.lua` 仍按 `purchasedItem / equippedItem` 播放本地 `shopPurchase / equipItem` SFX
 - `GetLoadoutState()` 同步 owned / equipped 数据给 Shop / Inventory UI
 - `GetLoadoutBonuses()` 给 `CoinFlipSystem` 计算正面概率、Cash 倍率和 flip 间隔倍率；当前会合并 Coin / Desk / Chair 装备和已拥有的 FlipACoin gamepass 加成
 - Desk Setup 装备成功后通知 `DecorationSystem` 刷新座位可视化
 - `MarketplaceService.ProcessReceipt` 处理 `EcoPresets.Products.flipACoin` 下的 Developer Product：Cash 包、Rebirth Points 包、Apex 外观礼包和购买后立即使用的 `paidCash2x10m`
 - Rewarded Video Ads 复用 Boosts 面板；服务端维护 15 分钟内存冷却和 in-flight 防重入，客户端用 `AdService:GetAdAvailabilityNowAsync()` 判断当前平台可用性
 - Rewarded Video Ads 必须在 `RewardedAds.DevProductId` 配置一个独立 Developer Product id；服务端用 `AdService:CreateAdRewardFromDevProductId()` 创建 `AdReward`，并在 `ProcessReceipt` 中发放并立即使用 `adCash2x5m`，不在 `ShowRewardedVideoAdAsync()` 返回后手动重复发奖
-- `PromptGamePassPurchaseFinished` / 进服 ownership 检查处理 `EcoPresets.GamePasses` 下的 `vip / winsX2 / luckyCharm / quickFlip`
+- `PromptGamePassPurchaseFinished` / 进服 ownership 检查处理 `EcoPresets.GamePasses` 下的 `vip / winsX2 / luckyCharm / quickFlip`；发放后统一记录 `coinflip_gamepass_granted`，`source` 为 `purchase` 或 `ownershipSync`
 
 当前 Coin / Desk / Chair 商品配置在 `EcoSystem/Presets.lua` 的 `GrowthShopItems`。FlipACoin 付费配置在同文件：
 
@@ -602,18 +608,18 @@ FlipACoin
 
 当前在 Flip A Coin 主线里负责：
 
-- `PlayCoinFlipVisual()` 播放本地桌面硬币飞行、落地、阴影和 streak pulse；多金币 payload 会额外克隆短生命周期 coin / shadow / pulse 并按扇形落点播放
+- `PlayCoinFlipVisual()` 播放本地桌面硬币飞行、落地、阴影和 streak pulse；多金币 payload 会额外克隆短生命周期 coin / shadow / pulse 并按扇形落点播放；`edgeStand` payload 会让对应 coin 以竖立姿态 settle，并复用现有 highlight 做轻表现
 - 每个座位维护一个持久硬币实例；换装会替换该实例，若换装发生在 flip 中则等动画落地后替换
 - 单金币 flip 视觉为基于桌面落点的垂直抛掷；多金币 flip 视觉从玩家侧起点飞向扇形落点，扇形以玩家到中心落点的线段为中轴。空中只绕水平翻面轴旋转，落桌阶段收敛到最终 Heads / Tails 与随机平铺朝向
 - 持久硬币 idle 显示上一轮 flip 结果和随机桌面 yaw，新入座 / 未翻过时默认显示 Heads
 - 自己 flip 时接管并释放 `FirstPersonCamera`；装备硬币为 Model 时跟随该 Model 的 `PrimaryPart`
 - 其他玩家 flip 时只播放桌面表现，不接管相机；观察者看到的 Heads / Tails 落地 pulse 使用更醒目的独立参数，Heads 更大更亮，Tails 更短促偏橙红
 - 硬币落地后会播放 `EffectSystem.Assets.coinLandingBurst` 短促粒子 burst，作为现有落地 pulse 的小型金属/赌场风反馈
-- 观察者看到他人 Heads streak 达到阈值时，会在落地 pulse 外追加第二层 streak ring，并按 streak 增大半径；高 streak 或 milestone 会给对应硬币 / 座位创建短生命周期 `Highlight`
+- 观察者看到他人 Heads streak 达到阈值时，会在落地 pulse 外追加第二层 streak ring，并按 streak 增大半径；`streak >= 4` 或 milestone 会给对应硬币 / 座位创建短生命周期 `Highlight`
 - `PlayInsideEffects()` 使用 `SettingSystem:GetParticleRateFactor()` 决定粒子倍率
-- `PlayStreakMilestone()` 按 `AnnouncementSystem/Presets.lua` 的 `BestStreakEffect` 或 `StreakEffects` 配置，在硬币本地落地回调后通过 `MusicSystem` 播放 SFX、播放 `EffectSystem.Assets` VFX，并可选触发本地 camera shake；如果 milestone VFX 资产缺失或类型无效，会 fallback 到程序化 streak pulse + `Highlight`
+- `PlayStreakMilestone()` 按 `AnnouncementSystem/Presets.lua` 的 `BestStreakEffect`、`StreakEffects` 或 `ComboEffects` 配置，在硬币本地落地回调后通过 `MusicSystem` 播放 SFX、播放 `EffectSystem.Assets` VFX，并可选触发本地 camera shake；观察者分支会显式抑制他人 milestone 的 SFX 和 camera shake，只保留桌面 VFX / fallback pulse / highlight；如果 milestone VFX 资产缺失或类型无效，会 fallback 到程序化 streak pulse + `Highlight`
 - `RefreshPersistentSeatCoins()` 也会按 seat-state snapshot 维护头顶热 streak spotlight：`entry.streak >= 5` 时从 `EffectSystem.Assets.hotStreakSpotlight` 克隆到真实玩家或假玩家的 `Head`，streak 失败、座位清空或角色消失时销毁
-- 客户端监听鼠标 / 触屏点击场景射线，当前用 `InputObject.Position` 配合 `Camera:ScreenPointToRay()` 消化输入事件坐标，避免桌面鼠标和移动端触点与桌面命中点偏移；命中 `DecorationsRuntime` 下 `{SeatId}Decoration` / `{SeatId}FakeDecoration` 时只在本机按模型底部接触点为支点抖动桌搭并短暂高光，命中 `TableTop` 时播放 `tableKnock` SFX 并生成短生命周期小尺寸桌面 ripple；不新增服务端状态。
+- 客户端监听鼠标 / 触屏点击场景射线，当前用 `InputObject.Position` 配合 `Camera:ScreenPointToRay()` 消化输入事件坐标，避免桌面鼠标和移动端触点与桌面命中点偏移；命中 `DecorationsRuntime` 下 `{SeatId}Decoration` / `{SeatId}FakeDecoration` 时只在本机按模型底部接触点为支点抖动桌搭并短暂高光。命中 `TableTop` 时本地立即播放 `tableKnock` SFX 和短生命周期小尺寸桌面 ripple，并通过 `EffectSystem:RequestTableReaction()` 让服务端确认玩家仍在座位上、按 `TableReactionCooldown = 0.55` 限频后广播给其他客户端；广播只带 `seatId / actorUserId`，各客户端按本地桌面和座位数据计算 ripple 落点，不写持久化状态。
 
 ### 7.4d `SettingSystem`
 
@@ -634,18 +640,20 @@ FlipACoin
 
 当前职责：
 
-- 当 `CoinFlipSystem` 出现正面且刷新 `bestStreak` 或命中 `Presets.StreakEffects` 时，生成 celebration payload 和轻量播报；`bestStreak` 优先于普通 milestone
+- 当 `CoinFlipSystem` 出现正面且刷新足够高的 `bestStreak`、命中 `Presets.StreakEffects` 或触发高价值 combo 时，生成 celebration payload 和轻量播报；达到 best-streak 阈值时优先于普通 milestone，低 streak 新纪录只保留桌面 pulse / ring，不发全桌大通知
 - 当前默认配置是：
-  - `BestStreakEffect`：`sfx = "bestStreak"`，`vfx = "bestStreak"`，带 camera shake 参数
+  - `MinBestStreakAnnouncement = 5`
+  - `BestStreakEffect`：`sfx = "bestStreak"`，`vfx = "bestStreak"`，不触发 camera shake
   - `3`：`sfx = "streak3"`，`vfx = "streak3"`，无 camera shake
   - `5`：`sfx = "streak5"`，`vfx = "streak5"`，无 camera shake
   - `10`：`sfx = "streak10"`，`vfx = "streak10"`，带 camera shake 参数
   - `20`：`sfx = "streak20"`，`vfx = "streak20"`，带 camera shake 参数
+- `ComboEffects` 复用现有资源：`triple -> streak3`，`fourHeads / perfect -> streak5`，`jackpot -> bestStreak`；Perfect / Jackpot 对本人带轻量 camera shake，Triple / Four Heads 只做落地 VFX/SFX payload，Jackpot 额外 `announce = true` 走全桌低噪音文字通知；观察者播放 milestone 时会 suppress SFX 和 camera shake
 - 客户端不再动态创建顶部 banner；当前通知只通过 `uiController.SetNotification` 做低噪音反馈，SFX / VFX / camera shake 由 `EffectSystem:PlayStreakMilestone()` 在硬币落地后播放
 
 当前依赖关系：
 
-- `CoinFlipSystem:RequestFlip()` / `RequestFakeFlip()` -> `AnnouncementSystem:BuildBestStreakPayload()` / `BuildStreakMilestonePayload()` / `HandleFlipResolved()`
+- `CoinFlipSystem:RequestFlip()` / `RequestFakeFlip()` -> `AnnouncementSystem:BuildBestStreakPayload()` / `BuildStreakMilestonePayload()` / `BuildComboMilestonePayload()` / `HandleFlipResolved()`
 
 ### 7.5a `AnalyticsSystem`
 
@@ -656,19 +664,29 @@ FlipACoin
 当前职责：
 
 - 作为 Roblox `AnalyticsService` 的服务端内部门面；所有公开方法都在 `whiteList`，不暴露给客户端 remote
-- `coinflip_flip_resolved` 的三个自定义字段当前是：兼容 `result`、压缩 round outcome（形如 `c3_h2_success_s2_4`）、当前装备 Coin id
+- `coinflip_flip_resolved` 的三个自定义字段当前是：兼容 `result`、压缩 round outcome（形如 `c3_h2_success_s2_4_pair`，末尾带 combo key）、当前装备 Coin id
+- 维护每个真实玩家当服内存 session，用于记录会话开始/结束、首 Flip 延迟和当服 Flip 次数里程碑；该 session 在 `PlayerRemoving` 清理，不写入持久化数据
 - 记录核心 Flip A Coin 玩法节点：
+  - `coinflip_session_start`
+  - `coinflip_session_end`
+  - `coinflip_first_flip_latency`
+  - `coinflip_flip_count_milestone`
   - `coinflip_seat_assigned`
   - `coinflip_flip_resolved`
   - `coinflip_streak_milestone`
   - `coinflip_run_upgrade`
   - `coinflip_shop_purchase`
   - `coinflip_item_equip`
+  - `coinflip_gamepass_granted`
   - `coinflip_rewarded_ad`
   - `coinflip_potion_granted`
   - `coinflip_potion_used`
   - `coinflip_buff_active`
   - `coinflip_input_action`
+  - `coinflip_profile_xp`
+  - `coinflip_daily_goal_completed`
+  - `coinflip_table_jackpot`
+  - `coinflip_edge_stand`
   - `coinflip_rebirth`
   - `coinflip_rebirth_upgrade`
 - 自定义字段只放低基数维度，例如 result、streak band、装备 id、商品 category、rarity、来源和 cash band
@@ -843,6 +861,8 @@ FlipACoin
 
 - `wins`
 - `fateShards`
+- `level`
+- `exp`
 - `bestStreak`
 - `lifetimeFlips`
 - `lifetimeHeads`
@@ -858,6 +878,7 @@ FlipACoin
 - `runData`
 - `guideData`
 - `settingsData`
+- `dailyClaim`
 - `potions`
 - `equippedBuff`
 
@@ -866,6 +887,8 @@ FlipACoin
 - 底层仍用 `wins`
 - 对玩家展示时普遍叫 `Cash`
 - 新建默认档 `wins = 9`，只影响新玩家 / 新档默认值；不对已有玩家现金做迁移
+- `level / exp` 是 Profile XP 的持久化成长字段，当前由真实玩家 Flip 结算后通过 `PlayerSystem:AddExp()` 增长；升级阈值来自 `ExcelConfig/PlayerLevel.lua`
+- `dailyClaim.flipACoinGoals` 是 Flip 专属轻量每日目标状态，按服务器日保存 `progress / claimed`；当前没有独立 Daily 面板，完成即自动领奖并通知
 - `runData.coinCountLevel` 是多金币数量 tier，默认 `0`，由 Rebirth 永久升级 `Coin Spread` 写入 baseline；它不是 HUD 里的本局 `Value` 升级
 - `guideData.coinFlipOnboarding` 是首局引导专用状态；当前 v4 流程覆盖首次 Flip、首次 Value 升级、首次 Rebirth、首次非默认 Coin 购买与装备
 - `onboardingFunnelStep` 现在只承担漏斗节点记录，不再直接代表 UI 引导进度
@@ -921,7 +944,7 @@ FlipACoin
 
 - 主 HUD 绑定读取 Studio 预制节点，不再为统计卡、升级按钮或离座按钮运行时创建兜底资源。
 - `CoinFlipSystem/ui.lua` 绑定 Flip HUD、run upgrade、多金币结果文案和 v4 引导高亮；不直接渲染 Shop / Inventory / Rebirth 面板内容，但会通过系统 UI 辅助方法打开并定位引导目标。
-- `EcoSystem/ui.lua` 绑定 TopbarPlus `Shop` / `Boosts` / `Inventory` 图标、兼容旧 `Buttons.CoinFlipMenu.ShopButton / InventoryButton`，并管理 `Frames.Shop / Inventory`；`Boosts` 复用 Shop 卡片展示 Rewarded Ad、`Products.flipACoin` 和 `GamePasses`。广告不可用或冷却时按钮禁用，付费 id 未配置时按钮显示 `Set ID` 且不可点击。
+- `EcoSystem/ui.lua` 绑定 TopbarPlus `Shop` / `Boosts` / `Inventory` 图标、兼容旧 `Buttons.CoinFlipMenu.ShopButton / InventoryButton`，并管理 `Frames.Shop / Inventory`；`Boosts` 复用 Shop 卡片展示 Rewarded Ad、`Products.flipACoin` 和 `GamePasses`。广告不可用或冷却时按钮禁用，付费 id 未配置时按钮显示 `Set ID` 且不可点击。Shop 购买成功和 Inventory 装备成功后，服务端发轻 notification，客户端按同步 payload 播放购买 / 装备 SFX。
 - `RebirthSystem/ui.lua` 绑定 TopbarPlus `Rebirth` 图标、兼容旧 `Buttons.CoinFlipMenu.RebirthButton`，并管理 `Frames.Rebirth`。
 - `EffectSystem` 负责桌面 coin flip 表现，`CoinFlipSystem/ui.lua` 只调用它并等待落地回调。
 - 当前 in-play minimal HUD 是 Studio-authored 资源：TopbarPlus 是顶部入口，`CoinFlipMenu` 只保留兼容且玩法态隐藏，`Elements.cash / candy` 保留为 hidden legacy 节点但不再作为右上钱包显示，`CoinFlipHUD` 是全屏透明承载层，左下显示现金 / round streak，右下显示概率 / 速度 / Value / Luck，底部中心显示 `FLIP`、`Auto:Off / Auto:On`、`GuidePrompt` 和短结果提示；多金币结果复用 `ResultLabel`，单金币保持 `Heads! +$ 10` / `Tails! +$ 2`，多金币显示 `headsCount/coinCount`、combo 名、streak reset 和奖励，如 `2/3 Heads! Pair +$ 48` 或 `1/3 Heads. Streak reset. +$ 10`；Rebirth 永久升级 `Coin Spread` 提高 coin 数量时会短暂提示 `Coin Spread unlocked 2 coins per flip.`；`FlipButton.gamepadKeyImg` 用 `UserInputService:GetImageForKeyCode()` 显示当前输入方式对应的 R2 图片，键鼠端在同一 ImageLabel 内显示 Studio-authored `keyboardKeyText` 紧凑 Space 键帽兜底并放在 `FLIP` 按钮内部左侧，触屏端隐藏，旧 `InputHints` Frame 不再显示；`Main.Elements` 只保留 `CoinFlipHUD`、`cash`、`candy`、`ripple`，旧 `Buffs / Rewards / Quests / auto / blockInfo` 和旧 CoinFlip onboarding / spectator / overview 节点已从 Studio 资源中删除。

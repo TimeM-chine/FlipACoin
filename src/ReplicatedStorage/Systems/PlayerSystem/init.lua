@@ -142,31 +142,47 @@ function PlayerSystem:AddExp(sender, player, args)
 			return
 		end
 		local playerIns = PlayerServerClass.GetIns(player)
-		if args.exp then
-			playerIns:AddOneData(dataKey.exp, args.exp)
+		if not playerIns or typeof(args) ~= "table" then
+			return
 		end
 
+		local expGain = math.max(math.floor(tonumber(args.exp) or 0), 0)
 		local exp = playerIns:GetOneData(dataKey.exp)
 		local level = playerIns:GetOneData(dataKey.level)
+		local previousLevel = level
+		exp += expGain
 
-		while exp >= PlayerPresets.Levels[level].levelUpExp do
-			exp = exp - PlayerPresets.Levels[level].levelUpExp
-			level = level + 1
-			if not PlayerPresets.Levels[level] then
+		while PlayerPresets.Levels[level] and PlayerPresets.Levels[level + 1] do
+			local levelUpExp = PlayerPresets.Levels[level].levelUpExp
+			if exp < levelUpExp then
 				break
 			end
+			exp -= levelUpExp
+			level += 1
+		end
+
+		if PlayerPresets.Levels[level] and not PlayerPresets.Levels[level + 1] then
+			exp = math.min(exp, PlayerPresets.Levels[level].levelUpExp)
 		end
 
 		playerIns:SetOneData(dataKey.level, level)
 		playerIns:SetOneData(dataKey.exp, exp)
-		self.Client:AddExp(player, {
+		local payload = {
 			exp = exp,
 			level = level,
-		})
+			expGained = expGain,
+			levelsGained = level - previousLevel,
+			reason = args.reason,
+		}
+		self.Client:AddExp(player, payload)
+
+		return payload
 	else
 		ClientData:SetOneData(dataKey.exp, args.exp)
 		ClientData:SetOneData(dataKey.level, args.level)
-		PlayerUi.AddExp()
+		if PlayerUi.AddExp then
+			PlayerUi.AddExp(args)
+		end
 	end
 end
 

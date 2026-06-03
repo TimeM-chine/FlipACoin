@@ -48,4 +48,6 @@ function PlayerUi.Init()
 	end)
 end
 
+function PlayerUi.AddExp(args) end
+
 return PlayerUi

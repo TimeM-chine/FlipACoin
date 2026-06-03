@@ -130,8 +130,9 @@ function PlayerServerClass:OnChatted(message, recipient)
 			count = tonumber(string.match(message, "/candy (%d+)")),
 		})
 	elseif string.match(message, "/exp (%d+)") then
-		SystemMgr.systems.GrassSystem:AddExp(SENDER, self.player, {
+		SystemMgr.systems.PlayerSystem:AddExp(SENDER, self.player, {
 			exp = tonumber(string.match(message, "/exp (%d+)")),
+			reason = "devCommand",
 		})
 	end
 end
