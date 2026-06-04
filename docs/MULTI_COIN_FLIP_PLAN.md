@@ -2,7 +2,7 @@
 
 日期：2026-06-03
 
-状态：计划文档；Phase 0 正反馈调参、Phase 1 服务端多金币结算 MVP、Phase 2 HUD 结果文案、Phase 3 多金币世界表现、Rebirth coin 数量迁移和 Phase 4 组合庆祝强化已执行；Phase 5 已执行 Bad Luck Pity、Table Jackpot、Edge Stand 和 Lucky Coin trait 小步，其他深层特殊事件尚未实现。
+状态：计划文档；Phase 0 正反馈调参、Phase 1 服务端多金币结算 MVP、Phase 2 HUD 结果文案、Phase 3 多金币世界表现、Rebirth coin 数量迁移和 Phase 4 组合庆祝强化已执行；Phase 5 已执行 Bad Luck Pity、Table Bonus、Edge Stand 和 Lucky Coin trait 小步，其他深层特殊事件尚未实现。
 
 目的：把玩家反馈中提到的“目标不够有吸引力、正反馈太低、体验太平常”拆成可逐步实现的调整。核心方向是保留当前 `Flip A Coin` 的一键桌面主循环，但让一次 `FLIP` 可以在成长后结算多枚金币、更多奖励组合和少量稀有事件。
 
@@ -15,9 +15,9 @@
 - 2026-06-02：Phase 3 世界多金币视觉已执行。`EffectSystem` 在 `coinCount > 1` 时克隆短生命周期 coin / shadow / pulse，并按玩家到中心落点轴线生成左右对称扇形落点。
 - 2026-06-03：多金币扇形表现加宽。相邻扇形角度从 `8°` 提到 `13°`，半角上限从 `18°` 提到 `30°`，3/4/5 枚 coin 分别临时缩放到 `0.94 / 0.90 / 0.86`。
 - 2026-06-03：多金币结算后不再按固定秒数恢复成 1 枚 Coin；多枚结果会留在桌面上，直到该座位下一次 Flip、隐藏或换装清理。
-- 2026-06-03：Phase 4 组合庆祝强化已执行。服务端 outcome / payload 新增 `comboKey / comboTier / comboMilestone`；Triple 及以上组合复用现有 streak/bestStreak VFX 路径做落地庆祝，Jackpot 才发全桌低噪音文字通知；HUD 对 Jackpot / Perfect 使用更明确的一行结果文案；Analytics compact round outcome 末尾追加 combo key。
+- 2026-06-03：Phase 4 组合庆祝强化已执行。服务端 outcome / payload 新增 `comboKey / comboTier / comboMilestone`；Triple 及以上组合复用现有 streak/bestStreak VFX 路径做落地庆祝，Perfect Five 才发全桌低噪音文字通知；HUD 对 Perfect Five / Perfect 使用更明确的一行结果文案；Analytics compact round outcome 末尾追加 combo key。
 - 2026-06-03：Phase 5 先执行 Bad Luck Pity。真实玩家连续 round 失败达到阈值后，下一轮获得隐藏正面率加成；该补偿只影响服务端 roll，不改变 round streak 阈值，不新增 UI，也不写持久化。
-- 2026-06-03：Phase 5 Table Jackpot 小步已执行。真实玩家 `5/5 Heads` 时，会给同桌其他真实玩家发小额 Cash 和轻提示；fake player 不触发共享奖励，不新增 UI / 资产 / 持久字段。
+- 2026-06-03：Phase 5 Table Bonus 小步已执行。真实玩家 `5/5 Heads` 时，会给同桌其他真实玩家发小额 Cash 和轻提示；fake player 不触发共享奖励，不新增 UI / 资产 / 持久字段。内部配置和埋点仍保留 `TableJackpot` / `coinflip_table_jackpot` 历史 key。
 - 2026-06-03：Phase 5 Edge Stand 小步已执行。真实玩家失败轮在连续失败压力下有低概率触发立币，保护当前 round streak 不清零并给小额 bonus；fake player 不触发，不新增 UI / 资产 / 持久字段。
 - 2026-06-04：Lucky Coin trait foundation 小步已执行。高阶 Coin `coin7` 到 `coin10` 在现有 `stats` 中提供少量 `edgeStandChanceBonus`，通过 loadout bonus 汇总后提高真实玩家 Edge Stand chance；不新增 Coin 面板、不改手机端 UI、不新增持久字段。
 - 2026-06-04：Lucky Coin perfect bonus 小步已执行。同一批高阶 Coin 额外提供 `perfectRewardMultiplierBonus`，只提高 `perfect` / `jackpot` 组合奖励，不影响普通 Heads、round streak、UI 或持久字段。
@@ -207,7 +207,7 @@ ComboMultiplierByHeadsCount = {
 - `2` Heads：Pair
 - `3` Heads：Triple
 - `4` Heads：Four Heads
-- `5` Heads：Royal Sweep 或 Jackpot
+- `5` Heads：Perfect Five
 - `perfect` 且 `coinCount >= 3`：追加 Perfect 文案和更强表现
 
 ### 5.3 早期数值爆发
@@ -399,7 +399,7 @@ landingPosition = actorSurfacePosition + rotate(axis, tableNormal, angleOffset)
 - Toss 使用一条更厚的 `coinToss` 或略变速播放。
 - Spin 仍按一轮播放一次。
 - Land 对多金币用短间隔 sequence，最多 `3` 次 audible tick。
-- Perfect / Jackpot 使用单独高光 SFX。
+- Perfect / Perfect Five 使用单独高光 SFX。
 - 他人和 fake player 继续 suppress 高价值结算音，保留低噪音桌面反馈。
 
 ## 9. Fake Player 计划
@@ -456,14 +456,14 @@ Fake player 应该用同一套服务端结算规则。
 - 当前小步效果：不把失败改成成功、不增加 streak，但保护当前 round streak 不清零，并给小额 bonus。
 - 当前小步表现：被选中的 Tails coin 以竖立姿态落桌，并复用现有 highlight / ResultLabel；不新增 VFX 资产。
 
-### 11.2 Table Jackpot
+### 11.2 Table Bonus
 
 全桌共享小奖励。
 
 - 触发：`5/5 Heads` 或连续 perfect。
 - 当前小步触发：真实玩家 `5/5 Heads`。
-- 当前小步效果：本人大奖走原有 jackpot reward；同桌其他真实玩家获得小 Cash。
-- 当前小步表现：复用现有 Jackpot 组合庆祝、ResultLabel 和轻 notification，不新增桌面中心 VFX 资产。
+- 当前小步效果：本人 Perfect Five reward 保持原有高价值奖励；同桌其他真实玩家获得小 Cash。
+- 当前小步表现：复用现有 Perfect Five 组合庆祝、ResultLabel 和轻 notification，不新增桌面中心 VFX 资产。
 - 注意：视觉 / 公告必须走既有系统路径，不新增并行 remote 或强噪音表现。
 
 ### 11.3 Bad Luck Pity
@@ -579,7 +579,7 @@ Fake player 应该用同一套服务端结算规则。
 
 验证：
 
-- Pair / Triple / Perfect / Jackpot 奖励符合表。
+- Pair / Triple / Perfect / Perfect Five 奖励符合表。
 - 高价值结果触发桌面弱社交反馈。
 - 他人高光不播放自己的高价值 SFX。
 - Analytics 能看出不同组合的出现率和奖励规模。
@@ -588,7 +588,7 @@ Fake player 应该用同一套服务端结算规则。
 
 目标：加入少量低频记忆点。
 
-状态：2026-06-04 部分执行；已上线 Bad Luck Pity、Table Jackpot、Edge Stand 和 Lucky Coin trait 小步，其他深层特殊事件仍保留为候选。
+状态：2026-06-04 部分执行；已上线 Bad Luck Pity、Table Bonus、Edge Stand 和 Lucky Coin trait 小步，其他深层特殊事件仍保留为候选。
 
 改动范围：
 
@@ -601,7 +601,7 @@ Fake player 应该用同一套服务端结算规则。
 
 验证：
 
-- Edge Stand / Jackpot / Pity / Lucky Coin trait 触发率和奖励倍率可控。
+- Edge Stand / Perfect Five / Pity / Lucky Coin trait 触发率和奖励倍率可控。
 - 事件不会破坏 round streak 语义。
 - 事件奖励不会绕过服务端权威结算。
 - 事件表现不会影响 `FLIP` 冷却和 Auto Flip。

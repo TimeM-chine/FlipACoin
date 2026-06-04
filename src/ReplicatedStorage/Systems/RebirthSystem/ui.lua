@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
 local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
 
 local SystemMgr = require(Replicated.Systems.SystemMgr)
 local ClientData = require(Replicated.Systems.ClientData)
@@ -43,6 +44,20 @@ local function setButtonText(button, text, isEnabled)
 	button.Text = text
 	button.AutoButtonColor = isEnabled
 	button.Active = isEnabled
+end
+
+local function getLastInputTypeName()
+	local inputType = UserInputService:GetLastInputType()
+	return inputType and inputType.Name or "unknown"
+end
+
+local function openRebirthFrame(source)
+	SystemMgr.systems.RebirthSystem.Server:ReportGrowthPanelOpened({
+		panel = "Rebirth",
+		source = source,
+		inputType = getLastInputTypeName(),
+	})
+	uiController.OpenFrame("Rebirth")
 end
 
 local function playSfx(soundName)
@@ -129,7 +144,7 @@ local function bindTopbarIcon()
 		end
 		if isSelected then
 			updateRebirthPanel()
-			uiController.OpenFrame("Rebirth")
+			openRebirthFrame("topbarRebirth")
 		else
 			uiController.CloseFrame("Rebirth")
 		end
@@ -140,7 +155,7 @@ end
 local function bindButtons()
 	uiController.SetButtonHoverAndClick(CoinFlipMenu.RebirthButton, function()
 		updateRebirthPanel()
-		uiController.OpenFrame("Rebirth")
+		openRebirthFrame("legacyMenu")
 	end)
 
 	uiController.SetButtonHoverAndClick(RebirthFrame.X, function()
@@ -204,7 +219,7 @@ function RebirthUi.OpenGuideRebirth()
 
 	currentRebirthState = ClientData:GetOneData("rebirthState") or currentRebirthState
 	updateRebirthPanel()
-	uiController.OpenFrame("Rebirth")
+	openRebirthFrame("guide")
 	return RebirthConfirmButton
 end
 

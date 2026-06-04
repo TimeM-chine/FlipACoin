@@ -10,12 +10,15 @@ local Types = require(Replicated.configs.Types)
 local IsServer = RunService:IsServer()
 local SENDER, SystemMgr
 local CustomFieldKeys = Enum.AnalyticsCustomFieldKeys
+local EarlySessionDuration = 180
 local FlipCountMilestones = { 10, 25, 50, 100, 250, 500 }
 
 ---- server variables ----
 local AnalyticsService
 
 ---- client variables ----
+local UserInputService
+local WorkspaceService
 
 local AnalyticsSystem: Types.System = {
 	whiteList = {
@@ -30,6 +33,9 @@ local AnalyticsSystem: Types.System = {
 		"LogPotionUsed",
 		"LogBuffActive",
 		"LogInputAction",
+		"LogFirstAutoToggle",
+		"LogFirstRunUpgrade",
+		"LogFirstGrowthPanelOpen",
 		"LogProfileXp",
 		"LogDailyGoalCompleted",
 		"LogTableJackpot",
@@ -43,13 +49,23 @@ local AnalyticsSystem: Types.System = {
 		"_CanLog",
 		"_CashBand",
 		"_ClampEventValue",
+		"_DeviceClassField",
 		"_DurationBand",
+		"_EarlySessionStage",
 		"_EnsureSession",
+		"_GetLocalDeviceClass",
+		"_GetLocalViewportBand",
+		"_GetSessionElapsed",
+		"_InputTypeField",
+		"_LogEarlySessionEnd",
+		"_LogFirstSessionEvent",
 		"_LogFlipProgress",
 		"_LogCustomEvent",
+		"_ReportLocalDeviceProfile",
 		"_RoundOutcomeField",
 		"_StreakBand",
 		"_StringField",
+		"_ViewportBandField",
 	},
 	players = {},
 	tasks = {},
@@ -62,6 +78,8 @@ if IsServer then
 	AnalyticsService = game:GetService("AnalyticsService")
 else
 	AnalyticsSystem.Server = setmetatable({}, AnalyticsSystem)
+	UserInputService = game:GetService("UserInputService")
+	WorkspaceService = game:GetService("Workspace")
 end
 
 local function GetSystemMgr()
@@ -74,6 +92,11 @@ end
 
 function AnalyticsSystem:Init()
 	GetSystemMgr()
+	if not IsServer then
+		task.defer(function()
+			self:_ReportLocalDeviceProfile()
+		end)
+	end
 end
 
 function AnalyticsSystem:PlayerAdded(sender, player, args)
@@ -83,6 +106,31 @@ function AnalyticsSystem:PlayerAdded(sender, player, args)
 
 	local session = self:_EnsureSession(player)
 	self:_LogCustomEvent(player, "coinflip_session_start", 1, self:_BuildFields("join", self:_AccountAgeBand(player.AccountAge)))
+end
+
+function AnalyticsSystem:ReportDeviceProfile(sender, player, args)
+	if not IsServer then
+		return
+	end
+
+	player = player or sender
+	if sender ~= player or not player:IsDescendantOf(Players) or typeof(args) ~= "table" then
+		return
+	end
+
+	local deviceClass = self:_DeviceClassField(args.deviceClass)
+	local viewportBand = self:_ViewportBandField(args.viewportBand)
+	local inputType = self:_InputTypeField(args.inputType)
+	local session = self:_EnsureSession(player)
+	session.deviceClass = deviceClass
+	session.viewportBand = viewportBand
+	session.inputType = inputType
+	self:_LogFirstSessionEvent(
+		player,
+		"deviceProfileLogged",
+		"coinflip_device_profile",
+		self:_BuildFields(deviceClass, viewportBand, inputType)
+	)
 end
 
 function AnalyticsSystem:PlayerRemoving(sender, player, args)
@@ -96,6 +144,7 @@ function AnalyticsSystem:PlayerRemoving(sender, player, args)
 	end
 
 	local duration = math.max(math.floor(os.clock() - session.startedAt), 0)
+	self:_LogEarlySessionEnd(player, session, duration)
 	self:_LogCustomEvent(
 		player,
 		"coinflip_session_end",
@@ -112,6 +161,12 @@ function AnalyticsSystem:LogSeatAssigned(sender, player, args)
 
 	local source = args and args.autoAssigned and "auto" or "manual"
 	self:_LogCustomEvent(player, "coinflip_seat_assigned", 1, self:_BuildFields(source, args and args.seatId))
+	self:_LogFirstSessionEvent(
+		player,
+		"firstSeatAssignedLogged",
+		"coinflip_first_seat_assigned_latency",
+		self:_BuildFields(self:_DurationBand(self:_GetSessionElapsed(player)), source, args and args.seatId)
+	)
 end
 
 function AnalyticsSystem:LogCoinFlipResolved(sender, player, args)
@@ -246,6 +301,50 @@ function AnalyticsSystem:LogInputAction(sender, player, args)
 		"coinflip_input_action",
 		1,
 		self:_BuildFields(args and args.action, args and args.source, args and args.inputType)
+	)
+end
+
+function AnalyticsSystem:LogFirstAutoToggle(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	self:_LogFirstSessionEvent(
+		player,
+		"firstAutoToggleLogged",
+		"coinflip_first_auto_toggle",
+		self:_BuildFields(args and args.source, args and args.inputType, args and args.enabled)
+	)
+end
+
+function AnalyticsSystem:LogFirstRunUpgrade(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	self:_LogFirstSessionEvent(
+		player,
+		"firstRunUpgradeLogged",
+		"coinflip_first_run_upgrade",
+		self:_BuildFields(args and args.upgradeKey, args and args.newLevel, self:_CashBand(args and args.cashAfterPurchase))
+	)
+end
+
+function AnalyticsSystem:LogFirstGrowthPanelOpen(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+
+	local panel = args and args.panel
+	if panel ~= "Shop" and panel ~= "Inventory" and panel ~= "Rebirth" then
+		return
+	end
+
+	self:_LogFirstSessionEvent(
+		player,
+		`first{panel}OpenLogged`,
+		"coinflip_first_growth_panel_open",
+		self:_BuildFields(panel, args and args.source, args and args.inputType)
 	)
 end
 
@@ -431,6 +530,31 @@ function AnalyticsSystem:_DurationBand(seconds)
 	return "30m_plus"
 end
 
+function AnalyticsSystem:_DeviceClassField(deviceClass)
+	if deviceClass == "touch" or deviceClass == "keyboard" or deviceClass == "gamepad" or deviceClass == "hybrid" then
+		return deviceClass
+	end
+
+	return "unknown"
+end
+
+function AnalyticsSystem:_EarlySessionStage(session)
+	if session.firstShopOpenLogged or session.firstInventoryOpenLogged or session.firstRebirthOpenLogged then
+		return "opened_growth_panel"
+	end
+	if session.firstRunUpgradeLogged then
+		return "upgraded_run"
+	end
+	if session.firstFlipLogged then
+		return "flipped_no_upgrade"
+	end
+	if session.firstSeatAssignedLogged then
+		return "seated_no_flip"
+	end
+
+	return "joined_no_seat"
+end
+
 function AnalyticsSystem:_EnsureSession(player)
 	local session = self.players[player.UserId]
 	if not session then
@@ -446,11 +570,59 @@ function AnalyticsSystem:_EnsureSession(player)
 	return session
 end
 
+function AnalyticsSystem:_GetSessionElapsed(player)
+	local session = self:_EnsureSession(player)
+	return math.max(math.floor(os.clock() - session.startedAt), 0)
+end
+
+function AnalyticsSystem:_InputTypeField(inputType)
+	if typeof(inputType) ~= "string" then
+		return "unknown"
+	end
+	if string.find(inputType, "Gamepad") == 1 then
+		return "gamepad"
+	end
+	if inputType == "Touch" then
+		return "touch"
+	end
+	if string.find(inputType, "Mouse") == 1 or inputType == "Keyboard" then
+		return "keyboard"
+	end
+
+	return "unknown"
+end
+
+function AnalyticsSystem:_LogFirstSessionEvent(player, flagName, eventName, fields)
+	local session = self:_EnsureSession(player)
+	if session[flagName] == true then
+		return false
+	end
+
+	local elapsed = self:_GetSessionElapsed(player)
+	session[flagName] = true
+	self:_LogCustomEvent(player, eventName, elapsed, fields)
+	return true
+end
+
+function AnalyticsSystem:_LogEarlySessionEnd(player, session, duration)
+	if duration >= EarlySessionDuration or session.earlySessionEndLogged == true then
+		return
+	end
+
+	session.earlySessionEndLogged = true
+	self:_LogCustomEvent(
+		player,
+		"coinflip_early_session_end",
+		duration,
+		self:_BuildFields(session.deviceClass or "unknown", session.viewportBand or "unknown", self:_EarlySessionStage(session))
+	)
+end
+
 function AnalyticsSystem:_LogFlipProgress(player, args)
 	local session = self:_EnsureSession(player)
 	session.flipCount += 1
 
-	local elapsed = math.max(math.floor(os.clock() - session.startedAt), 0)
+	local elapsed = self:_GetSessionElapsed(player)
 	if not session.firstFlipLogged then
 		self:_LogCustomEvent(
 			player,
@@ -545,6 +717,19 @@ function AnalyticsSystem:_StreakBand(streak)
 	return "20_plus"
 end
 
+function AnalyticsSystem:_ViewportBandField(viewportBand)
+	if
+		viewportBand == "small_portrait"
+		or viewportBand == "phone_landscape"
+		or viewportBand == "tablet"
+		or viewportBand == "desktop"
+	then
+		return viewportBand
+	end
+
+	return "unknown"
+end
+
 function AnalyticsSystem:_StringField(value)
 	local text = tostring(value)
 	if #text > 50 then
@@ -552,6 +737,65 @@ function AnalyticsSystem:_StringField(value)
 	end
 
 	return text
+end
+
+---- [[ Client Only ]] ----
+
+function AnalyticsSystem:_GetLocalDeviceClass(lastInputType)
+	local lastInputName = lastInputType.Name
+	local isGamepadInput = string.find(lastInputName, "Gamepad") == 1
+	if UserInputService.TouchEnabled and (UserInputService.KeyboardEnabled or UserInputService.GamepadEnabled) then
+		return "hybrid"
+	end
+	if isGamepadInput or (UserInputService.GamepadEnabled and not UserInputService.KeyboardEnabled) then
+		return "gamepad"
+	end
+	if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+		return "touch"
+	end
+	if UserInputService.KeyboardEnabled then
+		return "keyboard"
+	end
+
+	return "unknown"
+end
+
+function AnalyticsSystem:_GetLocalViewportBand(deviceClass)
+	local camera = WorkspaceService.CurrentCamera
+	if not camera then
+		return "unknown"
+	end
+
+	local viewportSize = camera.ViewportSize
+	local width = viewportSize.X
+	local height = viewportSize.Y
+	local shortSide = math.min(width, height)
+	local longSide = math.max(width, height)
+	if deviceClass == "touch" or deviceClass == "hybrid" then
+		if height > width and shortSide <= 700 then
+			return "small_portrait"
+		end
+		if width > height and longSide <= 1200 then
+			return "phone_landscape"
+		end
+		return "tablet"
+	end
+
+	return "desktop"
+end
+
+function AnalyticsSystem:_ReportLocalDeviceProfile()
+	if IsServer then
+		return
+	end
+
+	local lastInputType = UserInputService:GetLastInputType()
+	local deviceClass = self:_GetLocalDeviceClass(lastInputType)
+	self.Server:ReportDeviceProfile({
+		deviceClass = deviceClass,
+		viewportBand = self:_GetLocalViewportBand(deviceClass),
+		inputType = lastInputType.Name,
+	})
 end
 
 return AnalyticsSystem

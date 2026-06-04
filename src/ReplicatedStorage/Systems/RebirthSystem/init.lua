@@ -239,6 +239,26 @@ function RebirthSystem:ApplyRunBaseline(sender, player, args)
 	end
 end
 
+function RebirthSystem:ReportGrowthPanelOpened(sender, player, args)
+	if not IsServer then
+		return
+	end
+
+	player = player or sender
+	if sender ~= player or not player:IsDescendantOf(Players) or typeof(args) ~= "table" then
+		return
+	end
+	if args.panel ~= "Rebirth" then
+		return
+	end
+
+	SystemMgr.systems.AnalyticsSystem:LogFirstGrowthPanelOpen(SENDER, player, {
+		panel = "Rebirth",
+		source = typeof(args.source) == "string" and args.source or "unknown",
+		inputType = typeof(args.inputType) == "string" and args.inputType or "unknown",
+	})
+end
+
 function RebirthSystem:RequestRebirth(sender, player)
 	if IsServer then
 		player = player or sender

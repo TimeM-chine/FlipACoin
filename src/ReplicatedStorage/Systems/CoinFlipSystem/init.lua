@@ -335,7 +335,7 @@ local function grantTableJackpotRewards(actor, outcome)
 				reason = "tableJackpot",
 			})
 			SystemMgr.systems.GuiSystem:SetNotification(SENDER, audiencePlayer, {
-				text = `Table Jackpot: {actor.player.DisplayName} shared +$ {audienceReward}`,
+				text = `Table Bonus: {actor.player.DisplayName} shared +$ {audienceReward}`,
 				lastTime = Presets.GetTableJackpotNotificationDuration(),
 				soundName = "notification",
 				textColor = Color3.fromRGB(255, 224, 158),
@@ -790,6 +790,11 @@ function CoinFlipSystem:ReportInputAction(sender, player, args)
 		source = typeof(args.source) == "string" and args.source or "unknown",
 		inputType = typeof(args.inputType) == "string" and args.inputType or "unknown",
 	})
+	SystemMgr.systems.AnalyticsSystem:LogFirstAutoToggle(SENDER, player, {
+		source = typeof(args.source) == "string" and args.source or "unknown",
+		inputType = typeof(args.inputType) == "string" and args.inputType or "unknown",
+		enabled = args.enabled == true,
+	})
 end
 
 function CoinFlipSystem:RequestFakeFlip(sender, fakeActor)
@@ -889,6 +894,11 @@ function CoinFlipSystem:BuyUpgrade(sender, player, args)
 		upgradeKey = upgradeKey,
 		newLevel = runData[upgradeKey],
 		cost = cost,
+		cashAfterPurchase = playerIns:GetOneData(dataKey.wins),
+	})
+	SystemMgr.systems.AnalyticsSystem:LogFirstRunUpgrade(SENDER, player, {
+		upgradeKey = upgradeKey,
+		newLevel = runData[upgradeKey],
 		cashAfterPurchase = playerIns:GetOneData(dataKey.wins),
 	})
 	applyOnboardingAction(self, player, "buyUpgrade", {

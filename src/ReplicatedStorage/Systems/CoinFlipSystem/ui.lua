@@ -530,9 +530,9 @@ end
 local function buildResultCopy(args)
 	local reward = args.reward or 0
 	local rewardCopy = `+$ {Util.FormatNumber(reward, true)}`
-	local tableJackpotCopy = ""
+	local tableBonusCopy = ""
 	if (args.tableJackpotAudienceReward or 0) > 0 and (args.tableJackpotRecipientCount or 0) > 0 then
-		tableJackpotCopy = ` Table +$ {Util.FormatNumber(args.tableJackpotAudienceReward, true)}`
+		tableBonusCopy = ` Table +$ {Util.FormatNumber(args.tableJackpotAudienceReward, true)}`
 	end
 	local coinCount = args.coinCount or 1
 	local headsCount = args.headsCount or (args.result == "Heads" and 1 or 0)
@@ -556,7 +556,7 @@ local function buildResultCopy(args)
 	if roundSuccess then
 		local comboName = args.comboName
 		if args.comboKey == "jackpot" then
-			return `Jackpot! {headsCount}/{coinCount} Heads {rewardCopy}{tableJackpotCopy}`, "Heads"
+			return `{comboName}! {headsCount}/{coinCount} Heads {rewardCopy}{tableBonusCopy}`, "Heads"
 		end
 		if args.comboKey == "perfect" then
 			return `{comboName}! {headsCount}/{coinCount} Heads {rewardCopy}`, "Heads"
@@ -603,23 +603,23 @@ local function requestFlip(inputSource, inputObject)
 		return false
 	end
 
+	if not currentSeatId then
+		updateResultText("Waiting for seat...", "Neutral")
+		return false
+	end
+
 	awaitingFlipResponse = true
 	currentFlipInProgress = true
 	activeFlipRequestToken += 1
 	local requestToken = activeFlipRequestToken
-	local hadSeatWhenRequested = currentSeatId ~= nil
 	localFlipCooldownEndsAt = now + math.max(0.15, currentFlipInterval + 0.05)
-	if currentSeatId then
-		applyGameplayVisibility(true)
-	end
+	applyGameplayVisibility(true)
 	CoinFlipSystem.Server:RequestFlip({
 		inputSource = inputSource or "hud",
 		inputType = getInputTypeName(inputObject),
 	})
-	updateResultText(hadSeatWhenRequested and "Flipping..." or "Checking your seat...", "Neutral")
-	if hadSeatWhenRequested then
-		playSfx("flipPress")
-	end
+	updateResultText("Flipping...", "Neutral")
+	playSfx("flipPress")
 
 	task.delay(0.45, function()
 		if activeFlipRequestToken ~= requestToken or not awaitingFlipResponse then
@@ -630,11 +630,7 @@ local function requestFlip(inputSource, inputObject)
 		currentFlipInProgress = false
 		localFlipCooldownEndsAt = os.clock() + 0.05
 		applyGameplayVisibility(currentSeatId ~= nil)
-		if hadSeatWhenRequested then
-			updateResultText("Flip not ready.", "Neutral")
-		else
-			updateResultText("Waiting for seat...", "Neutral")
-		end
+		updateResultText("Flip not ready.", "Neutral")
 	end)
 
 	return true
@@ -903,6 +899,7 @@ local function bindInputActionSystem()
 				action = "ToggleAutoFlip",
 				source = "inputAction",
 				inputType = getInputTypeName(inputObject),
+				enabled = not autoFlipEnabled,
 			})
 			setAutoFlipEnabled(not autoFlipEnabled)
 			if autoFlipEnabled then
@@ -1077,6 +1074,7 @@ function CoinFlipUi.Init()
 			action = "ToggleAutoFlip",
 			source = "hudAuto",
 			inputType = getInputTypeName(),
+			enabled = not autoFlipEnabled,
 		})
 		setAutoFlipEnabled(not autoFlipEnabled)
 		if autoFlipEnabled then

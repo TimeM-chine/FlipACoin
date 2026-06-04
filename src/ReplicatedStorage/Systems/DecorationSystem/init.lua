@@ -14,13 +14,11 @@ local ChairAssetFolderName = DecorationPresets.ChairAssetFolderName
 local DefaultTableDecorationAssetName = DecorationPresets.DefaultTableDecorationAssetName
 local WorkspaceTableDecorationName = DecorationPresets.WorkspaceTableDecorationName
 local TableDecorationSurfaceGap = DecorationPresets.TableDecorationSurfaceGap
-local Keys = require(Replicated.configs.Keys)
 local Types = require(Replicated.configs.Types)
 
 ---- common variables ----
 local IsServer = RunService:IsServer()
 local SENDER, SystemMgr
-local dataKey = Keys.DataKey
 
 ---- server variables ----
 local PlayerServerClass
@@ -126,8 +124,9 @@ function DecorationSystem:RefreshPlayerDecoration(sender, player)
 		rawSeatId = assignment.rawSeatId,
 		tableModel = assignment.tableModel,
 	}
+	local loadoutState = GetSystemMgr().systems.EcoSystem:GetLoadoutState(SENDER, player)
 
-	local deskSetupId = playerIns:GetOneData(dataKey.equippedDeskSetup)
+	local deskSetupId = loadoutState.equippedDeskSetup
 	local assetModel = getDecorationAsset(deskSetupId)
 	if assetModel then
 		local decorationName = `{assignment.rawSeatId}Decoration`
@@ -147,7 +146,7 @@ function DecorationSystem:RefreshPlayerDecoration(sender, player)
 		warn(`[DecorationSystem] Missing table decoration model asset for desk setup: {deskSetupId}`)
 	end
 
-	local chairId = playerIns:GetOneData(dataKey.equippedChair)
+	local chairId = loadoutState.equippedChair
 	local chairAsset = getChairAsset(chairId)
 	if chairAsset then
 		local chairName = `{assignment.rawSeatId}Chair`

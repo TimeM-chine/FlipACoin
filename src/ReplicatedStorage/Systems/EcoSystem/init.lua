@@ -813,6 +813,28 @@ function EcoSystem:GetLoadoutBonuses(sender, player)
 	end
 end
 
+function EcoSystem:ReportGrowthPanelOpened(sender, player, args)
+	if not IsServer then
+		return
+	end
+
+	player = player or sender
+	if sender ~= player or not player:IsDescendantOf(Players) or typeof(args) ~= "table" then
+		return
+	end
+
+	local panel = args.panel
+	if panel ~= "Shop" and panel ~= "Inventory" then
+		return
+	end
+
+	SystemMgr.systems.AnalyticsSystem:LogFirstGrowthPanelOpen(SENDER, player, {
+		panel = panel,
+		source = typeof(args.source) == "string" and args.source or "unknown",
+		inputType = typeof(args.inputType) == "string" and args.inputType or "unknown",
+	})
+end
+
 function EcoSystem:RequestShopPurchase(sender, player, args)
 	if IsServer then
 		player = player or sender

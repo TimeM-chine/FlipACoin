@@ -368,7 +368,7 @@ end
 
 local function getSeatBillboardTone(streak)
 	if streak >= 10 then
-		return "Jackpot", BillboardColors.Jackpot
+		return "Hot Streak", BillboardColors.Jackpot
 	end
 	if streak >= 8 then
 		return "On Fire", BillboardColors.Hot

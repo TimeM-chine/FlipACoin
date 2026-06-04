@@ -42,40 +42,118 @@
 - Creator Dashboard：创建 `cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle / paidCash2x10m` 七个付费 Developer Products、一个 Rewarded Ads 专用 Developer Product，以及 `vip / winsX2 / luckyCharm / quickFlip` 四个 Game Pass；把付费 product id 填回 `Products.flipACoin`，把广告奖励 product id 填回 `RewardedAds.DevProductId`。
 - Studio Play：新档默认 Cash 为 `9`，入座后看到首次 Flip 引导；首次 Flip 后进入 v4 Value 升级阶段，Cash 不足时继续高亮 `FLIP`，Cash 达到 `12` 后高亮 HUD 内实际 `ValueButton`，点击升级后进入 Rebirth 引导。
 - Studio Play：确认 Phase 0 正反馈调参后的首局节奏，重点看首次升级是否更有反馈、首次 Rebirth 是否过快；如果 Rebirth 明显过快，再单独调整 `RebirthPresets.FlipACoin.Rebirth.MinCash`。
-- Studio Play：确认 Rebirth `Coin Spread` 购买后 `coinCountLevel` / `coinCount` 是否立即增长，round streak 是否按成功轮数增减，失败但有 Heads 的奖励是否能接受。
+- Studio Play：确认 Rebirth `Coin Spread` 购买后的真实运行体感，重点看多 Coin 立即生效后的世界表现、round streak 是否按成功轮数增减、失败但有 Heads 的奖励是否能接受；源码层已确认购买后 `coinCountLevel` / `coinCount` 会即时同步增长。
 - Studio Play：确认 Phase 2 HUD 文案，重点看 `1/1`、`1/3`、`2/3`、`3/3` 等结果是否清楚，`Streak reset` 是否不会和有 Heads 奖励矛盾，移动端是否挤压底部 ResultLabel。
 - Studio Play：确认 Phase 3 多金币扇形世界表现，重点看自己的相机是否能看清多枚硬币、扇形是否以玩家到中心落点为中轴、临时 coin / shadow / pulse 是否在下一轮或座位隐藏后清理。
-- Studio Play：确认 Phase 4 组合庆祝，重点看 Triple / Four Heads / Perfect / Jackpot 的落地 VFX 强度、Jackpot 全桌通知频率、自己高价值组合有 SFX / 轻量 camera shake，而观察者不播放高价值结果 SFX 且不触发 camera shake，Jackpot / Perfect 结果文案不挤压底部 ResultLabel。
+- Studio Play：确认 Phase 4 组合庆祝，重点看 Triple / Four Heads / Perfect / Perfect Five 的落地 VFX 强度、Perfect Five 全桌通知频率、自己高价值组合有 SFX / 轻量 camera shake，而观察者不播放高价值结果 SFX 且不触发 camera shake，Perfect Five / Perfect 结果文案不挤压底部 ResultLabel。
 - Studio Play：确认 Phase 5 Bad Luck Pity 体感，重点看连续失败 3 轮后下一轮是否更容易回正但不显得保送、成功后 pity 是否清零、round streak 语义是否保持不变。
-- Studio Play 双客户端：确认真实玩家 `5/5 Heads` 触发 Table Jackpot 时，同桌其他真实玩家收到 `$15` Cash 和轻 notification，触发者 ResultLabel 追加 Table bonus，fake player jackpot 不发共享奖励，并记录 `coinflip_table_jackpot`。
+- Studio Play 双客户端：确认真实玩家 `5/5 Heads` 触发 Table Bonus 时，同桌其他真实玩家收到 `$15` Cash 和轻 notification，触发者 ResultLabel 追加 Table bonus，fake player 不发共享奖励，并记录内部埋点 `coinflip_table_jackpot`。
 - Studio Play：确认 Edge Stand 只在真实玩家失败轮低概率触发，触发时 Tails coin 竖立落桌、当前 round streak 不清零、发 `$8` bonus、ResultLabel 显示 `Edge Stand! Streak saved.`，fake player 不触发，并记录 `coinflip_edge_stand`。
 - Studio Play：确认装备高阶 Coin `coin7` 到 `coin10` 后，真实玩家 Edge Stand 触发率按 `edgeStandChanceBonus` 小幅提高且仍受 `EdgeStand.MaxChance` 限制；fake player 仍不触发 Edge Stand。
-- Studio Play：确认装备高阶 Coin `coin7` 到 `coin10` 后，`Perfect` / `Jackpot` 组合奖励按 `perfectRewardMultiplierBonus` 小幅提高，但普通 Heads / Pair / Triple / Four Heads 奖励不被额外放大。
-- Studio Play：确认装备高阶 Coin `coin7` 到 `coin10` 后，低概率 Tails reroll 每轮最多触发一次，重掷后最终 `coinResults / headsCount / reward / combo / Edge Stand / Table Jackpot` 判定一致，且不会让普通 Flip 结果文案产生困惑。
+- Studio Play：确认装备高阶 Coin `coin7` 到 `coin10` 后，`Perfect` / `Perfect Five` 组合奖励按 `perfectRewardMultiplierBonus` 小幅提高，但普通 Heads / Pair / Triple / Four Heads 奖励不被额外放大。
+- Studio Play：确认装备高阶 Coin `coin7` 到 `coin10` 后，低概率 Tails reroll 每轮最多触发一次，重掷后最终 `coinResults / headsCount / reward / combo / Edge Stand / Table Bonus` 判定一致，且不会让普通 Flip 结果文案产生困惑。
 - Studio Play：确认 Profile XP 每次真实玩家 Flip 后增加 `exp`，达到 `PlayerLevel` 阈值后 `level` 正确提升；fake player flip 不增加 XP，客户端 `ClientData.level / exp` 同步不报错。
 - Studio Play：确认轻量每日目标按服务器日写入 `dailyClaim.flipACoinGoals`，真实玩家完成 `Flip 10 times / Flip 15 Heads / Reach a 3 streak` 后自动发 Cash 和轻提示，fake player 不推进目标，重新进服同日不重复领奖。
-- Studio Play / Analytics：确认真实玩家进服、首次 Flip、达到 `10` 次 Flip、离服时分别能写入 `coinflip_session_start`、`coinflip_first_flip_latency`、`coinflip_flip_count_milestone`、`coinflip_session_end`；fake player 不产生 session / milestone 埋点。
+- Studio Play / Analytics：确认真实玩家进服、session 设备画像、前 `3` 分钟短会话结束、首次入座、首次 Flip、首次 Auto Toggle、首次 run upgrade、首次打开 Shop / Inventory / Rebirth、达到 `10` 次 Flip、离服时分别能写入 `coinflip_session_start`、`coinflip_device_profile`、`coinflip_early_session_end`、`coinflip_first_seat_assigned_latency`、`coinflip_first_flip_latency`、`coinflip_first_auto_toggle`、`coinflip_first_run_upgrade`、`coinflip_first_growth_panel_open`、`coinflip_flip_count_milestone`、`coinflip_session_end`；fake player 不产生 session / milestone 埋点。
 - Studio Play 双客户端：确认他人 Heads / Tails 落地 pulse 更明显、Heads streak ring 按 streak 扩大、`streak >= 4` / milestone 有短 Highlight；低 streak best-streak 不再刷全桌大通知；`streak1` / `streak2` 资产缺失时 fallback pulse 不阻塞落地回调。
 - Studio Play 双客户端：确认玩家点击 `TableTop` 时本人立即听到 / 看到 table knock，其他客户端在该玩家座位硬币落点附近看到低噪音 ripple / SFX；频繁点击会被服务端 `0.55s` 限频，不会刷屏。
-- Studio Play：确认 `coin1` through `coin10` 资产能按装备显示，新档默认 `Copper R Coin`，旧 Coin id 存档能 reconcile 到 `coin1`。
-- Studio Play：确认启动后 HUD 从 `Seat --` 切到分配座位并保持稳定，立刻点击 `FLIP` 不会被客户端旧 seat state 错拦。
-- Studio Play：确认不同 Coin 自己/他人 flip 视觉正常，落点在桌面上方，不沉入桌面。
+- Studio Play：确认 `coin1` through `coin10` 在真实 Play 运行态能按装备显示，桌面落点和换装刷新观感正常；源码 / Studio 资产层已确认默认 `Copper R Coin`、旧 / 无效 Coin id 归一到 `coin1`、Shop Coin id 和 `Assets.Coins` 一一匹配。
+- Studio Play：确认启动后 HUD 从 `Seat --` 切到分配座位并保持稳定；源码层已确认客户端没有本地 `currentSeatId` 时不会发 `RequestFlip()` 或进入本地 flip 等待 / 冷却态，避免旧 seat state 短暂锁住刚同步后的 `FLIP` 按钮。
+- Studio Play：确认不同 Coin 自己/他人 flip 视觉观感正常；源码 / Studio 几何层已确认 `coin1` 到 `coin10` 在 `Seat01` 到 `Seat08` 的 Heads / Tails 平铺落点会按 `TableTop` raycast + bounds lift 放在桌面上方，不使用固定尺寸导致沉桌。
 - Studio Play：确认 Shop 成功购买 Coin / Desk / Chair 后出现短 notification 并播放购买 SFX；Inventory 装备成功后出现短 notification、播放装备 SFX，并保持座位 Coin / Desk / Chair 立即刷新。
-- Studio Play：确认 Desk Setup 购买 / 装备后按座位刷新，模型坐在桌面上，离座 / 离服能清理。
-- Studio 资产整理：如需永久 source-backed decoration 资产，把 live `Workspace.TableDecoration` 移到 `ReplicatedStorage.Systems.DecorationSystem.Assets.TableDecoration`，并按 `Tall Candle` / `Barrel Stein` / `Balance Scale` / `Quill Pot` / `Cosmic Globe` / `Miner Trophy` / `Crimson Hourglass` / `Amethyst Hourglass` 拆分命名。
+- Studio Play：确认 Desk Setup / Chair 购买或装备后真实 Play 观感正常，模型坐在桌面上且不遮挡 Coin；源码 / Studio 资产层已确认旧 / 无效 Desk Setup 和 Chair id 会归一到默认 `"1"`、商品 id 与资产一一匹配、入座 / 离座 / 离服清理路径存在。
 - Studio Play：最终看一遍桌面版 Rebirth / Shop / Inventory 视觉比例、tab 状态、打开关闭流程；MCP synthetic click 对这些按钮不可靠。
 
 ## Backlog / Ideas
 
 - `P0` 移动端首发剩余收敛：安全区、growth panels、Topbar 入口和真实设备观感 QA。
 - `P1` 同桌弱社交补强后续：双客户端 Studio QA，确认低噪音桌面反馈强度和公告频率。
-- `P1` 多金币 Flip 后续：Phase 0 正反馈调参、Phase 1 服务端 round 结算、Phase 2 HUD 结果文案、Phase 3 扇形世界表现、Rebirth `Coin Spread` 迁移、Phase 4 组合庆祝强化、Phase 5 Bad Luck Pity、Table Jackpot、Edge Stand 和 Lucky Coin Edge Stand / perfect reward / Tails reroll 词条小步已完成；更复杂的符号、花色或可视化词条仍待未来评估。
+- `P1` 多金币 Flip 后续：Phase 0 正反馈调参、Phase 1 服务端 round 结算、Phase 2 HUD 结果文案、Phase 3 扇形世界表现、Rebirth `Coin Spread` 迁移、Phase 4 组合庆祝强化、Phase 5 Bad Luck Pity、Table Bonus、Edge Stand 和 Lucky Coin Edge Stand / perfect reward / Tails reroll 词条小步已完成；更复杂的符号、花色或可视化词条仍待未来评估。
 - `P1` 装扮价值前置：购买 / 装备成功短 notification 与既有 SFX 小步已完成；剩余主要是 Studio 资产观感和真机确认。
 - `P2` 首发成长补强：Profile XP 和轻量每日目标已完成；如需完整 Daily 面板，后续用 Studio-authored UI 单独做，不接回旧 `DailySystem / QuestSystem` 主线。
-- `P3` 首发表现与运营：核心埋点、基础 gamepass analytics polish、桌面 table reaction 和组合庆祝强度小步已完成；后续可继续按 Studio 观感反馈微调 VFX / SFX 数值。
-- 可评估极简决策点：高 streak 后出现 `Cash Out` / `Double` / bonus choice，但不要破坏“一键 Flip”的主循环。
+- `P3` 首发表现与运营：核心埋点、基础 gamepass analytics polish、桌面 table reaction、组合庆祝强度和合规语义收敛小步已完成；后续可继续按 Studio 观感反馈微调 VFX / SFX 数值。
+- 可评估极简决策点：高 streak 后出现保留本轮 streak 或继续挑战额外 bonus 的轻选择，但不要使用强博彩词，也不要破坏“一键 Flip”的主循环。
 
 ## Recent Done
+
+### 2026-06-04 Studio MCP remaining verification pass
+
+- Outcome: 在当前 active Studio `Flip A Coin` 执行剩余可自动覆盖的 MCP 验证，不改源码。Edit-time sanity 通过：`coin1` 到 `coin10` 资产完整；Desk Setup `1` 到 `8`、Chair `1` 到 `11` 资产完整；`Seat01` 到 `Seat08` 的 Seat、CoinLanding / Decoration / Chair / Marker anchor 与 `TableTop.TableCenterAttachment` 均存在；Rebirth / Shop / Inventory prefab 与源码绑定路径一致；`Coin Spread` 的 `polishedStart -> coinCountLevel -> coinCount` 映射为 `0->1`、`1->2`、`2->3`、`3->4`、`4+->5`；Shop Coin / Desk / Chair 和七个 Developer Product 配置覆盖完整。
+- Runtime MCP: 单客户端 Play sanity 通过：真实玩家 `MagicalHailuo` 自动入座 `Seat02`，`PlayerGui.Main` 克隆成功，`CoinFlipHUD` 显示 `Tap FLIP` 与主按钮 `FLIP`，Rebirth / Shop / Inventory frame 存在且默认关闭，当前座位 coin visual 存在，`noUse` legacy 容器下没有“有效可见且 Active”的 GuiObject 抢交互。控制台未见 fatal runtime error；有预期 / 非阻断输出：空动画 ID fallback、ProfileService 可保存、Analytics custom event 触发、旧 `RankingListFolder not found` 提示。
+- Decisions: 未自动点击 `FLIP`、购买、装备、Rebirth 或 Robux prompt，因为当前 Studio Play 已显示 Roblox API services available，直接操作会影响真实 profile / 外部购买流程；这些保留给用户手动验证。`RewardedAds.DevProductId` 仍为 `0`，需外部创建并填回。
+- Validation: Roblox Studio MCP `list_roblox_studios` 确认 active 为 `Flip A Coin`；多段只读 `execute_luau` sanity 和一次 `screen_capture` 完成；Play 已停止回 edit mode。未改 Luau，未运行 `rojo build`。
+
+### 2026-06-04 Rebirth Coin Spread sync sanity
+
+- Outcome: 执行 Rebirth `Coin Spread` 购买后即时同步源码 sanity 小步，不改手机端 UI、不改 Luau 源码。源码核对确认 `RebirthSystem:RequestRebirthUpgrade()` 成功购买 `polishedStart` 后会先更新 `rebirthTree` / `fateShards`，再用新的永久树调用 `RebirthPresets.ApplyFlipACoinRunBaseline()` 把当前 `runData.coinCountLevel` 抬到 baseline，并通过 `CoinFlipSystem:SyncPlayerState()` 立刻重建 `derivedStats.coinCount`。
+- Decisions: 当前不需要新增同步事件或额外客户端缓存；`CoinFlipSystem/ui.lua` 已在 `rebirthUpgradePurchased == "polishedStart"` 且 coin count 增长时显示 `Coin Spread unlocked N coins per flip.`，`RebirthSystem/ui.lua` 同步刷新升级卡等级、成本和点数，并复用现有 purchase SFX。
+- Validation: 源码核对覆盖 `RebirthSystem/Presets.lua` 的 `Coin Spread -> coinCountLevel` baseline、`RebirthSystem/init.lua` 的购买 / rebirth state 构建 / 同步路径、`CoinFlipSystem/Presets.lua` 的 `GetCoinCount()` / `BuildDerivedStats()`、`CoinFlipSystem/init.lua` 的 `buildClientState()` / `syncPlayerState()`、`CoinFlipSystem/ui.lua` 的购买提示分支和 `RebirthSystem/ui.lua` 的升级卡刷新。未改 Luau，未运行 `stylua`；本机未发现 `luau` / `selene` 命令；未执行 Studio Play，真实多 Coin 购买体感、round streak 语义和失败奖励接受度仍需用户在 Studio 中确认。
+
+### 2026-06-04 Coin landing geometry sanity
+
+- Outcome: 执行 Coin flip 落点 / 不沉桌源码与 Studio anchor sanity 小步，不改手机端 UI、不改源码。源码核对确认 `EffectSystem` 的单 Coin、多 Coin 和 idle 重摆都走 `getFlipPositions()` + `resolveFlatLandWorldPosition()`：先按当前座位 / `CoinLandingAnchor` 得到桌面平面落点，再 raycast 命中 `TableTop`，最后用硬币最终平铺姿态的真实 bounds corner 沿桌面法线做一次 lift，并追加 `CoinSurfaceGap = 0.01`，不再用固定 `coin.Size.X * 0.5` 或重复叠加 lift。
+- Decisions: 本轮只做几何和资源 sanity，不替代 Studio Play 对动画、相机可见性、不同 Coin 材质观感和双客户端他人 flip 表现的验证。
+- Validation: Roblox Studio MCP 当前 active 实例为 `Flip A Coin`；`Workspace.CoinFlipTable.TableTop` 存在且有 `TableCenterAttachment`，`Workspace.CoinFlipTable.Attachments` 对 `Seat01` 到 `Seat08` 均有 `CoinLandingAnchor`。Studio Luau sanity 对 `coin1` 到 `coin10`、`Seat01` 到 `Seat08`、Heads / Tails 平铺姿态共 `160` 个组合计算落点：`missingAnchors = ""`、`badRays = ""`、`badCoinLifts = ""`、`checkedPlacements = 160`、`minFinalGap ≈ 0.01`、`maxLift ≈ 0.107`。未改 Luau，未运行 `stylua`；未执行 Studio Play。
+
+### 2026-06-04 Seat HUD immediate flip guard
+
+- Outcome: 执行启动后座位 HUD 稳定性 / 立刻点击 `FLIP` 防旧 seat state 小步，不改手机端 UI。`CoinFlipSystem/ui.lua` 的 `requestFlip()` 现在在本地 `currentSeatId` 尚未同步时只显示 `Waiting for seat...` 并返回 `false`，不再提前设置 `awaitingFlipResponse / currentFlipInProgress / localFlipCooldownEndsAt`，也不再向服务端发 `RequestFlip()`；座位状态同步到达后 HUD 能立即按 seated 状态恢复可点。
+- Decisions: 服务端 `CoinFlipSystem:RequestFlip()` 的权威座位校验保持不变；本轮只修客户端旧 seat state 竞态，不改变入座分配、自动 Flip、引导、冷却或移动端布局。
+- Validation: 源码核对覆盖 `TableSeatSystem.syncCoinFlipSeatState()`、`CoinFlipUi.SyncRunState()`、`CoinFlipUi.SeatStateChanged()` 和 `requestFlip()`；无 seat id 时 `requestFlip()` 返回 `false`，`hudAuto / inputActionAuto` 仍会走既有 `scheduleAutoFlipRequest()` 等待后续 seated 状态。`git diff --check -- docs/TASK_STATE.md docs/PROJECT_LOGIC.md src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua` 通过；`stylua --check src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua` 仍因 Aftman shim 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；本机未发现 `luau` / `selene` 命令；未执行 Studio Play，真实首帧点击体感仍需用户在 Studio 中确认。
+
+### 2026-06-04 Desk and Chair runtime loadout sanity
+
+- Outcome: 执行 Desk / Chair 装扮运行态 sanity 小步，不改手机端 UI。`DecorationSystem:RefreshPlayerDecoration()` 现在通过 `EcoSystem:GetLoadoutState()` 读取已归一化的 `equippedDeskSetup / equippedChair`，再克隆座位桌搭和椅子模型，避免系统 `PlayerAdded` 并发时旧 / 无效存档 id 在入座刷新阶段生成空装饰；无用 `Keys` / `dataKey` require 已清理。
+- Decisions: 不改变 Shop / Inventory 解耦规则，不新增 Studio prefab，不调整模型位置或尺寸；本轮只收紧运行态 id 归一化和资源映射 sanity，真实摆放观感仍留给 Studio Play。
+- Validation: Roblox Studio MCP 当前 active 实例为 `Flip A Coin`；Studio Luau sanity 返回默认 Desk `"1" / Tall Candle`、默认 Chair `"1" / Round Stool`，Desk 商品 id 为 `1` 到 `8` 且 `missingDesk = "" / badDesk = ""`，Chair 商品 id 为 `1` 到 `11` 且 `missingChair = "" / badChair = ""`；`Workspace.CoinFlipTable.Attachments` 对 `Seat01` 到 `Seat08` 均有 Decoration / Chair anchor fallback。源码核对覆盖 `EcoSystem.normalizeLoadoutData()`、`EcoSystem:RequestEquipItem()`、`DecorationSystem:RefreshPlayerDecoration()` / `ClearPlayerDecoration()`、`TableSeatSystem` 入座 / 离座 / 离服刷新清理路径。`git diff --check -- docs/TASK_STATE.md docs/PROJECT_LOGIC.md src/ReplicatedStorage/Systems/DecorationSystem/init.lua` 通过；`stylua --check src/ReplicatedStorage/Systems/DecorationSystem/init.lua` 仍因 Aftman shim 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；本机未发现 `luau` / `selene` 命令；未执行 Studio Play。
+
+### 2026-06-04 Coin runtime loadout sanity
+
+- Outcome: 执行 Coin 运行态装备 / 旧存档 reconcile 验证小步，不改手机端 UI、不改 Luau 源码。源码核对确认 `EcoSystem.normalizeLoadoutData()` 会在 `GetLoadoutState()` / `GetLoadoutBonuses()` 路径中把无效、缺失或未拥有的 `equippedCoin` 归一到 `EcoPresets.LoadoutDefaults.equippedCoin = "coin1"`，并补 `ownedCoins.coin1 = true`；`CoinFlipSystem.buildClientState()` 和 `RequestFlip()` 会通过这些路径获得归一后的 loadout / bonus；装备成功后 `EcoSystem:RequestEquipItem()` 会刷新 audience state 并 `CoinFlipSystem:SyncPlayerState()`，客户端 `CoinFlipUi.FlipResolved()` 和 `EffectSystem:RefreshPersistentSeatCoins()` 均使用同步 payload 里的 `equippedCoin`。
+- Decisions: 本轮只做源码和 Studio 资产 sanity，不替代 Studio Play 对真实换装、Flip 落点、视觉不沉桌和座位刷新体感的验证。
+- Validation: Roblox Studio MCP 当前 active 实例为 `Flip A Coin`；Studio Luau sanity 返回 `defaultCoin = "coin1"`、`defaultDisplayName = "Copper R Coin"`、Shop Coin id 为 `coin1` 到 `coin10`、`missingAssets = ""`、`badAssets = ""`、`coinFolderChildren = 10`。源码核对覆盖 `EcoSystem.normalizeLoadoutData()`、`CoinFlipSystem.buildClientState()` / `RequestFlip()`、`EcoSystem:RequestEquipItem()`、`CoinFlipSystem/ui.lua` 的 `coinId` payload 和 `EffectSystem` persistent coin asset fallback。未改 Luau，未运行 `stylua` 或 Studio Play。
+
+### 2026-06-04 Coin asset consistency check
+
+- Outcome: 执行 Coin 资产一致性检查小步，不改手机端 UI、不改源码、不迁移资产。源码配置 `EcoSystem/Presets.lua` 的 Coin 商品 id 连续覆盖 `coin1` 到 `coin10`，`Textures.lua` 的 coin icon 配置也覆盖 `coin1` 到 `coin10`，`DefaultData.lua` 和 `EcoPresets.LoadoutDefaults` 均默认 `equippedCoin = "coin1"`。
+- Decisions: Roblox Studio 当前 `ReplicatedStorage.Systems.CoinFlipSystem.Assets.Coins` 已有完整 `coin1` 到 `coin10` 模型，且没有多余子项；本轮只收敛资产 / 配置一致性，不替代 Studio Play 对运行态装备显示、旧存档 reconcile 和桌面落点观感的验证。
+- Validation: Roblox Studio MCP 当前 active 实例为 `Flip A Coin`；`InspectInstance("ReplicatedStorage.Systems.CoinFlipSystem.Assets.Coins")` 确认 `childrenCount = 10`，包含 `coin1` 到 `coin10` 且均为 `Model`；Studio Luau 校验返回 `missing = ""`、`extra = ""`。源码扫描确认 `EcoSystem/Presets.lua` 的 Coin item id 为 `coin1` 到 `coin10`，`Textures.lua` 的 icon 配置覆盖 `coin1` 到 `coin10`，`DefaultData.lua` 默认 `equippedCoin = "coin1"` / `ownedCoins.coin1 = true`。`git diff --check -- docs/TASK_STATE.md` 通过；未改 Luau，未运行 `stylua`。
+
+### 2026-06-04 Decoration asset source check
+
+- Outcome: 执行 Studio 资产整理检查小步，不改手机端 UI、不改源码、不迁移资产。已通过 Roblox Studio MCP 切到 `Flip A Coin` 实例并确认 `Workspace.TableDecoration` 不存在；目标目录 `ReplicatedStorage.Systems.DecorationSystem.Assets.TableDecoration` 已有 `1` 到 `8` 共 `8` 个桌搭模型，`ReplicatedStorage.Systems.DecorationSystem.Assets.Chairs` 已有 `1` 到 `11` 共 `11` 个椅子模型。
+- Decisions: 当前不需要再执行 live `Workspace.TableDecoration` 迁移；保留 `DecorationSystem.migrateWorkspaceTableDecoration()` 作为未来误放 live asset 的启动兜底。live follow-up 中的 Studio 资产整理项已移除，剩余装扮相关工作主要是 Studio Play 观感验证。
+- Validation: Roblox Studio MCP 已切到 `Flip A Coin` 实例；`InspectInstance("Workspace.TableDecoration")` 返回未找到；`InspectInstance("ReplicatedStorage.Systems.DecorationSystem.Assets.TableDecoration")` 确认 `childrenCount = 8` 且子模型为 `1` 到 `8`；`InspectInstance("ReplicatedStorage.Systems.DecorationSystem.Assets.Chairs")` 确认 `childrenCount = 11` 且子模型为 `1` 到 `11`。`git diff --check -- docs/TASK_STATE.md` 通过；未改 Luau，未运行 `stylua`。
+
+### 2026-06-04 Early session end analytics
+
+- Outcome: 执行 P2 数据和埋点小步，不改手机端 UI、不新增持久字段。`AnalyticsSystem:PlayerRemoving()` 在真实玩家当服时长少于 `180` 秒时额外记录 `coinflip_early_session_end`，value 为 session 秒数，字段带 session 设备分类、viewport band 和首局进度阶段，方便按设备口径看前 `3` 分钟流失点。
+- Decisions: 复用 `coinflip_device_profile` 写入的当服 session 设备画像；如果玩家在设备画像上报前离服，字段回落为 `unknown`。进度阶段只用现有 session flag 推导为 `joined_no_seat / seated_no_flip / flipped_no_upgrade / upgraded_run / opened_growth_panel`，不新增 profile 或 UI 状态。
+- Validation: `git diff --check -- docs/TASK_STATE.md docs/PROJECT_LOGIC.md docs/ROBLOX_PLATFORM_IMPROVEMENT.md src/ReplicatedStorage/Systems/AnalyticsSystem/init.lua` 通过；同批文件行尾空白扫描无命中；符号扫描确认 `coinflip_early_session_end / EarlySessionDuration / _EarlySessionStage / _LogEarlySessionEnd / earlySessionEndLogged` 和 `joined_no_seat / seated_no_flip / flipped_no_upgrade / upgraded_run / opened_growth_panel` 已接入源码和 live docs。`stylua --check src/ReplicatedStorage/Systems/AnalyticsSystem/init.lua` 仍因 Aftman shim 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；未执行 Studio Play 或 Roblox Analytics 后台验证。
+
+### 2026-06-04 Session device profile analytics
+
+- Outcome: 执行 P2 数据和埋点小步，不改手机端 UI、不新增持久字段。`AnalyticsSystem` 新增客户端启动后一次性上报自身设备画像的 `ReportDeviceProfile()` 路径，服务端校验 `sender == player` 并清洗低基数字段后记录 `coinflip_device_profile`；字段覆盖 `touch / keyboard / gamepad / hybrid` 设备分类、`small_portrait / phone_landscape / tablet / desktop` viewport band 和最近输入类型。
+- Decisions: `ReportDeviceProfile()` 刻意不放入 `whiteList`，让客户端可通过框架 remote 上报；其余记录方法和 helper 仍保持 `whiteList` 阻断客户端调用。上报只衡量当服 session，不写 profile，不采集原始 viewport 尺寸，不改任何 UI。
+- Validation: `git diff --check -- docs/TASK_STATE.md docs/PROJECT_LOGIC.md docs/ROBLOX_PLATFORM_IMPROVEMENT.md src/ReplicatedStorage/Systems/AnalyticsSystem/init.lua` 通过；同批文件行尾空白扫描无命中；符号扫描确认 `coinflip_device_profile / ReportDeviceProfile / deviceProfileLogged / _DeviceClassField / _ViewportBandField / _InputTypeField / _ReportLocalDeviceProfile` 已接入源码和 live docs。`stylua --check src/ReplicatedStorage/Systems/AnalyticsSystem/init.lua` 仍因 Aftman shim 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；未执行 Studio Play 或 Roblox Analytics 后台验证。
+
+### 2026-06-04 First seat assignment latency analytics
+
+- Outcome: 执行 P2 数据和埋点小步，不改座位流程、不改手机端 UI、不新增持久字段。`AnalyticsSystem:LogSeatAssigned()` 保持原有 `coinflip_seat_assigned` 事件，同时在同一当服 session 内首次入座时额外记录 `coinflip_first_seat_assigned_latency`，value 为进服 session start 到成功 seat assigned 的秒数，字段带 duration band、seat assign source 和 seat id。
+- Decisions: 复用既有 `TableSeatSystem:RequestSit()` 成功路径，不新增客户端上报或新 profile 字段；重复入座 / 重生回座仍会写原有 `coinflip_seat_assigned`，但 first latency 只写一次。
+- Validation: `git diff --check -- docs/TASK_STATE.md docs/PROJECT_LOGIC.md docs/ROBLOX_PLATFORM_IMPROVEMENT.md src/ReplicatedStorage/Systems/AnalyticsSystem/init.lua` 通过；同批文件行尾空白扫描无命中；符号扫描确认 `coinflip_first_seat_assigned_latency / firstSeatAssignedLogged / _GetSessionElapsed / LogSeatAssigned / 首次入座` 已接入源码和 live docs。`stylua --check src/ReplicatedStorage/Systems/AnalyticsSystem/init.lua` 仍因 Aftman shim 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；未执行 Studio Play 或 Roblox Analytics 后台验证。
+
+### 2026-06-04 First-session funnel analytics
+
+- Outcome: 执行 P2 数据和埋点小步，不改手机端 UI、不新增持久字段。`AnalyticsSystem` 新增当服内存 session 去重的一次性漏斗事件：`coinflip_first_auto_toggle`、`coinflip_first_run_upgrade`、`coinflip_first_growth_panel_open`。`CoinFlipSystem` 在服务端 Auto Toggle 上报和 run upgrade 成功路径记录首次事件；`EcoSystem` / `RebirthSystem` 增加服务器校验过的 `ReportGrowthPanelOpened()`，客户端 Shop / Boosts / Inventory / Rebirth 的 Topbar、legacy menu 和 guide 打开路径都会上报 panel、source 和最近输入类型。
+- Decisions: 这些漏斗事件只衡量当服首局行为，不写 profile，不影响 onboarding 状态，不新增 UI；Shop 的 Boosts 入口归入 `panel = "Shop"`，通过 `source = "topbarBoosts"` 区分。Auto Toggle 继续保留已有 `coinflip_input_action`，新增 first-event 只做一次性漏斗口径。
+- Validation: `git diff --check -- docs/TASK_STATE.md docs/PROJECT_LOGIC.md docs/ROBLOX_PLATFORM_IMPROVEMENT.md src/ReplicatedStorage/Systems/AnalyticsSystem/init.lua src/ReplicatedStorage/Systems/CoinFlipSystem/init.lua src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua src/ReplicatedStorage/Systems/EcoSystem/init.lua src/ReplicatedStorage/Systems/EcoSystem/ui.lua src/ReplicatedStorage/Systems/RebirthSystem/init.lua src/ReplicatedStorage/Systems/RebirthSystem/ui.lua` 通过；同批文件行尾空白扫描无命中；符号扫描确认 `coinflip_first_auto_toggle / coinflip_first_run_upgrade / coinflip_first_growth_panel_open / LogFirstAutoToggle / LogFirstRunUpgrade / LogFirstGrowthPanelOpen / ReportGrowthPanelOpened / openGrowthFrame / openRebirthFrame` 已接入源码和 live docs。`stylua --check` 仍因 Aftman shim 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；本机未发现 `luau` / `selene` 命令；未执行 Studio Play 或 Roblox Analytics 后台验证。
+
+### 2026-06-04 Compliance language pass
+
+- Outcome: 执行 P2 合规语义收敛小步，不改手机端 UI、不改内部 analytics/schema 标识。玩家可见 `5/5 Heads` 结果名从 `Jackpot` 收敛为 `Perfect Five`；全桌共享奖励 notification 从 `Table Jackpot` 改为 `Table Bonus`；座位高 streak Billboard 状态从 `Jackpot` 改为 `Hot Streak`；Shop 中高阶 Coin / Desk / Chair 的 `role = "Jackpot"` 改为 `role = "Perfect"`。`2x Cash / Double Cash` 保持不变，因为它是明确收益的 gamepass 描述，不是随机收益或 streak 决策文案。
+- Decisions: 内部 `comboKey = "jackpot"`、`TableJackpot` 配置、`JackpotBonus` 配置字段和 `coinflip_table_jackpot` 埋点保留为历史 schema，避免破坏 analytics / 既有代码引用；文档同步说明它们不是玩家可见文案。Backlog 中未实现的 `Cash Out / Double` 想法改为中性 streak 决策描述，并保留“不使用强博彩词、不破坏一键 Flip”的约束。
+- Validation: `git diff --check -- docs/TASK_STATE.md docs/PROJECT_LOGIC.md docs/ROBLOX_PLATFORM_IMPROVEMENT.md docs/MULTI_COIN_FLIP_PLAN.md src/ReplicatedStorage/configs/GameConfig.lua src/ReplicatedStorage/Systems/CoinFlipSystem/ui.lua src/ReplicatedStorage/Systems/CoinFlipSystem/init.lua src/ReplicatedStorage/Systems/TableSeatSystem/init.lua src/ReplicatedStorage/Systems/EcoSystem/Presets.lua` 通过；同批文件行尾空白扫描无命中；源码 / live docs 扫描确认不再存在 `Jackpot!`、`Table Jackpot:`、`role = "Jackpot"`、`return "Jackpot"`、`[5] = "Jackpot"` 或 backlog `Cash Out / bonus choice` 落地方向。剩余 `Cash Out / Double / Jackpot` 命中只在平台文档的“避免使用”规则句、历史 Recent Done 或内部 schema key 中。`stylua --check` 仍因 Aftman shim 未在仓库或用户 `aftman.toml` 注册 stylua 无法运行；未执行 Studio Play，最终玩家可见文案仍需 Studio 里确认。
 
 ### 2026-06-04 Loadout purchase and equip feedback
 

@@ -3,6 +3,7 @@ local Replicated = game:GetService("ReplicatedStorage")
 local GuiService = game:GetService("GuiService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local AdService = game:GetService("AdService")
+local UserInputService = game:GetService("UserInputService")
 
 local SystemMgr = require(Replicated.Systems.SystemMgr)
 local ClientData = require(Replicated.Systems.ClientData)
@@ -70,6 +71,20 @@ local rewardedAdAvailabilityToken = 0
 
 local function getGeneratedCardKey(category, itemId)
 	return `{category}:{itemId}`
+end
+
+local function getLastInputTypeName()
+	local inputType = UserInputService:GetLastInputType()
+	return inputType and inputType.Name or "unknown"
+end
+
+local function openGrowthFrame(frameName, source)
+	SystemMgr.systems.EcoSystem.Server:ReportGrowthPanelOpened({
+		panel = frameName,
+		source = source,
+		inputType = getLastInputTypeName(),
+	})
+	uiController.OpenFrame(frameName)
 end
 
 local function getOwnedItems(category)
@@ -586,7 +601,7 @@ local function createTopbarFrameIcon(name, label, order, frame, beforeOpen)
 		end
 		if isSelected then
 			beforeOpen()
-			uiController.OpenFrame(frame.Name)
+			openGrowthFrame(frame.Name, if name == "Boosts" then "topbarBoosts" else `topbar{name}`)
 		else
 			uiController.CloseFrame(frame.Name)
 		end
@@ -622,12 +637,12 @@ local function bindButtons()
 		end
 		resetScrollPosition(ShopItems)
 		updatePanels()
-		uiController.OpenFrame("Shop")
+		openGrowthFrame("Shop", "legacyMenu")
 	end)
 	uiController.SetButtonHoverAndClick(CoinFlipMenu.InventoryButton, function()
 		resetScrollPosition(InventoryItems)
 		updatePanels()
-		uiController.OpenFrame("Inventory")
+		openGrowthFrame("Inventory", "legacyMenu")
 	end)
 
 	uiController.SetButtonHoverAndClick(ShopFrame.X, function()
@@ -759,7 +774,7 @@ function EcoUi.OpenGuideShopItem(args)
 	end
 	resetScrollPosition(ShopItems)
 	updatePanels()
-	uiController.OpenFrame("Shop")
+	openGrowthFrame("Shop", "guide")
 
 	local card = typeof(itemId) == "string" and generatedShopCards[getGeneratedCardKey(category, itemId)] or nil
 	return card and card:FindFirstChild("BuyButton")
@@ -781,7 +796,7 @@ function EcoUi.OpenGuideInventoryItem(args)
 	selectedInventoryCategory = category
 	resetScrollPosition(InventoryItems)
 	updatePanels()
-	uiController.OpenFrame("Inventory")
+	openGrowthFrame("Inventory", "guide")
 
 	local card = typeof(itemId) == "string" and generatedInventoryCards[getGeneratedCardKey(category, itemId)] or nil
 	return card and card:FindFirstChild("EquipButton")

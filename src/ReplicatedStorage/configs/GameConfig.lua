@@ -148,7 +148,7 @@ GameConfig.FlipACoin = {
 		[2] = "Pair",
 		[3] = "Triple",
 		[4] = "Four Heads",
-		[5] = "Jackpot",
+		[5] = "Perfect Five",
 	},
 	FirstRebirthAssist = {
 		BaseBonus = 0.07,

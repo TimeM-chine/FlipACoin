@@ -155,9 +155,11 @@
 
 建议：
 
-- 谨慎使用 `Cash Out`、`Double` 等强博彩词；如果保留，优先作为游戏内 streak 决策，不与 Robux 购买直接绑定。
+- 谨慎使用 `Cash Out`、`Double`、`Jackpot` 等强博彩词；如果未来做 streak 决策，优先使用中性表达，不与 Robux 购买直接绑定。
 - 不做 Robux 直接购买随机收益。
 - 如果未来做付费随机装扮，必须明确展示概率，并遵守 Roblox 随机虚拟物品政策。
+
+当前小步：源码里面向玩家的 `Jackpot` 结果 / 全桌提示 / 座位状态 / Shop 角色标签已收敛为 `Perfect Five`、`Table Bonus`、`Hot Streak` 或 `Perfect`；内部 `comboKey = "jackpot"`、`TableJackpot` 配置和 `coinflip_table_jackpot` 埋点保留为历史 schema，不作为玩家可见文案。
 
 验收：
 
@@ -173,6 +175,8 @@
 - 记录首局：进服到入座、入座到第一次 Flip、首次 Auto Toggle、首次升级、首次打开 Shop / Inventory / Rebirth。
 - 区分 touch / keyboard / gamepad 设备口径。
 - 优先看移动端前 3 分钟流失点。
+
+当前小步：核心 session 埋点已覆盖进服、离服、session 设备画像、前 `3` 分钟短会话结束、进服到首次入座 latency、首次 Flip latency、首次 Auto Toggle、首次 run upgrade、首次打开 `Shop / Inventory / Rebirth` 和 Flip 次数 milestone。这些事件只用服务器内存 session 去重，不新增持久字段；`coinflip_device_profile` 带 `touch / keyboard / gamepad / hybrid` 设备分类、viewport band 和最近输入类型，`coinflip_early_session_end` 带设备分类、viewport band 和当前首局进度阶段，growth panel 打开事件带 panel、入口 source 和最近输入类型。
 
 验收：
 
