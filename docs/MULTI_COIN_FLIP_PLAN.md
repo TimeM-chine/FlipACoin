@@ -54,17 +54,17 @@
 
 当前重要数值：
 
-- `BaseHeadsChance = 0.23`
+- `BaseHeadsChance = 0.30`
 - `MaxHeadsChance = 0.60`
-- `BaseReward = 7`
-- `BaseTailsReward = 1`
+- `BaseReward = 10`
+- `BaseTailsReward = 2`
 - `BaseFlipInterval = 1.60`
-- `ValueGrowth = 1.19`
-- `ComboBaseStep = 0.18`
-- `ComboStepPerLevel = 0.04`
+- `ValueGrowth = 1.28`
+- `ComboBaseStep = 0.25`
+- `ComboStepPerLevel = 0.06`
 - `BiasStep = 0.025`
 
-当前 `currentStreak` 是连续 Heads 的语义。多金币上线后，建议保留字段名以减少改动面，但把项目语义更新为 `Round Streak`：连续多少轮达到成功条件。
+当前 `currentStreak` 已是 `Round Streak` 语义：连续多少轮达到成功条件。字段名保持不变以减少改动面。
 
 ## 4. 核心规则方案
 

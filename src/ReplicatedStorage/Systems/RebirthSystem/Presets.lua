@@ -1879,7 +1879,9 @@ RebirthPresets.RunUpgradeOrder = table.freeze({
 RebirthPresets.FlipACoin = {
 	Rebirth = {
 		MinCash = 250,
+		MinCashGrowth = 1.18,
 		CashPerPoint = 250,
+		CashPerPointGrowth = 1.12,
 		MaxPointGain = 8,
 		CashAfterReset = 30,
 		BiasLevelsPerRebirth = 0,
@@ -1945,18 +1947,30 @@ function RebirthPresets.GetFlipACoinUpgradeCost(upgradeKey, currentLevel)
 	return math.round(config.costBase * (config.costGrowth ^ currentLevel))
 end
 
+function RebirthPresets.GetFlipACoinRebirthMinCash(rebirthCount)
+	local config = RebirthPresets.FlipACoin.Rebirth
+	return math.round(config.MinCash * ((config.MinCashGrowth or 1) ^ math.max(rebirthCount or 0, 0)))
+end
+
+function RebirthPresets.GetFlipACoinRebirthCashPerPoint(rebirthCount)
+	local config = RebirthPresets.FlipACoin.Rebirth
+	return math.round(config.CashPerPoint * ((config.CashPerPointGrowth or 1) ^ math.max(rebirthCount or 0, 0)))
+end
+
 function RebirthPresets.IsFlipACoinUpgradeMaxed(upgradeKey, currentLevel)
 	local config = RebirthPresets.GetFlipACoinUpgradeConfig(upgradeKey)
 	return config and currentLevel >= config.maxLevel
 end
 
-function RebirthPresets.GetFlipACoinPointGain(cash)
+function RebirthPresets.GetFlipACoinPointGain(cash, rebirthCount)
 	local config = RebirthPresets.FlipACoin.Rebirth
-	if cash < config.MinCash then
+	local minCash = RebirthPresets.GetFlipACoinRebirthMinCash(rebirthCount)
+	if cash < minCash then
 		return 0
 	end
 
-	return math.clamp(math.floor(cash / config.CashPerPoint), 1, config.MaxPointGain)
+	local cashPerPoint = RebirthPresets.GetFlipACoinRebirthCashPerPoint(rebirthCount)
+	return math.clamp(math.floor(cash / cashPerPoint), 1, config.MaxPointGain)
 end
 
 function RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree, rebirthCount)

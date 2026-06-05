@@ -1,6 +1,6 @@
 # TASK_STATE
 
-最后更新：2026-06-04
+最后更新：2026-06-05
 
 > 目的：记录当前正在做什么、下一步是什么、关键决策、待验证项与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`；已完成的历史日志放 `docs/archive/`。
 
@@ -41,7 +41,7 @@
 - Studio Play：填入真实 Developer Product / Game Pass id 后，确认 Boosts 入口能弹出 Robux 购买 prompt；购买 Cash / Rebirth Points / Apex bundle / VIP / 2x Cash / Lucky Charm / Quick Flip 后刷新 HUD、Shop、Inventory、Rebirth 和座位表现，并记录 `coinflip_gamepass_granted`。
 - Creator Dashboard：创建 `cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle / paidCash2x10m` 七个付费 Developer Products、一个 Rewarded Ads 专用 Developer Product，以及 `vip / winsX2 / luckyCharm / quickFlip` 四个 Game Pass；把付费 product id 填回 `Products.flipACoin`，把广告奖励 product id 填回 `RewardedAds.DevProductId`。
 - Studio Play：新档默认 Cash 为 `9`，入座后看到首次 Flip 引导；首次 Flip 后进入 v4 Value 升级阶段，Cash 不足时继续高亮 `FLIP`，Cash 达到 `12` 后高亮 HUD 内实际 `ValueButton`，点击升级后进入 Rebirth 引导。
-- Studio Play：确认 Phase 0 正反馈调参后的首局节奏，重点看首次升级是否更有反馈、首次 Rebirth 是否过快；如果 Rebirth 明显过快，再单独调整 `RebirthPresets.FlipACoin.Rebirth.MinCash`。
+- Studio Play：确认 Phase 0 正反馈调参后的首局节奏，重点看首次升级是否更有反馈、首次 Rebirth 是否过快；如果后续 Rebirth 节奏仍明显过快，再单独调整 `RebirthPresets.FlipACoin.Rebirth.MinCashGrowth / CashPerPointGrowth`。
 - Studio Play：确认 Rebirth `Coin Spread` 购买后的真实运行体感，重点看多 Coin 立即生效后的世界表现、round streak 是否按成功轮数增减、失败但有 Heads 的奖励是否能接受；源码层已确认购买后 `coinCountLevel` / `coinCount` 会即时同步增长。
 - Studio Play：确认 Phase 2 HUD 文案，重点看 `1/1`、`1/3`、`2/3`、`3/3` 等结果是否清楚，`Streak reset` 是否不会和有 Heads 奖励矛盾，移动端是否挤压底部 ResultLabel。
 - Studio Play：确认 Phase 3 多金币扇形世界表现，重点看自己的相机是否能看清多枚硬币、扇形是否以玩家到中心落点为中轴、临时 coin / shadow / pulse 是否在下一轮或座位隐藏后清理。
@@ -75,6 +75,18 @@
 - 可评估极简决策点：高 streak 后出现保留本轮 streak 或继续挑战额外 bonus 的轻选择，但不要使用强博彩词，也不要破坏“一键 Flip”的主循环。
 
 ## Recent Done
+
+### 2026-06-05 Coin landing burst and Rebirth cost curve
+
+- Outcome: `EffectSystem` 的 `coinLandingBurst` 现在按单 Coin / 多 Coin 的每枚落地结果绑定到对应 Coin visual：burst holder 挂到当前硬币对象下并 weld 到 focus part / PrimaryPart / Part；holder 标记 `IgnoreCoinBounds`，避免进入后续落点 bounds lift 计算。`RebirthSystem` 的执行门槛和每点 RP 所需 Cash 现在按当前 rebirth 次数轻量递增：首轮仍为 `$250 / RP`，后续分别按 `MinCashGrowth = 1.18` 和 `CashPerPointGrowth = 1.12` 增长；服务端 rebirth 判定、Rebirth state、Onboarding 和首局 assist 已统一使用动态数值，Rebirth 面板文案显示当前 `$ / RP`。
+- Decisions: Rebirth 成本应当逐渐提升，但只做温和曲线；理由是 `Coin Spread / Chain Start / Quick Start / Lucky Start` 会提高重生后起跑能力，如果门槛固定，越到后面越容易快速循环，永久升级的选择压力会下降。曲线不提高首轮门槛，避免破坏新手首个 Rebirth 节奏。
+- Validation: `git diff --check -- src/ReplicatedStorage/Systems/EffectSystem/init.lua src/ReplicatedStorage/Systems/RebirthSystem/Presets.lua src/ReplicatedStorage/Systems/RebirthSystem/init.lua src/ReplicatedStorage/Systems/RebirthSystem/ui.lua src/ReplicatedStorage/Systems/CoinFlipSystem/init.lua src/ReplicatedStorage/Systems/CoinFlipSystem/Modules/Onboarding.lua docs/TASK_STATE.md docs/PROJECT_LOGIC.md` 通过；源码扫描确认 `GetFlipACoinPointGain()` 调用点都传入 rebirth count。Lua 数值 sanity：rebirth `0..10` 的 `MinCash` 为 `250, 295, 348, 411, 485, 572, 675, 796, 940, 1109, 1308`，`CashPerPoint` 为 `250, 280, 314, 351, 393, 441, 493, 553, 619, 693, 776`。`stylua --check` 仍因 Aftman 未注册 stylua 无法运行；本机未发现 `luau` / `selene`；未执行 Studio Play，多 Coin burst 跟随和 Rebirth 面板观感仍需 Studio 确认。
+
+### 2026-06-05 Non-UI follow-up pass
+
+- Outcome: 处理不依赖 UI 适配、Creator Dashboard 或真实 Robux prompt 的可自动覆盖项。源码核对确认真实玩家 Flip 路径会写入 Profile XP、轻量每日目标、analytics、Table Bonus 和 Edge Stand；fake player flip 不写 XP / daily goal / session milestone，不触发共享 Table Bonus 或 Edge Stand。高阶 Coin `coin7` 到 `coin10` 的 `edgeStandChanceBonus / perfectRewardMultiplierBonus / tailsRerollChance` 已通过 `EcoPresets.BuildLoadoutBonuses()` 汇总进结算路径。
+- Docs: 修正当前事实文档漂移：`GameConfig.isAlphaTest` 和 `GameConfig.IsDebug` 当前均为 `false`，Studio 测试不会自动用 `DefaultData` 或 `DebugData` 覆盖 profile；`ROBLOX_PLATFORM_IMPROVEMENT.md` 改为记录移动端 HUD / growth panel 重排曾接入但现已临时注释；`MULTI_COIN_FLIP_PLAN.md` 的当前数值更新为 Phase 0 后的源码数值，并标明 `currentStreak` 已是 Round Streak 语义。
+- Validation: Roblox Studio MCP active 为 `Flip A Coin`；Edit-mode 纯模块 sanity 通过，覆盖 daily goal 初始化 / 封顶 / 自动 claim、jackpot XP 上限、`coin7` bonus 汇总、`coin10` Edge Stand 概率、Perfect Five reward bonus 和 Tails reroll 每轮一次结果更新，`failureCount = 0`。未触发 Play、购买、Rebirth 或真实 profile 写入；真实玩家 Flip 后的存档写入和埋点上报仍保留给 Studio Play / Analytics 人工确认。
 
 ### 2026-06-04 Studio MCP remaining verification pass
 

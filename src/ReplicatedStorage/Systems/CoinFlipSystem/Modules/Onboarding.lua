@@ -159,7 +159,8 @@ end
 
 function Onboarding.CanRebirth(playerIns)
 	local cash = playerIns:GetOneData(dataKey.wins) or 0
-	return RebirthPresets.GetFlipACoinPointGain(cash) > 0
+	local rebirthCount = playerIns:GetOneData(dataKey.rebirth) or 0
+	return RebirthPresets.GetFlipACoinPointGain(cash, rebirthCount) > 0
 end
 
 local function isStateComplete(state)

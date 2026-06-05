@@ -502,7 +502,7 @@ FlipACoin
 当前首发成长配置按职责拆分：
 
 - `EcoSystem/Presets.lua`：首发 Coin / Desk Setup / Chair 商品、价格、稀有度 / 角色、Cash 倍率、luck 加成，以及当前 Lucky Coin 词条小步的 Edge Stand chance / Perfect reward / Tails reroll 加成；FlipACoin Developer Product / Game Pass 占位 id 与付费效果配置
-- `RebirthSystem/Presets.lua`：重生最低 Cash、Cash 到点数换算、单次点数上限、重生后 Cash，以及当前 Rebirth 面板启用的 `Coin Spread / Chain Start / Quick Start / Lucky Start` 四个永久升级；重生次数本身不再自动给起始 Luck，`Coin Spread` 只提高多 Coin 数量，不再顺带提高起始 Value
+- `RebirthSystem/Presets.lua`：重生最低 Cash、Cash 到点数换算、单次点数上限、重生后 Cash，以及当前 Rebirth 面板启用的 `Coin Spread / Chain Start / Quick Start / Lucky Start` 四个永久升级；重生次数本身不再自动给起始 Luck，`Coin Spread` 只提高多 Coin 数量，不再顺带提高起始 Value。Rebirth 执行门槛和每点 RP 所需 Cash 会按当前 rebirth 次数轻量递增，避免永久升级叠加后重生节奏越来越短。
 - `EffectSystem/Presets.lua`：桌面硬币飞行、水平轴翻面、多金币扇形落点角度、落地随机平铺朝向收敛、自己 / 他人落地脉冲、落地短促粒子 burst、streak ring、milestone fallback 和上次结果保留表现
 
 硬币资产约定：
@@ -514,7 +514,7 @@ FlipACoin
 - `EffectSystem` 在动态座位布局下按当前 `TableSeatSystem:GetSeatTargetCFrame()` 推导硬币落点，让 fake player / 真实玩家当前座位、桌搭和硬币跟随同一套动态排位；单金币动态硬币落点位于座位正前方，不带左右偏移。多金币视觉会以玩家到中心落点的线段为中轴，在桌面平面上按 `MultiCoinFanAngleStep = 13° / MultiCoinFanMaxAngle = 30°` 旋转出左右对称的扇形落点，并按 coin 数对多 coin 模型做轻微临时缩放以减少结算重叠。没有动态座位目标时才读取 `Workspace.CoinFlipTable.Attachments/<SeatId>CoinLandingAnchor`，再回退到 `EffectSystem/Presets.lua` 的 `LandingRadius`，当前默认半径为 `5.4`
 - 当前 Studio 资源使用 `<SeatId>CoinLandingAnchor` 作为每个座位的静态 fallback 硬币落点定位块，位于玩家侧且在桌搭锚点相反侧，避免 Coin 与 Desk Setup 重合
 - Flip 落点按硬币最终姿态的真实包围角点和 `TableTop` 表面法线计算；落地高度来自一次桌面 raycast 命中点加一次 bounds lift，不能再用固定 `coin.Size.X * 0.5` 或重复叠加 lift
-- Flip 落地时除程序化 pulse 外，会从 Studio-owned `EffectSystem.Assets.coinLandingBurst` 克隆短促粒子 burst；Heads 偏金色，Tails 偏橙红，缺失该资产时静默跳过
+- Flip 落地时除程序化 pulse 外，会从 Studio-owned `EffectSystem.Assets.coinLandingBurst` 克隆短促粒子 burst；Heads 偏金色，Tails 偏橙红，缺失该资产时静默跳过。Burst anchor 会挂到当前落地的硬币对象下并焊到该 Coin visual 的 focus part / PrimaryPart / Part，跟随对应 `CoinModel` 生命周期；临时 burst holder 带 `IgnoreCoinBounds`，避免干扰下一次落点 bounds lift。
 - 每次 Flip 开始时决定该次落桌的随机桌面 yaw；空中翻转只绕水平轴旋转，接近桌面时平滑收敛到 Heads / Tails 与最终平铺朝向，避免硬币落桌后再突兀拧转
 - 每个座位的持久硬币记录上一轮落地结果和桌面随机 yaw；seat state 刷新、idle 重摆或换装后仍展示上一轮 Heads / Tails 和落地方向，不重置成默认正面
 - Phase 3 世界多金币视觉已上线：`CoinFlipSystem/ui.lua` 把 `coinCount / coinResults` 传给 `EffectSystem:PlayCoinFlipVisual()`；`coinCount > 1` 时本地显示多枚硬币扇形抛出，落地后多枚硬币会继续留在桌面上，直到该座位下一次 Flip、隐藏或换装清理，让玩家看清每枚 coin 的 Heads / Tails 结果。HUD 仍不新增 `CoinResultRow` prefab，多金币详细结果继续通过现有 `ResultLabel` 显示。
@@ -837,11 +837,11 @@ FlipACoin
 
 一个关键现实：
 
-- `GameConfig.isAlphaTest` 当前为 `true`
-- alpha 测试阶段 `DataManager` 每次玩家进服都会把已加载 profile 的 `Data` 替换为 `DefaultData` 深拷贝，确保每次进入都是初始数据
+- `GameConfig.isAlphaTest` 当前为 `false`
+- alpha 测试阶段如果重新打开，`DataManager` 每次玩家进服都会把已加载 profile 的 `Data` 替换为 `DefaultData` 深拷贝，确保每次进入都是初始数据
 - `isAlphaTest` 优先于 Studio `IsDebug`；关闭 alpha 后，Studio debug 才会继续使用 `DebugData`
-- `GameConfig.IsDebug` 目前在 Studio 下为 `true`
-- 所以非 alpha 的 Studio 测试会直接把 profile 数据替换成 `DebugData`
+- `GameConfig.IsDebug` 当前也为 `false`，因为 `GameConfig.lua` 内部本地 `IsDebug = false`
+- 所以当前 Studio 测试不会自动用 `DefaultData` 或 `DebugData` 覆盖 profile；需要重置数据时应显式打开 alpha / debug 配置或用专门测试账号
 
 当前 `DebugData` 特点：
 

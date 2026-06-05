@@ -426,7 +426,7 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 		local landingPulseOptions = getLandingPulseOptions(result, isObservedFlip)
 		playSfx("coinLand")
 		playLandingPulse(landingPulse, shadowPos, pulseColor, landingPulseOptions)
-		playCoinLandingBurst(surfaceEndPos, tableNormal, result)
+		playCoinLandingBurst(surfaceEndPos, tableNormal, result, visual)
 		if shouldShowObservedStreakPulse then
 			playLandingPulse(streakPulse, shadowPos, VisualConfig.StreakPulseColor, {
 				startSize = VisualConfig.StreakPulseStartSize,
@@ -681,7 +681,7 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 			local pulseColor = getLandingPulseColor(state.result, isObservedFlip)
 			local landingPulseOptions = getLandingPulseOptions(state.result, isObservedFlip)
 			playLandingPulse(state.coinVisual.landingPulse, state.shadowPos, pulseColor, landingPulseOptions)
-			playCoinLandingBurst(state.surfaceEndPos, state.tableNormal, state.result)
+			playCoinLandingBurst(state.surfaceEndPos, state.tableNormal, state.result, state.coinVisual)
 			if state.edgeStand then
 				playCoinVisualHighlight(seatId, state.coinVisual, {
 					duration = VisualConfig.MilestoneHighlightDuration,
@@ -1464,10 +1464,12 @@ end
 function getCoinObjectParts(coinObject)
 	local parts = {}
 	if coinObject:IsA("BasePart") then
-		table.insert(parts, coinObject)
+		if coinObject:GetAttribute("IgnoreCoinBounds") ~= true then
+			table.insert(parts, coinObject)
+		end
 	elseif coinObject:IsA("Model") then
 		for _, descendant in ipairs(coinObject:GetDescendants()) do
-			if descendant:IsA("BasePart") then
+			if descendant:IsA("BasePart") and descendant:GetAttribute("IgnoreCoinBounds") ~= true then
 				table.insert(parts, descendant)
 			end
 		end
@@ -2042,23 +2044,33 @@ function playTableTapRipple(position, normal)
 	Debris:AddItem(ripple, SceneInteractionConfig.TableTapRippleDuration + 0.12)
 end
 
-function playCoinLandingBurst(position, normal, result)
+function playCoinLandingBurst(position, normal, result, coinVisual)
 	local burstAsset = script.Assets:FindFirstChild(VisualConfig.LandingBurstAssetName)
 	if not burstAsset or not burstAsset:IsA("Attachment") then
 		return
 	end
 
+	local targetPart = getCoinVisualEffectTarget(coinVisual)
+	local targetParent = coinVisual and coinVisual.coin
 	local holder = Instance.new("Part")
 	holder.Name = "CoinLandingBurst"
-	holder.Anchored = true
+	holder.Anchored = targetPart == nil
 	holder.CanCollide = false
 	holder.CanTouch = false
 	holder.CanQuery = false
 	holder.CastShadow = false
+	holder.Massless = true
 	holder.Transparency = 1
 	holder.Size = Vector3.new(0.2, 0.2, 0.2)
 	holder.CFrame = getCylinderSurfaceCFrame(position + normal.Unit * VisualConfig.LandingBurstSurfaceGap, normal)
-	holder.Parent = getEffectRuntimeParent()
+	holder:SetAttribute("IgnoreCoinBounds", true)
+	holder.Parent = targetParent or getEffectRuntimeParent()
+	if targetPart then
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = holder
+		weld.Part1 = targetPart
+		weld.Parent = holder
+	end
 
 	local burst = burstAsset:Clone()
 	burst.Parent = holder
@@ -2070,6 +2082,23 @@ function playCoinLandingBurst(position, normal, result)
 
 	EffectSystem:PlayInsideEffects(holder)
 	Debris:AddItem(holder, VisualConfig.LandingBurstLifetime)
+end
+
+function getCoinVisualEffectTarget(coinVisual)
+	if not coinVisual or not coinVisual.coin then
+		return nil
+	end
+	if coinVisual.focusPart and coinVisual.focusPart:IsA("BasePart") and coinVisual.focusPart:IsDescendantOf(coinVisual.coin) then
+		return coinVisual.focusPart
+	end
+	if coinVisual.coin:IsA("BasePart") then
+		return coinVisual.coin
+	end
+	if coinVisual.coin:IsA("Model") and coinVisual.coin.PrimaryPart then
+		return coinVisual.coin.PrimaryPart
+	end
+
+	return getCoinObjectParts(coinVisual.coin)[1]
 end
 
 function tintBurstParticles(container, primaryColor, secondaryColor)

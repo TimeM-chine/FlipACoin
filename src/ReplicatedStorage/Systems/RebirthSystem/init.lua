@@ -173,7 +173,7 @@ function RebirthSystem:GetRebirthState(sender, player, args)
 		local cash = playerIns:GetOneData(dataKey.wins)
 		local rebirthCount = playerIns:GetOneData(dataKey.rebirth)
 		local rebirthPoints = playerIns:GetOneData(dataKey.fateShards)
-		local pointGain = RebirthPresets.GetFlipACoinPointGain(cash)
+		local pointGain = RebirthPresets.GetFlipACoinPointGain(cash, rebirthCount)
 
 		return {
 			cash = cash,
@@ -182,8 +182,8 @@ function RebirthSystem:GetRebirthState(sender, player, args)
 			fateShards = rebirthPoints,
 			pointGain = pointGain,
 			canRebirth = pointGain > 0,
-			rebirthMinCash = RebirthPresets.FlipACoin.Rebirth.MinCash,
-			rebirthCashPerPoint = RebirthPresets.FlipACoin.Rebirth.CashPerPoint,
+			rebirthMinCash = RebirthPresets.GetFlipACoinRebirthMinCash(rebirthCount),
+			rebirthCashPerPoint = RebirthPresets.GetFlipACoinRebirthCashPerPoint(rebirthCount),
 			rebirthCashAfterReset = RebirthPresets.FlipACoin.Rebirth.CashAfterReset,
 			rebirthTree = table.clone(rebirthTree),
 			rebirthUpgrades = buildRebirthUpgrades(rebirthTree),
@@ -272,7 +272,8 @@ function RebirthSystem:RequestRebirth(sender, player)
 		end
 
 		local wins = playerIns:GetOneData(dataKey.wins)
-		local pointGain = RebirthPresets.GetFlipACoinPointGain(wins)
+		local rebirthCount = playerIns:GetOneData(dataKey.rebirth)
+		local pointGain = RebirthPresets.GetFlipACoinPointGain(wins, rebirthCount)
 		if pointGain <= 0 then
 			SystemMgr.systems.GuiSystem:SetNotification(SENDER, player, {
 				text = "Build more Cash before rebirth",
@@ -284,7 +285,7 @@ function RebirthSystem:RequestRebirth(sender, player)
 		end
 
 		local rebirthTree = normalizeRebirthTree(playerIns)
-		local newRebirthLevel = playerIns:GetOneData(dataKey.rebirth) + 1
+		local newRebirthLevel = rebirthCount + 1
 		local resetRunData = RebirthPresets.BuildFlipACoinRunBaseline(rebirthTree, newRebirthLevel)
 		playerIns:SetOneData(dataKey.wins, RebirthPresets.FlipACoin.Rebirth.CashAfterReset)
 		playerIns:SetOneData(dataKey.fateShards, playerIns:GetOneData(dataKey.fateShards) + pointGain)

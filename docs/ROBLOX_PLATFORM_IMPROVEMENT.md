@@ -34,9 +34,9 @@
 
 ## 当前进展
 
-- 2026-05-18：代码侧已完成 P0-1 / P0-2 的第一轮接入：`CoinFlipHUD` 会在触屏端按 viewport 套用 mobile layout 参数，触屏端隐藏 keyboard / gamepad 输入提示，ready 文案改为 `Tap FLIP`，手机 portrait 下折叠 Chance / Speed 状态。
-- 2026-05-18：代码侧已完成 P0-3 的第一轮 safe-area 接入：`uiController.OpenFrame()` 会在触屏移动端对 `Shop / Inventory / Rebirth` 现有 Frame 套用 viewport / Core UI inset 感知的 Scale 布局，并在 viewport 变化时刷新。
-- 待验证：Studio 未开启，尚未做手机 portrait / landscape、平板、TopbarPlus 点击面积、growth panel 内容挤压和双客户端实机 QA。
+- 2026-05-18：代码侧曾完成 P0-1 / P0-2 的第一轮接入：触屏端隐藏 keyboard / gamepad 输入提示，ready 文案改为 `Tap FLIP`；后续为收敛首发桌面体验，`CoinFlipSystem/ui.lua` 的 mobile HUD profile 和 portrait 下折叠 Chance / Speed 逻辑已临时注释，触屏端目前沿用桌面 / narrow HUD 布局。
+- 2026-05-18：代码侧曾完成 P0-3 的第一轮 safe-area 接入；后续 `uiController.OpenFrame()` 的移动端 growth panel 重排与 viewport 刷新绑定已临时注释，等待移动端布局重做。
+- 待验证：尚未做手机 portrait / landscape、平板、TopbarPlus 点击面积、growth panel 内容挤压和双客户端实机 QA。
 
 ## 评分
 

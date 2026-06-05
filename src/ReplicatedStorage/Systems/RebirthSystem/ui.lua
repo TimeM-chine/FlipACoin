@@ -74,6 +74,7 @@ local function updateRebirthPanel()
 	local pointGain = currentRebirthState.pointGain or 0
 	local rebirthPoints = currentRebirthState.rebirthPoints or currentRebirthState.fateShards or 0
 	local minCash = currentRebirthState.rebirthMinCash or RebirthPresets.FlipACoin.Rebirth.MinCash
+	local cashPerPoint = currentRebirthState.rebirthCashPerPoint or RebirthPresets.FlipACoin.Rebirth.CashPerPoint
 	local cashAfterReset = currentRebirthState.rebirthCashAfterReset or RebirthPresets.FlipACoin.Rebirth.CashAfterReset
 	local canRebirth = currentRebirthState.canRebirth == true
 
@@ -84,7 +85,7 @@ local function updateRebirthPanel()
 		`Cash resets to $ {Util.FormatNumber(cashAfterReset, true)}. Run stats reset to Rebirth upgrade baselines. Need $ {Util.FormatNumber(
 			minCash,
 			true
-		)} minimum.`
+		)} minimum; $ {Util.FormatNumber(cashPerPoint, true)} per RP.`
 	setButtonText(
 		RebirthConfirmButton,
 		canRebirth and "Rebirth" or `Need $ {Util.FormatNumber(minCash, true)}`,

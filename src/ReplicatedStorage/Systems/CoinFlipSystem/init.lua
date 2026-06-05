@@ -370,7 +370,7 @@ local function getFirstRebirthAssistBonus(playerIns, playerState)
 
 	return Presets.GetFirstRebirthAssistBonus(
 		playerIns:GetOneData(dataKey.wins),
-		RebirthPresets.FlipACoin.Rebirth.MinCash,
+		RebirthPresets.GetFlipACoinRebirthMinCash(playerIns:GetOneData(dataKey.rebirth)),
 		playerState.firstRebirthTailsStreak
 	)
 end
