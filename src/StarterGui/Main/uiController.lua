@@ -42,6 +42,7 @@ local responsiveViewportConnection
 local closeInputContext
 local GrowthFrameNames = {
 	Shop = true,
+	Boosts = true,
 	Inventory = true,
 	Rebirth = true,
 }

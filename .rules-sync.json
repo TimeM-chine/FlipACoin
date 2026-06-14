@@ -1,5 +1,5 @@
 {
-  "centralRoot": "../_central-rules",
+  "centralRoot": "../CentralRules",
   "files": [
     {
       "source": "AGENTS.md",
@@ -18,10 +18,6 @@
       "target": ".cursor/rules/10-luau-style.mdc"
     },
     {
-      "source": ".cursor/rules/15-repository-conventions.mdc",
-      "target": ".cursor/rules/15-repository-conventions.mdc"
-    },
-    {
       "source": ".cursor/rules/20-system-architecture.mdc",
       "target": ".cursor/rules/20-system-architecture.mdc"
     },
@@ -36,6 +32,10 @@
     {
       "source": ".cursor/rules/50-testing-and-validation.mdc",
       "target": ".cursor/rules/50-testing-and-validation.mdc"
+    },
+    {
+      "source": "docs/FRAMEWORK.md",
+      "target": "docs/FRAMEWORK.md"
     }
   ]
 }

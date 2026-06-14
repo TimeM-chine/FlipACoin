@@ -38,6 +38,16 @@ Before writing or reviewing Luau, read the repository's canonical Luau / framewo
 - Do not duplicate content across tiers. If the same fact appears in two, the more specific tier is canonical and the other should be trimmed.
 - When docs and code disagree, trust the code and update docs.
 
+## Docs budget
+
+Live docs are read at the start of many conversations; their size is a recurring cost. Enforce these limits when writing or updating docs:
+
+- Startup / bootstrap docs hold only slow-changing facts (project positioning, entry points, doc routing). Never write implementation progress, feature status, or "X is still pending" snapshots there; status belongs in task-state or project-logic docs.
+- Project-logic entries are short facts: what exists, who is authoritative, where boundaries are. Keep each bullet within roughly two lines. If a bullet keeps growing with implementation detail, delete the detail — the source code is the reference for how things work.
+- Task-state done/outcome lines are one sentence each. Keep only the most recent ~10 done entries in the live file; move older ones to archive docs during normal maintenance.
+- When the live product brief (for example `README.md`) is canonical, do not restate it in other docs; record only deviations and clarifications.
+- Prefer deleting stale text over appending corrections next to it.
+
 ## Discovery rules
 
 - Do not assume every directory is active just because it exists.

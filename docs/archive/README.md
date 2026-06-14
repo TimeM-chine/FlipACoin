@@ -11,5 +11,6 @@
 
 ## Files
 
+- `TASK_STATE_DONE_2026-06-02_TO_2026-06-04.md`：从旧 `TASK_STATE.md` 的 `Recent Done` 压缩出来的已完成历史摘要，覆盖 2026-06-02 到 2026-06-04。
 - `TASK_STATE_DONE_2026-05_TO_2026-06-01.md`：从旧 `TASK_STATE.md` 压缩出来的已完成历史摘要，覆盖 2026-05-01 到 2026-06-01。
 

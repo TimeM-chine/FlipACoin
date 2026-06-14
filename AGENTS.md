@@ -1,4 +1,4 @@
-# Repository Instructions
+﻿# Repository Instructions
 
 ## First Read
 
@@ -25,7 +25,6 @@ Rule of thumb:
 - For code-only Luau changes, do not run `rojo build` as validation unless the repository's mapping, instance tree, asset structure, or Rojo config changed.
 - Do not use Rojo/source edits just to create complex asset placeholders. Treat art, models, layered UI prefabs, VFX/SFX, and other rich Roblox assets as Studio-owned unless the user explicitly asks to source-control a specific simple structure.
 - Do not generate adjustable Roblox UI at runtime with code. Author Frames, cards, layouts, corners, strokes, constraints, and other inspectable UI structure in Studio via MCP tools, then let Luau read existing instances, bind interactions, toggle visibility, and update dynamic text/state. Topbar/icon modules, template clones for short-lived effects, and non-UI runtime instances are acceptable when they are intentionally not designer-edited prefabs.
-- When authoring editable UI prefabs, use `Scale` for both `Position` and `Size` on layout-bearing containers and controls. Keep `Offset` for intentional padding, border thickness, text inset, or other fixed micro-adjustments only.
 - If an operation can be completed with an MCP tool, prefer MCP over computer-use automation.
 - For complex visual, multi-client, mobile-device, or Studio-only validation that automation cannot verify reliably, record feasible source review and sanity checks, then leave final feel / visual judgment to the user.
 
@@ -35,10 +34,11 @@ When the repository keeps live task state:
 
 - Add a new task entry when starting work.
 - Keep `Progress` / `Next` / `Decisions` accurate while working.
-- Move finished work to the repository's done/history section with a concise outcome and date.
+- Move finished work to the repository's done/history section with a one-sentence outcome and date.
 - Record non-obvious decisions, rejected alternatives, and follow-ups.
 - Put unscheduled future ideas in the repository's backlog section.
 - Keep long historical plans, audit records, and stale execution logs in archive docs when the repository has them.
+- Keep only the most recent ~10 done entries in the live file; rotate older entries into archive docs during normal maintenance.
 
 ### Project-Logic Maintenance
 
@@ -53,6 +53,8 @@ When the repository keeps a project-logic document, update it in the same change
 
 Prefer small targeted edits over rewriting large sections.
 
+Keep entries as short facts: what exists, who is authoritative, where boundaries are. Do not accumulate implementation narratives — source code is the reference for how things work. Keep each bullet within roughly two lines; if a bullet keeps growing, trim it instead of appending.
+
 ### Framework Maintenance
 
 When the repository keeps a framework reference document, update it only when the framework itself changes, such as:
@@ -63,6 +65,10 @@ When the repository keeps a framework reference document, update it only when th
 - Shared coding habits or framework-level helpers.
 
 Do not put repository-specific facts into framework docs.
+
+## Single Source Of Truth For Coding Rules
+
+When a repository keeps a canonical coding-habits checklist (for example `docs/FRAMEWORK.md` §8), that checklist is the only authoritative copy. `AGENTS.md` non-negotiables and `.cursor/rules/*.mdc` are compressed subsets that must point back to it instead of forking. When updating a coding rule, update the canonical checklist first, then shrink — never expand — the subsets.
 
 ## Non-Negotiables
 
@@ -77,6 +83,8 @@ If a repository has stricter local guidance, follow the local guidance. Otherwis
 - Do not use `do ... end` scoping blocks.
 - Do not add defensive nil/type/shape guards for deterministic project-owned paths, configs, or internal calls. Validate player-provided inputs and genuinely optional runtime state.
 - Do not use `Instance.new` in gameplay UI code to build editable UI prefabs or styling helpers; create those instances in Studio and bind them from code.
+- Studio/MCP-authored screen UI should use scale-based `Size` / `Position` for responsive layouts; keep offsets at `0` unless fixed-pixel behavior is intentional and documented.
+- Repeated UI rows/cards, especially in `ScrollingFrame` or grid/list containers, should be authored as a hidden `Template` / `ItemTemplate` in Studio and cloned at runtime.
 - Preserve the repository's established server/client method shape in shared files.
 - Keep helper functions near the end of the file. Do not predeclare `local f` just for forward references. Extract helpers only when reused, non-trivial, or materially clearer.
 - Implement server-authoritative behavior before client presentation when a feature crosses the network boundary.
@@ -88,10 +96,11 @@ If a repository has stricter local guidance, follow the local guidance. Otherwis
 Do not duplicate content across document tiers when a repository has them:
 
 - `AGENTS.md` — cross-tool working rules.
-- Startup / bootstrap docs — cheap orientation and routing.
+- Startup / bootstrap docs — cheap orientation and routing. Slow-changing facts only; no implementation progress or feature-status snapshots.
 - Framework docs — reusable framework mechanics and conventions.
 - Project-logic docs — facts specific to one repository.
 - Task-state docs — live progress and cross-session handoff.
 - Archive docs — historical plans, detailed audits, and old reference material read only on demand.
 
 If the same content appears in two places, treat the more specific tier as canonical and trim the broader one.
+

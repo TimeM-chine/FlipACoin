@@ -33,14 +33,19 @@ local uiController = require(Main:WaitForChild("uiController"))
 
 local CoinFlipMenu = Buttons:WaitForChild("CoinFlipMenu")
 local ShopFrame = Frames:WaitForChild("Shop")
+local BoostsFrame = Frames:WaitForChild("Boosts")
 local InventoryFrame = Frames:WaitForChild("Inventory")
 
 local ShopBody = ShopFrame:WaitForChild("Body")
 local ShopTabs = ShopBody:WaitForChild("Tabs")
-local ShopBoostTab = ShopTabs:FindFirstChild("BoostTab") or ShopTabs:FindFirstChild("RobuxTab")
 local ShopItems = ShopBody:WaitForChild("Items")
 local ShopPreview = ShopBody:WaitForChild("Preview")
 local ShopItemTemplate = ShopItems:WaitForChild("Template")
+
+local BoostsBody = BoostsFrame:WaitForChild("Body")
+local BoostsItems = BoostsBody:WaitForChild("Items")
+local BoostsPreview = BoostsBody:WaitForChild("Preview")
+local BoostsItemTemplate = BoostsItems:WaitForChild("Template")
 
 local InventoryBody = InventoryFrame:WaitForChild("Body")
 local InventoryTabs = InventoryBody:WaitForChild("Tabs")
@@ -65,7 +70,9 @@ local shopTopbarIcon
 local inventoryTopbarIcon
 local boostsTopbarIcon
 local selectedShopItemKeys = {}
+local selectedBoostItemKey
 local generatedShopCards = {}
+local generatedBoostCards = {}
 local generatedInventoryCards = {}
 local rewardedAdAvailabilityToken = 0
 
@@ -237,20 +244,35 @@ end
 local function getSelectedShopItem(items)
 	local selectedKey = selectedShopItemKeys[selectedShopCategory]
 	for _, item in ipairs(items) do
-		if getShopSelectionKey(selectedShopCategory, item) == selectedKey then
+		if item.id == selectedKey then
 			return item
 		end
 	end
 
 	local firstItem = items[1]
 	if firstItem then
-		selectedShopItemKeys[selectedShopCategory] = getShopSelectionKey(selectedShopCategory, firstItem)
+		selectedShopItemKeys[selectedShopCategory] = firstItem.id
 	end
 	return firstItem
 end
 
-local function setPreviewIcon(icon)
-	local holder = ShopPreview:FindFirstChild("Icon") or ShopPreview.PreviewScene:FindFirstChild("Icon")
+local function getSelectedBoostItem(items)
+	for _, item in ipairs(items) do
+		if getShopSelectionKey("boost", item) == selectedBoostItemKey then
+			return item
+		end
+	end
+
+	local firstItem = items[1]
+	if firstItem then
+		selectedBoostItemKey = getShopSelectionKey("boost", firstItem)
+	end
+	return firstItem
+end
+
+local function setPreviewIcon(preview, icon)
+	local previewScene = preview:FindFirstChild("PreviewScene")
+	local holder = preview:FindFirstChild("Icon") or (previewScene and previewScene:FindFirstChild("Icon"))
 	if holder and (holder:IsA("ImageLabel") or holder:IsA("ImageButton")) then
 		holder.Image = icon
 		holder.Visible = icon ~= ""
@@ -292,29 +314,47 @@ local function updateShopPreview(item, ownedItems)
 		ShopPreview.Title.Text = "Select Item"
 		ShopPreview.Equipped.Text = ""
 		ShopPreview.TotalBonus.Text = ""
-		setPreviewIcon("")
+		setPreviewIcon(ShopPreview, "")
 		return
 	end
 
-	setPreviewIcon(getItemIcon(selectedShopCategory, item))
+	setPreviewIcon(ShopPreview, getItemIcon(selectedShopCategory, item))
 	ShopPreview.Title.Text = item.displayName
-	if selectedShopCategory == "boost" then
-		local isOwnedPass = item.itemType == "gamePass" and currentGamePasses[item.key] == true
-		ShopPreview.Equipped.Text = item.description or "Premium boost"
-		if isOwnedPass then
-			ShopPreview.TotalBonus.Text = "Owned"
-		elseif item.configured then
-			ShopPreview.TotalBonus.Text = item.price and Util.GetRobuxText(item.price) or "Robux"
-		else
-			ShopPreview.TotalBonus.Text = "Set ID"
-		end
-		return
-	end
-
 	local isOwned = ownedItems[item.id] == true
 	local priceText = item.cost == 0 and "Starter" or `$ {Util.FormatNumber(item.cost, true)}`
 	ShopPreview.Equipped.Text = `{item.rarity} | {item.role}`
 	ShopPreview.TotalBonus.Text = `{describeItemStats(item.stats)} | {isOwned and "Owned" or priceText}`
+end
+
+local function updateBoostsPreview(item)
+	if not item then
+		BoostsPreview.Title.Text = "Select Boost"
+		BoostsPreview.Equipped.Text = ""
+		BoostsPreview.TotalBonus.Text = ""
+		setPreviewIcon(BoostsPreview, "")
+		return
+	end
+
+	local isOwnedPass = item.itemType == "gamePass" and currentGamePasses[item.key] == true
+	setPreviewIcon(BoostsPreview, getItemIcon("boost", item))
+	BoostsPreview.Title.Text = item.displayName
+	BoostsPreview.Equipped.Text = item.description or "Premium boost"
+	if item.itemType == "rewardedAd" then
+		local cooldownRemaining = getRewardedAdCooldownRemaining()
+		if currentRewardedAdState.available == true then
+			BoostsPreview.TotalBonus.Text = "Free | Ready"
+		elseif cooldownRemaining > 0 then
+			BoostsPreview.TotalBonus.Text = `Free | Wait {formatSeconds(cooldownRemaining)}`
+		else
+			BoostsPreview.TotalBonus.Text = "Free | Unavailable"
+		end
+	elseif isOwnedPass then
+		BoostsPreview.TotalBonus.Text = "Owned"
+	elseif item.configured then
+		BoostsPreview.TotalBonus.Text = item.price and Util.GetRobuxText(item.price) or "Robux"
+	else
+		BoostsPreview.TotalBonus.Text = "Set ID"
+	end
 end
 
 local function playSfx(soundName)
@@ -355,8 +395,8 @@ local function setTopbarIconSelected(icon, isSelected)
 end
 
 local function refreshTopbarIconState()
-	setTopbarIconSelected(shopTopbarIcon, ShopFrame.Visible and selectedShopCategory ~= "boost")
-	setTopbarIconSelected(boostsTopbarIcon, ShopFrame.Visible and selectedShopCategory == "boost")
+	setTopbarIconSelected(shopTopbarIcon, ShopFrame.Visible)
+	setTopbarIconSelected(boostsTopbarIcon, BoostsFrame.Visible)
 	setTopbarIconSelected(inventoryTopbarIcon, InventoryFrame.Visible)
 end
 
@@ -378,99 +418,46 @@ local function updateShopPanel()
 	updateTabButton(ShopTabs.CoinTab, selectedShopCategory == "coin")
 	updateTabButton(ShopTabs.DeskTab, selectedShopCategory == "desk")
 	updateTabButton(ShopTabs.ChairTab, selectedShopCategory == "chair")
-	if ShopBoostTab and ShopBoostTab:IsA("TextButton") then
-		updateTabButton(ShopBoostTab, selectedShopCategory == "boost")
-	end
 
 	local ownedItems = getOwnedItems(selectedShopCategory)
-	local items = selectedShopCategory == "boost" and getOrderedBoostItems()
-		or (EcoPresets.GrowthShopItems[selectedShopCategory] or {})
+	local items = EcoPresets.GrowthShopItems[selectedShopCategory] or {}
 	local selectedItem = getSelectedShopItem(items)
 	clearGeneratedCards(ShopItems)
 	generatedShopCards = {}
 
 	for index, item in ipairs(items) do
 		local card = createGeneratedCard(ShopItemTemplate, ShopItems, index)
-		local itemKey = getShopSelectionKey(selectedShopCategory, item)
+		local itemKey = item.id
 		generatedShopCards[getGeneratedCardKey(selectedShopCategory, itemKey)] = card
-		updateCardSelection(card, selectedItem and itemKey == getShopSelectionKey(selectedShopCategory, selectedItem))
+		updateCardSelection(card, selectedItem and itemKey == selectedItem.id)
 		setCardIcon(card, getItemIcon(selectedShopCategory, item))
 		setTextIfPresent(card, "Name", item.displayName)
 		card.Price.Visible = false
-		if selectedShopCategory == "boost" then
-			card.Bonus.Text = item.description or "Premium boost"
-			card.Price.Text = item.price and Util.GetRobuxText(item.price) or "Robux"
-			if item.itemType == "rewardedAd" then
-				card.Price.Text = "Free"
-				local cooldownRemaining = getRewardedAdCooldownRemaining()
-				if currentRewardedAdState.available == true then
-					setButtonText(card.BuyButton, "Watch", true, BUY_BUTTON_COLOR)
-				elseif cooldownRemaining > 0 then
-					setButtonText(
-						card.BuyButton,
-						`Wait {formatSeconds(cooldownRemaining)}`,
-						false,
-						DISABLED_BUTTON_COLOR
-					)
-				else
-					setButtonText(card.BuyButton, "Unavailable", false, DISABLED_BUTTON_COLOR)
-				end
-			elseif item.itemType == "gamePass" and currentGamePasses[item.key] == true then
-				setButtonText(card.BuyButton, "Owned", false, OWNED_BUTTON_COLOR)
-			elseif item.configured then
-				setButtonText(
-					card.BuyButton,
-					item.price and Util.GetRobuxText(item.price) or "Robux",
-					true,
-					BUY_BUTTON_COLOR
-				)
-			else
-				setButtonText(card.BuyButton, "Set ID", false, DISABLED_BUTTON_COLOR)
-			end
+		local isOwned = ownedItems[item.id] == true
+		local priceText = item.cost == 0 and "Free" or `$ {Util.FormatNumber(item.cost, true)}`
+		card.Bonus.Text = `{item.rarity} | {item.role} | {describeItemStats(item.stats)}`
+		card.Price.Text = priceText
+		if isOwned then
+			setButtonText(card.BuyButton, "Owned", false, OWNED_BUTTON_COLOR)
 		else
-			local isOwned = ownedItems[item.id] == true
-			local priceText = item.cost == 0 and "Free" or `$ {Util.FormatNumber(item.cost, true)}`
-			card.Bonus.Text = `{item.rarity} | {item.role} | {describeItemStats(item.stats)}`
-			card.Price.Text = priceText
-			if isOwned then
-				setButtonText(card.BuyButton, "Owned", false, OWNED_BUTTON_COLOR)
-			else
-				setButtonText(
-					card.BuyButton,
-					priceText,
-					currentCash >= item.cost,
-					currentCash >= item.cost and BUY_BUTTON_COLOR or DISABLED_BUTTON_COLOR
-				)
-			end
+			setButtonText(
+				card.BuyButton,
+				priceText,
+				currentCash >= item.cost,
+				currentCash >= item.cost and BUY_BUTTON_COLOR or DISABLED_BUTTON_COLOR
+			)
 		end
 
 		local selectButton = card:FindFirstChild("SelectButton")
 		if selectButton and selectButton:IsA("GuiButton") then
 			uiController.SetButtonHoverAndClick(selectButton, function()
-				selectedShopItemKeys[selectedShopCategory] = getShopSelectionKey(selectedShopCategory, item)
+				selectedShopItemKeys[selectedShopCategory] = item.id
 				updateShopPanel()
 			end)
 		end
 		uiController.SetButtonHoverAndClick(card.BuyButton, function()
-			selectedShopItemKeys[selectedShopCategory] = getShopSelectionKey(selectedShopCategory, item)
-			if selectedShopCategory == "boost" then
-				if item.itemType == "rewardedAd" then
-					if currentRewardedAdState.available == true then
-						SystemMgr.systems.EcoSystem.Server:RequestRewardedCashPotionAd()
-					end
-					updateShopPanel()
-					return
-				end
-				if not item.configured then
-					updateShopPanel()
-					return
-				end
-				if item.itemType == "product" then
-					MarketplaceService:PromptProductPurchase(LocalPlayer, item.storeId)
-				elseif item.itemType == "gamePass" and not currentGamePasses[item.key] then
-					MarketplaceService:PromptGamePassPurchase(LocalPlayer, item.storeId)
-				end
-			elseif not ownedItems[item.id] then
+			selectedShopItemKeys[selectedShopCategory] = item.id
+			if not ownedItems[item.id] then
 				SystemMgr.systems.EcoSystem.Server:RequestShopPurchase({
 					category = selectedShopCategory,
 					itemId = item.id,
@@ -482,6 +469,73 @@ local function updateShopPanel()
 
 	updateShopPreview(selectedItem, ownedItems)
 	updateLoadoutSummary()
+end
+
+local function updateBoostsPanel()
+	local items = getOrderedBoostItems()
+	local selectedItem = getSelectedBoostItem(items)
+	clearGeneratedCards(BoostsItems)
+	generatedBoostCards = {}
+
+	for index, item in ipairs(items) do
+		local card = createGeneratedCard(BoostsItemTemplate, BoostsItems, index)
+		local itemKey = getShopSelectionKey("boost", item)
+		generatedBoostCards[getGeneratedCardKey("boost", itemKey)] = card
+		updateCardSelection(card, selectedItem and itemKey == getShopSelectionKey("boost", selectedItem))
+		setCardIcon(card, getItemIcon("boost", item))
+		setTextIfPresent(card, "Name", item.displayName)
+		card.Price.Visible = false
+		card.Bonus.Text = item.description or "Premium boost"
+		card.Price.Text = item.price and Util.GetRobuxText(item.price) or "Robux"
+
+		if item.itemType == "rewardedAd" then
+			card.Price.Text = "Free"
+			local cooldownRemaining = getRewardedAdCooldownRemaining()
+			if currentRewardedAdState.available == true then
+				setButtonText(card.BuyButton, "Watch", true, BUY_BUTTON_COLOR)
+			elseif cooldownRemaining > 0 then
+				setButtonText(card.BuyButton, `Wait {formatSeconds(cooldownRemaining)}`, false, DISABLED_BUTTON_COLOR)
+			else
+				setButtonText(card.BuyButton, "Unavailable", false, DISABLED_BUTTON_COLOR)
+			end
+		elseif item.itemType == "gamePass" and currentGamePasses[item.key] == true then
+			setButtonText(card.BuyButton, "Owned", false, OWNED_BUTTON_COLOR)
+		elseif item.configured then
+			setButtonText(card.BuyButton, item.price and Util.GetRobuxText(item.price) or "Robux", true, BUY_BUTTON_COLOR)
+		else
+			setButtonText(card.BuyButton, "Set ID", false, DISABLED_BUTTON_COLOR)
+		end
+
+		local selectButton = card:FindFirstChild("SelectButton")
+		if selectButton and selectButton:IsA("GuiButton") then
+			uiController.SetButtonHoverAndClick(selectButton, function()
+				selectedBoostItemKey = getShopSelectionKey("boost", item)
+				updateBoostsPanel()
+			end)
+		end
+		uiController.SetButtonHoverAndClick(card.BuyButton, function()
+			selectedBoostItemKey = getShopSelectionKey("boost", item)
+			if item.itemType == "rewardedAd" then
+				if currentRewardedAdState.available == true then
+					SystemMgr.systems.EcoSystem.Server:RequestRewardedCashPotionAd()
+				end
+				updateBoostsPanel()
+				return
+			end
+			if not item.configured then
+				updateBoostsPanel()
+				return
+			end
+			if item.itemType == "product" then
+				MarketplaceService:PromptProductPurchase(LocalPlayer, item.storeId)
+			elseif item.itemType == "gamePass" and not currentGamePasses[item.key] then
+				MarketplaceService:PromptGamePassPurchase(LocalPlayer, item.storeId)
+			end
+			updateBoostsPanel()
+		end)
+	end
+
+	updateBoostsPreview(selectedItem)
 end
 
 local function updateInventoryPanel()
@@ -536,6 +590,7 @@ end
 
 local function updatePanels()
 	updateShopPanel()
+	updateBoostsPanel()
 	updateInventoryPanel()
 	refreshTopbarIconState()
 end
@@ -552,8 +607,8 @@ local function refreshRewardedAdAvailability()
 	currentRewardedAdState.available = false
 	currentRewardedAdState.reason = "checking"
 	ClientData:SetOneData("rewardedAdState", currentRewardedAdState)
-	if initialized and selectedShopCategory == "boost" then
-		updateShopPanel()
+	if initialized then
+		updateBoostsPanel()
 	end
 
 	task.spawn(function()
@@ -574,8 +629,8 @@ local function refreshRewardedAdAvailability()
 			available = currentRewardedAdState.available,
 			reason = currentRewardedAdState.reason,
 		})
-		if initialized and selectedShopCategory == "boost" then
-			updateShopPanel()
+		if initialized then
+			updateBoostsPanel()
 		end
 	end)
 end
@@ -612,16 +667,12 @@ end
 
 local function bindTopbarIcons()
 	shopTopbarIcon = createTopbarFrameIcon("Shop", "S", 20, ShopFrame, function()
-		if selectedShopCategory == "boost" then
-			selectedShopCategory = "coin"
-		end
 		resetScrollPosition(ShopItems)
 		updatePanels()
 	end)
-	boostsTopbarIcon = createTopbarFrameIcon("Boosts", "R$", 21, ShopFrame, function()
-		selectedShopCategory = "boost"
+	boostsTopbarIcon = createTopbarFrameIcon("Boosts", "R$", 21, BoostsFrame, function()
 		SystemMgr.systems.EcoSystem.Server:RequestRewardedAdState()
-		resetScrollPosition(ShopItems)
+		resetScrollPosition(BoostsItems)
 		updatePanels()
 	end)
 	inventoryTopbarIcon = createTopbarFrameIcon("Inventory", "B", 22, InventoryFrame, function()
@@ -632,9 +683,6 @@ end
 
 local function bindButtons()
 	uiController.SetButtonHoverAndClick(CoinFlipMenu.ShopButton, function()
-		if selectedShopCategory == "boost" then
-			selectedShopCategory = "coin"
-		end
 		resetScrollPosition(ShopItems)
 		updatePanels()
 		openGrowthFrame("Shop", "legacyMenu")
@@ -647,6 +695,9 @@ local function bindButtons()
 
 	uiController.SetButtonHoverAndClick(ShopFrame.X, function()
 		uiController.CloseFrame("Shop")
+	end)
+	uiController.SetButtonHoverAndClick(BoostsFrame.X, function()
+		uiController.CloseFrame("Boosts")
 	end)
 	uiController.SetButtonHoverAndClick(InventoryFrame.X, function()
 		uiController.CloseFrame("Inventory")
@@ -667,14 +718,6 @@ local function bindButtons()
 		resetScrollPosition(ShopItems)
 		updatePanels()
 	end)
-	if ShopBoostTab and ShopBoostTab:IsA("TextButton") then
-		uiController.SetButtonHoverAndClick(ShopBoostTab, function()
-			selectedShopCategory = "boost"
-			SystemMgr.systems.EcoSystem.Server:RequestRewardedAdState()
-			resetScrollPosition(ShopItems)
-			updatePanels()
-		end)
-	end
 
 	uiController.SetButtonHoverAndClick(InventoryTabs.CoinTab, function()
 		selectedInventoryCategory = "coin"
@@ -705,9 +748,13 @@ function EcoUi.Init()
 	initialized = true
 
 	ShopFrame.Visible = false
+	BoostsFrame.Visible = false
 	InventoryFrame.Visible = false
+	InventoryTabs.OtherTab.Text = "COMING SOON"
 	ShopItemTemplate.Visible = false
 	ShopItemTemplate.Parent = nil
+	BoostsItemTemplate.Visible = false
+	BoostsItemTemplate.Parent = nil
 	InventoryItemTemplate.Visible = false
 	InventoryItemTemplate.Parent = nil
 	currentCash = ClientData:GetOneData(dataKey.wins) or 0
@@ -749,8 +796,8 @@ end
 function EcoUi.SyncRewardedAdState(args)
 	currentRewardedAdState = args or {}
 	ClientData:SetOneData("rewardedAdState", currentRewardedAdState)
-	if initialized and selectedShopCategory == "boost" then
-		updateShopPanel()
+	if initialized then
+		updateBoostsPanel()
 	end
 	refreshRewardedAdAvailability()
 end

@@ -336,7 +336,7 @@ function AnalyticsSystem:LogFirstGrowthPanelOpen(sender, player, args)
 	end
 
 	local panel = args and args.panel
-	if panel ~= "Shop" and panel ~= "Inventory" and panel ~= "Rebirth" then
+	if panel ~= "Shop" and panel ~= "Boosts" and panel ~= "Inventory" and panel ~= "Rebirth" then
 		return
 	end
 
@@ -539,7 +539,12 @@ function AnalyticsSystem:_DeviceClassField(deviceClass)
 end
 
 function AnalyticsSystem:_EarlySessionStage(session)
-	if session.firstShopOpenLogged or session.firstInventoryOpenLogged or session.firstRebirthOpenLogged then
+	if
+		session.firstShopOpenLogged
+		or session.firstBoostsOpenLogged
+		or session.firstInventoryOpenLogged
+		or session.firstRebirthOpenLogged
+	then
 		return "opened_growth_panel"
 	end
 	if session.firstRunUpgradeLogged then

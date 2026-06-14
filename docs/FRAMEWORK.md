@@ -1,10 +1,10 @@
-# FRAMEWORK
+﻿# FRAMEWORK
 
 > 目的：描述 **SystemMgr 框架本身**——所有基于此框架的 Roblox 项目共享的机制、约定、编码习惯。**不写具体项目的业务**（那些在 `docs/PROJECT_LOGIC.md`）。
 >
 > 使用规则：
-> - 新对话先读 `docs/BOOTSTRAP.md`，再按任务类型读取本文相关章节。
-> - 写 Luau 前必须读 §8；只有动核心框架时才需要读全文。
+> - 新对话默认不读整份本文；按 `docs/BOOTSTRAP.md` 路由，只在写 / review Luau 或触碰框架机制时读取相关章节。
+> - 写或 review Luau 前，优先读 §8 编码习惯；只有改 `SystemMgr`、生命周期、桥接、数据层等框架机制时才读更多章节。
 > - 跨项目复制时，整份 `FRAMEWORK.md` 可以原样带走；基本不需要按项目改。
 > - 如果框架本体升级（SystemMgr 改接口、生命周期顺序调整、桥接规则变化等），**只改这里**，不要把框架细节塞进 `PROJECT_LOGIC.md`。
 
@@ -51,11 +51,13 @@ SystemMgr.Start()
 ```
 
 ### 加载顺序
-1. `SystemMgr.Start()` 先按 `LoadOrder` 列出的名字 `task.spawn(LoadSystem, name)`（通常是 `PlayerSystem` → `CharacterSystem`）。
-2. 再遍历 `systems` 表，把未加载的剩余系统以 `task.spawn` 并发加载。
+1. `SystemMgr.Start()` 先按 `LoadOrder` 列出的名字调度 `LoadSystem(name)`（通常是 `PlayerSystem` → `CharacterSystem`）。
+2. 再遍历 `systems` 表，调度未加载的剩余系统。
 3. 服务端额外做两件事：
-   - 懒加载 `DataMgr`、`PlayerServerClass`
+   - 懒加载 `DataManager`、`PlayerServerClass`
    - 遍历已在服的 `Players:GetPlayers()`，再挂 `PlayerAdded / PlayerRemoving`
+
+当前框架实现用 `task.spawn(LoadSystem, name)` 调度加载；不要在业务代码里假设非 `LoadOrder` 系统已经按某个顺序完成 `Init`。
 
 ---
 
@@ -86,7 +88,9 @@ local LoadOrder = { "PlayerSystem", "CharacterSystem" }
 客户端：把每个这样的函数挂到 `system.Server[fn]` 上做 `FireServer`。
 末端：把原参数追加 `{ sysName, funName }` 作为定位信息，远端按 `systems[sysName][funName](systems[sysName], ...)` 调用。
 
-服务端 remote 派发会先校验定位信息必须是合法的 `{ sysName: string, funName: string }`，且目标系统 / 方法真实存在；malformed 直连 RemoteEvent payload 会被直接丢弃。客户端 remote 进入系统方法前，框架会强制清空第二个参数的 player slot，确保客户端不能伪造目标玩家；公开接口里常见的 `player = player or sender` 会落到真实 sender。
+RemoteEvent / UnreliableRemoteEvent 运行时作为 `SystemMgr.lua` 脚本的直接子级创建，客户端通过 `script:WaitForChild(...)` 等待。
+
+服务端 remote 派发通过末尾 `{ sysName, funName }` 定位目标，并阻止调用 `whiteList` 方法。客户端 remote 进入系统方法前会插入空的 sender / player slot，确保客户端表现入口不能伪造目标玩家。
 
 调用约定：
 
@@ -107,6 +111,8 @@ local System: Types.System = { whiteList = { "SomeInternal" }, ... }
 列进去的方法：
 - **不会**被框架挂成 remote（外部客户端伪造 RemoteEvent 无法触发）
 - 专供同服务端内部调用 / 共享工具方法
+
+框架还会统一拒绝客户端 remote 调用生命周期方法：`Init` / `PlayerAdded` / `PlayerRemoving`，且客户端不会生成这些 `self.Server:*` 代理。它们只允许 `SystemMgr` 启动与生命周期编排触发，不能作为系统业务 remote。
 
 ### 3.5 `SENDER`
 - `SystemMgr` 生成的随机整数，挂 `SystemMgr.SENDER`。
@@ -130,13 +136,13 @@ local System: Types.System = { whiteList = { "SomeInternal" }, ... }
 
 进服（服务端）：
 1. `DataManager`（自行监听 `Players.PlayerAdded`）先 `LoadProfileAsync`，完成后给 `player` 挂 `profileLoaded` BoolValue。
-2. `SystemMgr` 的 `PlayerAdded` 连接遍历 `ListenAdded`（定义了 `PlayerAdded` 的系统名列表），用 `task.spawn` 调每个 `systems[name]:PlayerAdded(SENDER, player)`。
-3. 各系统内部按需 `WaitForDataLoaded()`（通过 `PlayerServerClass.GetIns`）。
+2. `SystemMgr` 的 `HandlePlayerAdded` 先调用 `PlayerServerClass.GetIns(player, true)`，确保玩家实例和 profile 数据已经可用；若玩家已离场或数据未就绪则不继续。
+3. `SystemMgr` 遍历 `ListenAdded`（定义了 `PlayerAdded` 的系统名列表），用 `task.spawn` 调每个 `systems[name]:PlayerAdded(SENDER, player)`。
 
 离服（服务端）：
 1. **先**按 `ListenMoving` 遍历调每个系统的 `PlayerRemoving`（此时 profile 数据仍可写）；系统若未定义 `PlayerRemoving`，框架会自动清空 `system.players[player.UserId]`。
-2. **然后** `DataMgr:ReleaseProfile(player)`：snapshot + ProfileService 释放。
-3. **最后** `PlayerServerClass.RemoveIns(player)`。
+2. **然后** `PlayerServerClass.PlayerRemoving(player)` 清理服务端玩家实例。
+3. **最后** `DataManager.PlayerRemoving(player)`：snapshot + ProfileService 释放。
 
 > 单个系统**不要**自己 hook `Players.PlayerRemoving` 释放 profile；只实现 `PlayerRemoving(self, sender, player)` 交给 `SystemMgr` 调度。
 
@@ -235,7 +241,7 @@ export type System = {
 - `ServerStorage/libs/ProfileService.lua`（第三方）+ `ServerStorage/modules/DataManager.lua`（封装层）。
 - `DataManager` 自己监听 `Players.PlayerAdded`：`ProfileStore:LoadProfileAsync("Player_"..UserId)` → `profile:Reconcile()` → 在 `player` 下建 `profileLoaded` BoolValue。
 - `GameConfig.IsDebug`（通常 `= IsStudio and <flag>`）为真时用 `configs/DebugData.lua` 覆盖 profile 数据。
-- **离服释放由 `SystemMgr` 编排调 `DataMgr:ReleaseProfile(player)`**，`DataManager` 内部**不要**再去 hook `PlayerRemoving`。
+- **离服释放由 `SystemMgr` 编排调 `DataManager.PlayerRemoving(player)`**，`DataManager` 内部**不要**再去 hook `PlayerRemoving`。
 
 ### 5.2 服务端玩家实例：`PlayerServerClass`
 - 单例 `playerInsList[UserId]`，`PlayerServerClass.GetIns(player[, createIfNil])` 取或懒建。
@@ -303,7 +309,7 @@ export type System = {
 
 ## 8. 编码习惯（LLM 在本仓库写代码前，**必读本节**）
 
-这是**一站式清单**。AGENTS.md 的 Non-Negotiables 是精简版；`.cursor/rules/*.mdc` 是 Cursor 专属注入版；三者内容必须保持一致，以本节为准。
+这是**唯一权威清单（single source of truth）**。AGENTS.md 的 Non-Negotiables 与 `.cursor/rules/*.mdc` 只是它的压缩子集，必须指回本节，不允许各自分叉扩写。修订编码规则时：先改本节，再按需收缩子集；**永远不要往子集里加本节没有的新规则**。
 
 ### 8.1 字符串与控制流
 1. **反引号插值**：`` `Hello {player.Name} dealt {damage}` ``。不要用 `string.format` 做普通插值。
@@ -336,20 +342,23 @@ export type System = {
 20. **广播用 `self.AllClients`，不要用 `self.Client` 循环广播所有玩家**。
 21. **非关键高频广播加 `args.unreliable = true`**（走 `UnreliableRemoteEvent`）。
 22. **不要 hook `Players.PlayerRemoving` 释放 profile 或清 `playerInsList`**——`SystemMgr` 编排。
+23. **跨端方法名按两端语义命名**：如果服务端和客户端两侧都在执行同一个业务动作（如 `EndRun`：服务端结算并通知，客户端清本地表现），优先用命令式方法名并让服务端分支做 `SENDER` 防护；只有纯粹告知“某事已经发生”的客户端事件才用过去式事件名（如 `RunEnded`）。
 
 ### 8.6 通用工具
-23. **按钮交互用 `uiController.SetButtonHoverAndClick`**，不要手连 `MouseEnter / MouseButton1Click`。
-24. **周期任务用 `ScheduleModule.AddSchedule`**，不要写 `while true do task.wait(...) end`。长任务记下 `scheduleId` 以便取消。
+24. **按钮交互用 `uiController.SetButtonHoverAndClick`**，不要手连 `MouseEnter / MouseButton1Click`。
+25. **周期任务用 `ScheduleModule.AddSchedule`**，不要写 `while true do task.wait(...) end`。长任务记下 `scheduleId` 以便取消。
+26. **Studio/MCP 制作 UI 时默认使用 scale 布局**：屏幕级面板、HUD、按钮栏、卡片、按钮、列表行、图标和文本区域的 `Size` / `Position` 使用 scale，offset 保持 `0`。只有确实需要固定像素尺寸时才使用 offset，并在任务说明或属性命名中明确原因；不要留下以 1920x1080 像素为基准的固定 `RightBar` / HUD 面板 / 弹窗布局。
+27. **重复 UI 用 Template 克隆**：`ScrollingFrame`、网格、列表等有大量相同结构子项时，在容器下制作隐藏的 `Template` / `ItemTemplate`，运行时代码只负责 `Clone`、绑定数据、设置可见性 / `LayoutOrder`、清理旧克隆；不要用运行时代码重复 `Instance.new` 搭建每个条目的样式结构。
 
 ### 8.7 数据层
-25. **持久字段新增/删除**：`Keys.DataKey` + `DefaultData` + `DebugData` + 运行时读写点 + 下游消费者，**同一次改动里**全部落地。
-26. **客户端别自建 profile 字段缓存**，走 `ClientData`。
-27. **不直接编辑 `ExcelConfig/*.lua` 字面量**——改 xlsx 再导出。聚合/派生放 `Presets.lua`。
+28. **持久字段新增/删除**：`Keys.DataKey` + `DefaultData` + `DebugData` + 运行时读写点 + 下游消费者，**同一次改动里**全部落地。
+29. **客户端别自建 profile 字段缓存**，走 `ClientData`。
+30. **不直接编辑 `ExcelConfig/*.lua` 字面量**——改 xlsx 再导出。聚合/派生放 `Presets.lua`。
 
 ### 8.8 测试与收尾
-28. **离开前清 debug `print`**，保留必要 `warn`。
-29. **关键路径用 `pcall`**；`SystemMgr` 已在非 Studio 环境下为 remote 套 pcall，业务内部不必再套一层，除非真有可能失败。
-30. **Studio 验证覆盖：init → 运行 → 离服 cleanup → 再登陆 profile 正确**；跨端功能走 Team Test。
+31. **离开前清 debug `print`**，保留必要 `warn`。
+32. **关键路径用 `pcall`**；`SystemMgr` 已在非 Studio 环境下为 remote 套 pcall，业务内部不必再套一层，除非真有可能失败。
+33. **Studio 验证覆盖：init → 运行 → 离服 cleanup → 再登陆 profile 正确**；跨端功能走 Team Test。
 
 ---
 
@@ -393,9 +402,12 @@ SystemMgr.systems.BackpackSystem:DeleteItems(SENDER, player, { items = ... })
 
 ## 11. 与其他文档的分工
 
-- **本文件（`FRAMEWORK.md`）**：跨项目复用的框架机制与约定。项目间几乎不改。
-- **`BOOTSTRAP.md`**：新对话的低成本启动路由，只告诉 agent 该按任务读哪些文档。
-- **`PROJECT_LOGIC.md`**：仅本项目的事实（活跃系统列表、业务玩法主线、已知遗留、速查）。换项目就重写。
-- **`TASK_STATE.md`**：当前在做什么、下一步是什么。每次会话都会写。
-- **`AGENTS.md`**：跨工具通用规则（读文档顺序、维护纪律、风格硬性要求）。
-- **`.cursor/rules/*.mdc`**：Cursor 专属，`alwaysApply` 注入。
+- **本文件（`FRAMEWORK.md`）**：跨项目复用的框架机制与约定。项目间几乎不改。编码规则以 §8 为唯一权威。
+- **`BOOTSTRAP.md`**：启动路由+慢变事实（项目定位、入口、doc map）。**不写实现进度/功能状态快照**。
+- **`PROJECT_LOGIC.md`**：仅本项目的事实（活跃系统列表、业务玩法主线、已知遗留、速查）。换项目就重写。每条 bullet 控制在两行内，只写"有什么/谁权威/边界在哪"，不堆实现叙事——实现细节以源码为准。
+- **`TASK_STATE.md`**：当前在做什么、下一步是什么。只保留活任务、Backlog 和最近约 10 条 Done（outcome 单句）；更早的 Done 轮转进 `docs/archive/`。
+- **`AGENTS.md`**：跨工具通用规则（读文档顺序、维护纪律、风格硬性要求）。Non-Negotiables 是 §8 的子集。
+- **`.cursor/rules/*.mdc`**：Cursor 专属注入，是 §8 与 AGENTS 规则的压缩子集，不得分叉扩写。
+
+文档体积是每轮对话的固定成本：宁可删旧句，不要在旧句旁追加修正。
+

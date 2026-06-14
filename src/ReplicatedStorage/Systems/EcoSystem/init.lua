@@ -824,7 +824,7 @@ function EcoSystem:ReportGrowthPanelOpened(sender, player, args)
 	end
 
 	local panel = args.panel
-	if panel ~= "Shop" and panel ~= "Inventory" then
+	if panel ~= "Shop" and panel ~= "Boosts" and panel ~= "Inventory" then
 		return
 	end
 

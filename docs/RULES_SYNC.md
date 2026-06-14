@@ -1,6 +1,6 @@
 # Rules Sync
 
-This project uses a shared rules source at `../_central-rules`.
+This project uses a shared rules source at `../CentralRules`.
 
 The central folder also contains reusable setup assets:
 
@@ -11,8 +11,9 @@ Managed shared files:
 
 - `AGENTS.md`
 - `.cursor/rules/*.mdc`
+- `docs/FRAMEWORK.md`
 
-Project-local files such as `docs/BOOTSTRAP.md`, `docs/FRAMEWORK.md`, `docs/PROJECT_LOGIC.md`, and `docs/TASK_STATE.md` are not synced.
+Project-local files such as `docs/BOOTSTRAP.md`, `docs/PROJECT_LOGIC.md`, and `docs/TASK_STATE.md` are not synced.
 
 ## Commands
 
@@ -36,12 +37,12 @@ Check whether this project is current:
 
 ## Updating Shared Rules
 
-Edit the file in `../_central-rules` first, then run `Sync` in each project that should receive the update. Run `Check` afterward to verify the project matches the central source.
+Edit the file in `../CentralRules` first, then run `Sync` in each project that should receive the update. Run `Check` afterward to verify the project matches the central source.
 
 ## Adding Another Project
 
-Copy `../_central-rules/templates/rules-sync.json` into the project as `.rules-sync.json`, then either copy `../_central-rules/tools/Sync-Rules.ps1` into `tools/rules/Sync-Rules.ps1` or run the central script directly with `-ProjectRoot`.
+Copy `../CentralRules/templates/rules-sync.json` into the project as `.rules-sync.json`, then either copy `../CentralRules/tools/Sync-Rules.ps1` into `tools/rules/Sync-Rules.ps1` or run the central script directly with `-ProjectRoot`.
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ..\_central-rules\tools\Sync-Rules.ps1 -ProjectRoot C:\Path\To\OtherProject -Mode Sync
+powershell -NoProfile -ExecutionPolicy Bypass -File ..\CentralRules\tools\Sync-Rules.ps1 -ProjectRoot C:\Path\To\OtherProject -Mode Sync
 ```

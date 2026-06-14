@@ -19,6 +19,7 @@ alwaysApply: false
 - Reuse the repository's existing communication layer before introducing a second one.
 - Keep server-authoritative logic on the server, then wire client presentation on top of it.
 - Preserve existing ownership boundaries between orchestration modules, feature logic, and client rendering.
+- Name cross-endpoint methods by what each side executes: use command-style names when both server and client perform the same business action, and reserve past-tense event names for pure "this already happened" notifications.
 
 ## File responsibilities
 

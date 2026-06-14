@@ -1,6 +1,6 @@
 # PROJECT_LOGIC
 
-更新时间：2026-06-04
+更新时间：2026-06-14
 
 ## 1. 这份文档的定位
 
@@ -569,8 +569,9 @@ FlipACoin
 - `GetLoadoutState()` 同步 owned / equipped 数据给 Shop / Inventory UI
 - `GetLoadoutBonuses()` 给 `CoinFlipSystem` 计算正面概率、Cash 倍率和 flip 间隔倍率；当前会合并 Coin / Desk / Chair 装备和已拥有的 FlipACoin gamepass 加成
 - Desk Setup 装备成功后通知 `DecorationSystem` 刷新座位可视化
+- `EcoSystem/ui.lua` 管理 `Frames.Shop / Boosts / Inventory`；Boosts 是独立付费面板，不复用 Shop 的 Coin / Desk / Chair 侧栏
 - `MarketplaceService.ProcessReceipt` 处理 `EcoPresets.Products.flipACoin` 下的 Developer Product：Cash 包、Rebirth Points 包、Apex 外观礼包和购买后立即使用的 `paidCash2x10m`
-- Rewarded Video Ads 复用 Boosts 面板；服务端维护 15 分钟内存冷却和 in-flight 防重入，客户端用 `AdService:GetAdAvailabilityNowAsync()` 判断当前平台可用性
+- Rewarded Video Ads 在 Boosts 面板展示；服务端维护 15 分钟内存冷却和 in-flight 防重入，客户端用 `AdService:GetAdAvailabilityNowAsync()` 判断当前平台可用性
 - Rewarded Video Ads 必须在 `RewardedAds.DevProductId` 配置一个独立 Developer Product id；服务端用 `AdService:CreateAdRewardFromDevProductId()` 创建 `AdReward`，并在 `ProcessReceipt` 中发放并立即使用 `adCash2x5m`，不在 `ShowRewardedVideoAdAsync()` 返回后手动重复发奖
 - `PromptGamePassPurchaseFinished` / 进服 ownership 检查处理 `EcoPresets.GamePasses` 下的 `vip / winsX2 / luckyCharm / quickFlip`；发放后统一记录 `coinflip_gamepass_granted`，`source` 为 `purchase` 或 `ownershipSync`
 
@@ -952,12 +953,12 @@ FlipACoin
 
 - 主 HUD 绑定读取 Studio 预制节点，不再为统计卡、升级按钮或离座按钮运行时创建兜底资源。
 - `CoinFlipSystem/ui.lua` 绑定 Flip HUD、run upgrade、多金币结果文案和 v4 引导高亮；不直接渲染 Shop / Inventory / Rebirth 面板内容，但会通过系统 UI 辅助方法打开并定位引导目标。
-- `EcoSystem/ui.lua` 绑定 TopbarPlus `Shop` / `Boosts` / `Inventory` 图标、兼容旧 `Buttons.CoinFlipMenu.ShopButton / InventoryButton`，并管理 `Frames.Shop / Inventory`；`Boosts` 复用 Shop 卡片展示 Rewarded Ad、`Products.flipACoin` 和 `GamePasses`。广告不可用或冷却时按钮禁用，付费 id 未配置时按钮显示 `Set ID` 且不可点击。Shop 购买成功和 Inventory 装备成功后，服务端发轻 notification，客户端按同步 payload 播放购买 / 装备 SFX。
+- `EcoSystem/ui.lua` 绑定 TopbarPlus `Shop` / `Boosts` / `Inventory` 图标、兼容旧 `Buttons.CoinFlipMenu.ShopButton / InventoryButton`，并管理 `Frames.Shop / Boosts / Inventory`；Boosts 使用独立 Studio-authored 面板展示 Rewarded Ad、`Products.flipACoin` 和 `GamePasses`，不会显示 Shop 的 Coin / Desk / Chair 侧栏。广告不可用或冷却时按钮禁用，付费 id 未配置时按钮显示 `Set ID` 且不可点击。Shop 购买成功和 Inventory 装备成功后，服务端发轻 notification，客户端按同步 payload 播放购买 / 装备 SFX。
 - `RebirthSystem/ui.lua` 绑定 TopbarPlus `Rebirth` 图标、兼容旧 `Buttons.CoinFlipMenu.RebirthButton`，并管理 `Frames.Rebirth`。
 - `EffectSystem` 负责桌面 coin flip 表现，`CoinFlipSystem/ui.lua` 只调用它并等待落地回调。
 - 当前 in-play minimal HUD 是 Studio-authored 资源：TopbarPlus 是顶部入口，`CoinFlipMenu` 只保留兼容且玩法态隐藏，`Elements.cash / candy` 保留为 hidden legacy 节点但不再作为右上钱包显示，`CoinFlipHUD` 是全屏透明承载层，左下显示现金 / round streak，右下显示概率 / 速度 / Value / Luck，底部中心显示 `FLIP`、`Auto:Off / Auto:On`、`GuidePrompt` 和短结果提示；多金币结果复用 `ResultLabel`，单金币保持 `Heads! +$ 10` / `Tails! +$ 2`，多金币显示 `headsCount/coinCount`、combo 名、streak reset 和奖励，如 `2/3 Heads! Pair +$ 48` 或 `1/3 Heads. Streak reset. +$ 10`；Rebirth 永久升级 `Coin Spread` 提高 coin 数量时会短暂提示 `Coin Spread unlocked 2 coins per flip.`；`FlipButton.gamepadKeyImg` 用 `UserInputService:GetImageForKeyCode()` 显示当前输入方式对应的 R2 图片，键鼠端在同一 ImageLabel 内显示 Studio-authored `keyboardKeyText` 紧凑 Space 键帽兜底并放在 `FLIP` 按钮内部左侧，触屏端隐藏，旧 `InputHints` Frame 不再显示；`Main.Elements` 只保留 `CoinFlipHUD`、`cash`、`candy`、`ripple`，旧 `Buffs / Rewards / Quests / auto / blockInfo` 和旧 CoinFlip onboarding / spectator / overview 节点已从 Studio 资源中删除。
-- `Frames.Shop / Inventory / Rebirth / Settings` 的主结构、布局、圆角、描边和文字约束均在 Studio 中维护；Shop / Inventory 的 item 区域是 Studio-authored `ScrollingFrame + Template`，运行时从单个 `Template` clone 商品卡，不再依赖固定 `Item1` 到 `Item12` 卡片池或分页控件；Rebirth 面板复用 4 张 Studio-authored perk card 展示 `Coin Spread / Chain Start / Quick Start / Lucky Start`，升级 chip 和按钮都会标注当前 Rebirth Points 消耗；Shop 卡片的 `Art.Image`、Shop Preview 的 `PreviewScene.Icon` 和 Inventory 卡片的 `Icon.Image` 由 `EcoSystem/ui.lua` 绑定到 `Textures.FlipACoinItems` 临时 icon 配置，后续替换图片链接只需改 `src/ReplicatedStorage/configs/Textures.lua`；Shop 商品卡隐藏独立价格标签，底部居中大 `BuyButton` 直接显示价格 / Robux 价格或 `Owned`；运行时代码只绑定按钮、更新图片 / 文本 / selected 状态、打开关闭、重置滚动位置和播放音效。触屏移动端打开面板时通过 `uiController` 套安全区尺寸 / 位置的重排逻辑已临时注释，等待移动端布局重做。
-- `Frames.Shop / Inventory / Rebirth` 打开时会走 `uiController.OpenFrame()` 的轻遮罩，并由 `CoinFlipSystem/ui.lua` 隐藏 gameplay HUD，关闭后再恢复。
+- `Frames.Shop / Boosts / Inventory / Rebirth / Settings` 的主结构、布局、圆角、描边和文字约束均在 Studio 中维护；Shop / Boosts / Inventory 的 item 区域是 Studio-authored `ScrollingFrame + Template`，运行时从单个 `Template` clone 商品卡，不再依赖固定 `Item1` 到 `Item12` 卡片池或分页控件；Rebirth 面板复用 4 张 Studio-authored perk card 展示 `Coin Spread / Chain Start / Quick Start / Lucky Start`，升级 chip 和按钮都会标注当前 Rebirth Points 消耗；Shop / Boosts 卡片的 `Art.Image`、Preview 的 `PreviewScene.Icon` 和 Inventory 卡片的 `Icon.Image` 由 `EcoSystem/ui.lua` 绑定到 `Textures.FlipACoinItems` 临时 icon 配置，后续替换图片链接只需改 `src/ReplicatedStorage/configs/Textures.lua`；Shop / Boosts 商品卡隐藏独立价格标签，底部居中大 `BuyButton` 直接显示价格 / Robux 价格或 `Owned`；运行时代码只绑定按钮、更新图片 / 文本 / selected 状态、打开关闭、重置滚动位置和播放音效。触屏移动端打开面板时通过 `uiController` 套安全区尺寸 / 位置的重排逻辑已临时注释，等待移动端布局重做。
+- `Frames.Shop / Boosts / Inventory / Rebirth` 打开时会走 `uiController.OpenFrame()` 的轻遮罩，并由 `CoinFlipSystem/ui.lua` 隐藏 gameplay HUD，关闭后再恢复。
 - `uiController` 优先用 `GrowthPanelInputContext` 绑定 `ClosePanel = Escape / ButtonB`；Input Action System 不可用时回退到 `ContextActionService`。
 - 当前游戏具备基础触屏支持；`uiClient.client.lua` 会在触屏设备上禁用 Roblox 默认 `TouchGui`，因为当前玩法不需要移动 / 跳跃；触屏端仍隐藏 keyboard / gamepad 输入提示并把 ready 文案改为 `Tap FLIP`。`CoinFlipSystem/ui.lua` 的 mobile HUD profile 和 portrait 下折叠 Chance / Speed 的逻辑已临时注释，移动端先沿用桌面 / narrow HUD 布局。`uiController.OpenFrame()` 的移动端 growth panel 重排与 viewport 刷新绑定也已临时注释；TopbarPlus 入口点击面积、growth panel 内容挤压和整体观感仍需 Studio / 真机 QA。
 - 旧 `Stats` / `Actions` 容器如果仍存在，只是隐藏兼容遗留，不是当前主 HUD 数据源。
@@ -1050,7 +1051,11 @@ FlipACoin
 - `docs/PROJECT_LOGIC.md`
   - 项目事实运行地图；判断当前玩法、系统和资源事实时优先看这里
 - `docs/TASK_STATE.md`
-  - 当前 active 任务、下一步、决策、验证记录和 backlog 的唯一实时状态源
+  - 当前 active 任务、下一步、决策、backlog 和最近约 10 条完成摘要
+- `docs/archive/`
+  - 历史完成记录、旧计划和追溯用验证细节；默认启动不读
+- `docs/RULES_SYNC.md`
+  - 共享规则同步方式；当前共享源是同级 `../CentralRules`
 
 ### 12.2 已删除的旧 Markdown
 
@@ -1060,7 +1065,7 @@ FlipACoin
 删除原因：
 
 - 当前玩法定位已经合并进本文档第 2 节。
-- 当前任务、历史验证、决策和 backlog 已迁移到 `TASK_STATE.md`。
+- 当前任务、近期决策和 backlog 已迁移到 `TASK_STATE.md`；较旧验证细节进入 `docs/archive/`。
 - 旧系统拆分与旧架构梳理包含 `BaseSystem`、多桌 / 围观、旧 simulator 方向等过时信息，继续保留会误导新窗口。
 
 ### 12.3 哪些内容现在明显过时

@@ -95,26 +95,6 @@ if UserInputService.GamepadEnabled and not UserInputService.TouchEnabled then
 	end)
 end
 
-local Buttons = PlayerGui.Main:FindFirstChild("Buttons")
-local Frames = PlayerGui.Main:FindFirstChild("Frames")
-for _, btn in ipairs(Buttons:GetDescendants()) do
-	local frameName = string.match(btn.Name, "(%a+)Button")
-	if frameName then
-		uiController.SetButtonHoverAndClick(btn, function()
-			uiController.OpenFrame(frameName)
-		end)
-	end
-end
-
-for _, frame in ipairs(Frames:GetChildren()) do
-	local closeBtn = frame:FindFirstChild("X", true)
-	if closeBtn then
-		uiController.SetButtonHoverAndClick(closeBtn, function()
-			uiController.CloseFrame(frame.Name)
-		end)
-	end
-end
-
 -- local Icon = require(Replicated.modules.Icon)
 -- Icon.new()
 -- 	:align("Right")

@@ -46,10 +46,12 @@ local TopBar = Buttons:FindFirstChild("TopBar")
 local RightBottom = Buttons:FindFirstChild("RightBottom")
 local LegacyInventoryButton = Buttons:FindFirstChild("InventoryButton")
 local ShopFrame = Frames:WaitForChild("Shop")
+local BoostsFrame = Frames:WaitForChild("Boosts")
 local InventoryFrame = Frames:WaitForChild("Inventory")
 local RebirthFrame = Frames:WaitForChild("Rebirth")
 local GrowthFrames = {
 	ShopFrame,
+	BoostsFrame,
 	InventoryFrame,
 	RebirthFrame,
 }

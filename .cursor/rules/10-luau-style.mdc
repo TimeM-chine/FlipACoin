@@ -29,10 +29,15 @@ local text = `{player.Name} dealt {damage} damage`
 
 ## Deterministic paths and config
 
-- Do not add defensive nil guards around resource paths, config paths, or owned assets when the path is deterministic by project design.
+- Treat deterministic project-owned resource paths as required.
+- Do not add defensive `FindFirstChild` or nil-guard code around resource paths, config paths, or owned assets when the path is deterministic by project design.
+- Fail loudly during development when required resources are missing.
 - Use defensive checks only for truly optional state, runtime timing issues, or user-driven absence.
 
 ## Consistency
 
 - Match the naming and structure already used by the surrounding system.
 - Reuse existing helpers and project conventions before adding new patterns.
+- Keep related logic physically close unless reuse or complexity justifies extraction.
+
+When the repository keeps a canonical coding-habits checklist (for example `docs/FRAMEWORK.md` §8), that checklist is the single source of truth; this file is a compressed always-on subset and must not fork from it.

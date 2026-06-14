@@ -1,4 +1,4 @@
----
+﻿---
 description: Generic UI and client interaction rules
 globs:
   - "src/StarterGui/**/*.lua"
@@ -18,11 +18,15 @@ alwaysApply: false
 ## Layout
 
 - Do not build editable UI layout or style structure with runtime `Instance.new`; use MCP/Studio to create the prefab and keep code focused on binding, visibility, and data updates.
-- For editable UI prefabs, use `Scale` for both `Position` and `Size` on layout-bearing containers and controls. Keep `Offset` at `0` unless fixed-size behavior is intentional for padding, borders, or text inset.
 - Keep UI behavior consistent with the repository's established screen and HUD structure.
-- Prefer scale-based layout over fixed offsets for cross-device behavior.
+- For new Studio/MCP-authored UI, use scale-based `Size` and `Position` for screen panels, HUD bars, cards, buttons, rows, icons, and text regions. Keep `Size`/`Position` offsets at `0` unless fixed-pixel behavior is intentional and documented.
+- Do not leave screen-level UI such as `RightBar`, HUD panels, or popup frames sized/positioned with 1920x1080 pixel offsets. Convert design pixels to scale ratios from the intended baseline and verify on multiple device sizes.
 - Use `TextScaled` when the repository already relies on it for responsive text in UI-heavy flows.
 
+## Templates for repeated UI
+
+- For repeated UI content such as `ScrollingFrame` or grid/list entries with the same structure, author one hidden `Template` / `ItemTemplate` under the container in Studio.
+- Runtime code should `Clone` that template, bind data, set visibility/layout order, and clean old clones. Do not rebuild repeated card/row styling with runtime `Instance.new`.
 ## System UI split
 
 - Let entry modules handle bridge and lifecycle wiring.
@@ -38,3 +42,5 @@ alwaysApply: false
 
 - Prefer the framework's scheduling utility over ad hoc `while true do task.wait()` loops when such a scheduler exists.
 - If the repository uses something like `ScheduleModule`, use it for periodic work and keep a cancellation path when needed.
+
+
