@@ -12,9 +12,14 @@ local SENDER, SystemMgr
 local CustomFieldKeys = Enum.AnalyticsCustomFieldKeys
 local EarlySessionDuration = 180
 local FlipCountMilestones = { 10, 25, 50, 100, 250, 500 }
+local CustomEventFlushInterval = 15
+local AnalyticsRateLimitBase = 120
+local AnalyticsRateLimitPerPlayer = 20
+local AnalyticsRateLimitSafetyMultiplier = 0.8
 
 ---- server variables ----
 local AnalyticsService
+local ScheduleModule
 
 ---- client variables ----
 local UserInputService
@@ -45,6 +50,7 @@ local AnalyticsSystem: Types.System = {
 		"PlayerAdded",
 		"PlayerRemoving",
 		"_BuildFields",
+		"_BuildCustomEventKey",
 		"_AccountAgeBand",
 		"_CanLog",
 		"_CashBand",
@@ -53,6 +59,8 @@ local AnalyticsSystem: Types.System = {
 		"_DurationBand",
 		"_EarlySessionStage",
 		"_EnsureSession",
+		"_FlushCustomEvents",
+		"_GetFlushBudget",
 		"_GetLocalDeviceClass",
 		"_GetLocalViewportBand",
 		"_GetSessionElapsed",
@@ -63,11 +71,14 @@ local AnalyticsSystem: Types.System = {
 		"_LogCustomEvent",
 		"_ReportLocalDeviceProfile",
 		"_RoundOutcomeField",
+		"_SendCustomEvent",
 		"_StreakBand",
 		"_StringField",
 		"_ViewportBandField",
 	},
 	players = {},
+	pendingCustomEvents = {},
+	pendingCustomEventOrder = {},
 	tasks = {},
 	IsLoaded = false,
 }
@@ -76,6 +87,7 @@ AnalyticsSystem.__index = AnalyticsSystem
 if IsServer then
 	AnalyticsSystem.Client = setmetatable({}, AnalyticsSystem)
 	AnalyticsService = game:GetService("AnalyticsService")
+	ScheduleModule = require(Replicated.modules.ScheduleModule)
 else
 	AnalyticsSystem.Server = setmetatable({}, AnalyticsSystem)
 	UserInputService = game:GetService("UserInputService")
@@ -92,7 +104,20 @@ end
 
 function AnalyticsSystem:Init()
 	GetSystemMgr()
-	if not IsServer then
+	if IsServer then
+		if not self.customEventFlushScheduleId then
+			self.customEventFlushScheduleId = ScheduleModule.AddSchedule(CustomEventFlushInterval, function()
+				self:_FlushCustomEvents()
+			end)
+		end
+
+		if not self.customEventBindToCloseConnected then
+			self.customEventBindToCloseConnected = true
+			game:BindToClose(function()
+				self:_FlushCustomEvents(nil, math.huge)
+			end)
+		end
+	else
 		task.defer(function()
 			self:_ReportLocalDeviceProfile()
 		end)
@@ -139,19 +164,19 @@ function AnalyticsSystem:PlayerRemoving(sender, player, args)
 	end
 
 	local session = self.players[player.UserId]
-	if not session then
-		return
+	if session then
+		local duration = math.max(math.floor(os.clock() - session.startedAt), 0)
+		self:_LogEarlySessionEnd(player, session, duration)
+		self:_LogCustomEvent(
+			player,
+			"coinflip_session_end",
+			duration,
+			self:_BuildFields(self:_DurationBand(duration), session.flipCount or 0, session.lastMilestone or 0)
+		)
+		self.players[player.UserId] = nil
 	end
 
-	local duration = math.max(math.floor(os.clock() - session.startedAt), 0)
-	self:_LogEarlySessionEnd(player, session, duration)
-	self:_LogCustomEvent(
-		player,
-		"coinflip_session_end",
-		duration,
-		self:_BuildFields(self:_DurationBand(duration), session.flipCount or 0, session.lastMilestone or 0)
-	)
-	self.players[player.UserId] = nil
+	self:_FlushCustomEvents(player, math.huge)
 end
 
 function AnalyticsSystem:LogSeatAssigned(sender, player, args)
@@ -444,6 +469,13 @@ function AnalyticsSystem:_BuildFields(field01, field02, field03)
 	return fields
 end
 
+function AnalyticsSystem:_BuildCustomEventKey(player, eventName, fields)
+	local field01 = fields and fields[CustomFieldKeys.CustomField01.Name] or ""
+	local field02 = fields and fields[CustomFieldKeys.CustomField02.Name] or ""
+	local field03 = fields and fields[CustomFieldKeys.CustomField03.Name] or ""
+	return `{player.UserId}|{eventName}|{field01}|{field02}|{field03}`
+end
+
 function AnalyticsSystem:_AccountAgeBand(accountAge)
 	local days = tonumber(accountAge) or 0
 	if days < 1 then
@@ -575,6 +607,45 @@ function AnalyticsSystem:_EnsureSession(player)
 	return session
 end
 
+function AnalyticsSystem:_FlushCustomEvents(targetPlayer, limit)
+	if not AnalyticsService then
+		return 0
+	end
+
+	local remaining = limit or self:_GetFlushBudget()
+	if remaining <= 0 then
+		return 0
+	end
+
+	local flushed = 0
+	local pendingCustomEventOrder = {}
+	for _, key in ipairs(self.pendingCustomEventOrder) do
+		local bucket = self.pendingCustomEvents[key]
+		if bucket then
+			local shouldFlush = not targetPlayer or bucket.player == targetPlayer
+			if shouldFlush and remaining > 0 then
+				self.pendingCustomEvents[key] = nil
+				self:_SendCustomEvent(bucket.player, bucket.eventName, bucket.value, bucket.fields)
+				flushed += 1
+				remaining -= 1
+			else
+				table.insert(pendingCustomEventOrder, key)
+			end
+		end
+	end
+
+	self.pendingCustomEventOrder = pendingCustomEventOrder
+	return flushed
+end
+
+function AnalyticsSystem:_GetFlushBudget()
+	local requestsPerMinute = AnalyticsRateLimitBase + AnalyticsRateLimitPerPlayer * #Players:GetPlayers()
+	local budget = math.floor(
+		requestsPerMinute * AnalyticsRateLimitSafetyMultiplier * CustomEventFlushInterval / 60
+	)
+	return math.max(budget, 1)
+end
+
 function AnalyticsSystem:_GetSessionElapsed(player)
 	local session = self:_EnsureSession(player)
 	return math.max(math.floor(os.clock() - session.startedAt), 0)
@@ -656,13 +727,24 @@ function AnalyticsSystem:_LogCustomEvent(player, eventName, value, fields)
 	if not AnalyticsService then
 		return
 	end
-
-	local success, result = pcall(function()
-		AnalyticsService:LogCustomEvent(player, eventName, self:_ClampEventValue(value), fields)
-	end)
-	if not success then
-		warn(`[AnalyticsSystem] Failed to log {eventName}: {result}`)
+	if not player then
+		return
 	end
+
+	local key = self:_BuildCustomEventKey(player, eventName, fields)
+	local bucket = self.pendingCustomEvents[key]
+	if not bucket then
+		bucket = {
+			player = player,
+			eventName = eventName,
+			value = 0,
+			fields = fields,
+		}
+		self.pendingCustomEvents[key] = bucket
+		table.insert(self.pendingCustomEventOrder, key)
+	end
+
+	bucket.value += self:_ClampEventValue(value)
 end
 
 function AnalyticsSystem:_RoundOutcomeField(args)
@@ -742,6 +824,15 @@ function AnalyticsSystem:_StringField(value)
 	end
 
 	return text
+end
+
+function AnalyticsSystem:_SendCustomEvent(player, eventName, value, fields)
+	local success, result = pcall(function()
+		AnalyticsService:LogCustomEvent(player, eventName, self:_ClampEventValue(value), fields)
+	end)
+	if not success then
+		warn(`[AnalyticsSystem] Failed to log {eventName}: {result}`)
+	end
 end
 
 ---- [[ Client Only ]] ----

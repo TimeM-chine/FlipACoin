@@ -520,13 +520,14 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 	args = args or {}
 	local landedCallback = args and args.landedCallback
 	local coinCount = getVisualCoinCount(args)
-	local primaryIndex = getPrimaryVisualCoinIndex(args, coinCount)
+	local primaryIndex = getPrimaryVisualCoinIndex(coinCount)
 	local states = {}
 	local visualOptions = args.visualOptions
 	local overallResult = args.result == "Tails" and "Tails" or "Heads"
 	local isObservedFlip = visualOptions and visualOptions.isObserved == true
 	local isObservedMilestone = visualOptions and visualOptions.isMilestone == true
 	local observedStreak = visualOptions and (visualOptions.streak or 0) or 0
+	local edgeStandCoinIndex = args.edgeStand == true and args.edgeStandCoinIndex or nil
 	local shouldPlayResultSfx = not visualOptions or visualOptions.playResultSfx ~= false
 	local shouldShowObservedStreakPulse = isObservedFlip
 		and overallResult == "Heads"
@@ -616,6 +617,7 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 		return visual
 	end
 
+	local primaryState = getPrimaryMultiCoinState(states)
 	visual.shouldFollowCamera = args.shouldFollowCamera == true
 	visual.isFlipping = true
 
@@ -624,7 +626,7 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 	playSfx("coinToss")
 	playTimedSfx("coinSpin", airborneDuration + VisualConfig.LandingDuration)
 	if visual.shouldFollowCamera then
-		FirstPersonCamera.FollowCoin(visual.focusPart, {
+		FirstPersonCamera.FollowCoin(primaryState.coinVisual.focusPart, {
 			duration = airborneDuration + VisualConfig.LandingDuration + (VisualConfig.ResultRevealDelay or 0) + 0.08,
 		})
 	end
@@ -681,7 +683,9 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 			local pulseColor = getLandingPulseColor(state.result, isObservedFlip)
 			local landingPulseOptions = getLandingPulseOptions(state.result, isObservedFlip)
 			playLandingPulse(state.coinVisual.landingPulse, state.shadowPos, pulseColor, landingPulseOptions)
-			playCoinLandingBurst(state.surfaceEndPos, state.tableNormal, state.result, state.coinVisual)
+			if state.isPrimary then
+				playCoinLandingBurst(state.surfaceEndPos, state.tableNormal, state.result, state.coinVisual)
+			end
 			if state.edgeStand then
 				playCoinVisualHighlight(seatId, state.coinVisual, {
 					duration = VisualConfig.MilestoneHighlightDuration,
@@ -692,8 +696,8 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 				})
 			end
 		end
+
 		if shouldShowObservedStreakPulse then
-			local primaryState = getPrimaryMultiCoinState(states)
 			playLandingPulse(
 				primaryState.coinVisual.streakPulse,
 				primaryState.shadowPos,
@@ -723,12 +727,11 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 				return
 			end
 
-			local primaryState = getPrimaryMultiCoinState(states)
 			visual.isFlipping = false
 			visual.lastResult = overallResult
 			visual.lastRestSpinRadians = primaryState.restSpinRadians
 			if visual.shouldFollowCamera then
-				FirstPersonCamera.ReturnToFirstPerson(visual.focusPart)
+				FirstPersonCamera.ReturnToFirstPerson(primaryState.coinVisual.focusPart)
 			end
 			visual.shouldFollowCamera = false
 			if shouldPlayResultSfx then
@@ -1323,23 +1326,9 @@ function getVisualCoinResult(args, coinIndex)
 	return args and args.result == "Tails" and "Tails" or "Heads"
 end
 
-function getPrimaryVisualCoinIndex(args, coinCount)
-	local overallResult = args and args.result == "Tails" and "Tails" or "Heads"
+function getPrimaryVisualCoinIndex(coinCount)
 	local centerIndex = (coinCount + 1) * 0.5
-	local primaryIndex = math.clamp(math.round(centerIndex), 1, coinCount)
-	local bestDistance = math.huge
-
-	for coinIndex = 1, coinCount do
-		if getVisualCoinResult(args, coinIndex) == overallResult then
-			local distance = math.abs(coinIndex - centerIndex)
-			if distance < bestDistance then
-				bestDistance = distance
-				primaryIndex = coinIndex
-			end
-		end
-	end
-
-	return primaryIndex
+	return math.clamp(math.floor(centerIndex), 1, coinCount)
 end
 
 function getPrimaryMultiCoinState(states)

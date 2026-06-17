@@ -1,6 +1,6 @@
 # TASK_STATE
 
-最后更新：2026-06-14
+最后更新：2026-06-17
 
 > 目的：记录当前正在做什么、下一步是什么、关键决策、待验证项与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`；已完成的历史日志放 `docs/archive/`。
 
@@ -30,21 +30,23 @@
 - Shop 商品卡购买按钮采用底部居中的大按钮，按钮直接显示价格或 `Owned`；Inventory 装备按钮仍采用短状态标签，优先避免挤压长文案。
 - Inventory 装备从 item card 立即生效；除非新增 staged-loadout 流程，否则独立 Apply 按钮保持隐藏。
 - 运行态 Rebirth / Shop / Inventory 入口使用 TopbarPlus 顶栏按钮；`CoinFlipMenu` 只保留为旧绑定兼容节点，玩法态不再显示。
-- Growth panels 保持 Studio-authored 结构但由运行时代码统一套黑底大面板布局；当前游戏具备基础触屏支持，但移动端布局、提示、安全区和实机观感仍需专项收敛。
+- Growth panels 保持 Studio-authored 结构但由运行时代码统一套黑底大面板布局；当前游戏具备基础触屏支持，默认移动 / 跳跃控件已关闭，但移动端布局、安全区和实机观感仍需专项收敛。
 - `Main.Frames.noUse` 下的 legacy 透明 UI 保持不可交互，避免抢 Rebirth / Shop / Inventory hit test。
 - 复杂客户端视觉、多客户端、移动端设备或 Studio-only 观感验证交由用户手动确认；Codex 只记录可自动覆盖的源码 / 单客户端 sanity 和用户回传结果。
 - 2026-06-01 及以前的详细完成日志已移入 `docs/archive/TASK_STATE_DONE_2026-05_TO_2026-06-01.md`；live task state 只保留最近完成项和当前交接信息。
 
 ## Known Follow-Ups
 
+- 上线前处理审计项：移除生产 profile / leaderboard / animation debug 输出；给 `RewardedAds.DevProductId` 填独立 Developer Product id；确认是否补回 `Workspace.RankingList` 或关闭排行榜启动 warn；Creator Dashboard 隐藏旧项目商品入口。
 - Studio / device QA：按 `docs/ROBLOX_PLATFORM_IMPROVEMENT.md` 覆盖手机 portrait / landscape、平板、桌面键鼠、手柄和双客户端同桌，确认 HUD 响应式布局、安全区、growth panels、Topbar 入口与装扮刷新。
 - Studio Play：填入真实 Developer Product / Game Pass id 后，确认 Boosts 入口能弹出 Robux 购买 prompt；购买 Cash / Rebirth Points / Apex bundle / VIP / 2x Cash / Lucky Charm / Quick Flip 后刷新 HUD、Shop、Inventory、Rebirth 和座位表现，并记录 `coinflip_gamepass_granted`。
 - Creator Dashboard：创建 `cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle / paidCash2x10m` 七个付费 Developer Products、一个 Rewarded Ads 专用 Developer Product，以及 `vip / winsX2 / luckyCharm / quickFlip` 四个 Game Pass；把付费 product id 填回 `Products.flipACoin`，把广告奖励 product id 填回 `RewardedAds.DevProductId`。
 - Studio Play：新档默认 Cash 为 `9`，入座后看到首次 Flip 引导；首次 Flip 后进入 v4 Value 升级阶段，Cash 不足时继续高亮 `FLIP`，Cash 达到 `12` 后高亮 HUD 内实际 `ValueButton`，点击升级后进入 Rebirth 引导。
 - Studio Play：确认 Phase 0 正反馈调参后的首局节奏，重点看首次升级是否更有反馈、首次 Rebirth 是否过快；如果后续 Rebirth 节奏仍明显过快，再单独调整 `RebirthPresets.FlipACoin.Rebirth.MinCashGrowth / CashPerPointGrowth`。
 - Studio Play：确认 Rebirth `Coin Spread` 购买后的真实运行体感，重点看多 Coin 立即生效后的世界表现、round streak 是否按成功轮数增减、失败但有 Heads 的奖励是否能接受；源码层已确认购买后 `coinCountLevel` / `coinCount` 会即时同步增长。
+- Studio Play 新档：确认第一次 Rebirth 后 `Coin Spread` 首级能在前 `3` 分钟内稳定买到，并且关闭 Rebirth 面板后能看到解锁 banner，下一次多金币 Flip 能看到首秀 banner / `multiCoinReveal`。
 - Studio Play：确认 Phase 2 HUD 文案，重点看 `1/1`、`1/3`、`2/3`、`3/3` 等结果是否清楚，`Streak reset` 是否不会和有 Heads 奖励矛盾，移动端是否挤压底部 ResultLabel。
-- Studio Play：确认 Phase 3 多金币扇形世界表现，重点看自己的相机是否能看清多枚硬币、扇形是否以玩家到中心落点为中轴、临时 coin / shadow / pulse 是否在下一轮或座位隐藏后清理。
+- Studio Play：确认 Phase 3 多金币扇形世界表现，重点看 primary 是否固定为视觉中位币、自己的相机是否跟随 primary coin、强落地 burst 是否只出现在 primary coin、多枚硬币是否仍都有轻落地 pulse、扇形是否以玩家到中心落点为中轴、临时 coin / shadow / pulse 是否在下一轮或座位隐藏后清理。
 - Studio Play：确认 Phase 4 组合庆祝，重点看 Triple / Four Heads / Perfect / Perfect Five 的落地 VFX 强度、Perfect Five 全桌通知频率、自己高价值组合有 SFX / 轻量 camera shake，而观察者不播放高价值结果 SFX 且不触发 camera shake，Perfect Five / Perfect 结果文案不挤压底部 ResultLabel。
 - Studio Play：确认 Phase 5 Bad Luck Pity 体感，重点看连续失败 3 轮后下一轮是否更容易回正但不显得保送、成功后 pity 是否清零、round streak 语义是否保持不变。
 - Studio Play 双客户端：确认真实玩家 `5/5 Heads` 触发 Table Bonus 时，同桌其他真实玩家收到 `$15` Cash 和轻 notification，触发者 ResultLabel 追加 Table bonus，fake player 不发共享奖励，并记录内部埋点 `coinflip_table_jackpot`。
@@ -75,6 +77,26 @@
 - 可评估极简决策点：高 streak 后出现保留本轮 streak 或继续挑战额外 bonus 的轻选择，但不要使用强博彩词，也不要破坏“一键 Flip”的主循环。
 
 ## Recent Done
+
+### 2026-06-17 Early multi-coin burst
+
+- Outcome: `Coin Spread` 首级保持 `1 RP`、后续按 `3x` 增长并收束到 `4` 级；Studio/MCP 补了 `UnlockBanner`、`FirstMultiCoinBanner` 和 `multiCoinReveal` 占位 VFX，客户端绑定首次多金币解锁与下一次多金币 Flip 首秀。
+
+### 2026-06-15 Mobile touch controls removal
+
+- Outcome: 移动端默认摇杆 / 跳跃控件改为通过 `StarterPlayer.DevTouchMovementMode = Scriptable`、`GuiService.TouchControlsEnabled = false` 和 PlayerModule controls disable 三层关闭，保留相机转向和玩法 UI 点击。
+
+### 2026-06-15 Multi-coin primary VFX alignment
+
+- Outcome: 多金币 Flip 现在用视觉中位币作为 primary coin，并只让 primary coin 承载强落地 burst 和镜头跟随；非 primary 硬币只保留轻落地反馈。
+
+### 2026-06-15 Launch readiness audit
+
+- Outcome: 完成上线前源码、配置、Studio 实例和单客户端 Play sanity 审计；核心服务端权威路径成立，但上线前仍需处理生产日志、Rewarded Ads id、排行榜缺失提示和旧商品 Dashboard 暴露风险。
+
+### 2026-06-14 Analytics custom event batching
+
+- Outcome: `AnalyticsSystem` custom events now batch by player, event name, and the three custom fields, flush every `15` seconds under a soft `120 + 20 * CCU` per-minute AnalyticsService budget, and force flush on player leave / server close; docs now clarify that Dashboard `Count` is batch count and `Sum value` keeps the original value semantics.
 
 ### 2026-06-14 Growth panel preview polish
 

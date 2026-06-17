@@ -1890,13 +1890,13 @@ RebirthPresets.FlipACoin = {
 	Upgrades = {
 		polishedStart = {
 			displayName = "Coin Spread",
-			description = "More coins per flip.",
+			description = "More coins per flip. First tier is cheap, later tiers ramp harder.",
 			runDataSteps = {
 				coinCountLevel = 1,
 			},
 			costBase = 1,
-			costGrowth = 2,
-			maxLevel = 5,
+			costGrowth = 3,
+			maxLevel = 4,
 		},
 		chainStart = {
 			displayName = "Chain Start",

@@ -113,6 +113,8 @@ repeat
 until s
 
 if UserInputService.TouchEnabled then
+	GuiService.TouchControlsEnabled = false
+
 	local touchGui = PlayerGui:FindFirstChild("TouchGui")
 	if touchGui and touchGui:IsA("ScreenGui") then
 		touchGui.Enabled = false
@@ -123,4 +125,11 @@ if UserInputService.TouchEnabled then
 			child.Enabled = false
 		end
 	end)
+
+	local playerScripts = LocalPlayer:WaitForChild("PlayerScripts")
+	local playerModule = playerScripts:FindFirstChild("PlayerModule")
+	if playerModule then
+		local controls = require(playerModule):GetControls()
+		controls:Disable()
+	end
 end

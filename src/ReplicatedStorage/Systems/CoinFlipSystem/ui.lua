@@ -95,6 +95,13 @@ local AutoButtonStroke = AutoButton:WaitForChild("UIStroke")
 local GuidePrompt = CenterPanel:WaitForChild("GuidePrompt")
 local GuideMessage = GuidePrompt:WaitForChild("Message")
 local GuideActionButton = GuidePrompt:WaitForChild("ActionButton")
+local UnlockBanner = GuidePrompt:WaitForChild("UnlockBanner")
+local UnlockBannerTitle = UnlockBanner:WaitForChild("Title")
+local UnlockBannerDesc = UnlockBanner:WaitForChild("Desc")
+local UnlockBannerCount = UnlockBanner:WaitForChild("Count")
+local FirstMultiCoinBanner = CenterPanel:WaitForChild("FirstMultiCoinBanner")
+local FirstMultiCoinTitle = FirstMultiCoinBanner:WaitForChild("Title")
+local FirstMultiCoinDesc = FirstMultiCoinBanner:WaitForChild("Desc")
 
 local SpectatorFeed = Elements:FindFirstChild("CoinFlipSpectatorFeed")
 local TableOverview = Elements:FindFirstChild("CoinFlipTableOverview")
@@ -147,7 +154,12 @@ local currentLayoutIsMobilePortrait = false
 local autoFlipEnabled = false
 local autoFlipToken = 0
 local upgradePromptToken = 0
+local unlockBannerToken = 0
+local firstMultiCoinBannerToken = 0
 local lastUpgradePromptKey = nil
+local firstMultiCoinFlipShown = false
+local pendingFirstMultiCoinFlip = false
+local pendingUnlockBannerCoinCount = nil
 local currentRunSnapshot = {
 	cash = 0,
 	runData = {},
@@ -456,6 +468,10 @@ local function applyGameplayVisibility(isVisible)
 		InputHints.Visible = false
 	end
 	ResultLabel.Visible = showHud
+	if not showHud then
+		UnlockBanner.Visible = false
+		FirstMultiCoinBanner.Visible = false
+	end
 	FlipButton.Visible = showHud
 	FlipButton.Active = canRequestFlip
 	FlipButton.AutoButtonColor = canRequestFlip
@@ -526,6 +542,73 @@ local function updateResultText(text, tone)
 			return
 		end
 		ResultLabel.TextColor3 = resultColor
+	end)
+end
+
+local function showUnlockBanner(coinCount)
+	unlockBannerToken += 1
+	local token = unlockBannerToken
+	if Hud.Visible ~= true or CenterPanel.Visible ~= true then
+		pendingUnlockBannerCoinCount = coinCount
+		return
+	end
+	UnlockBannerTitle.Text = "Coin Spread unlocked"
+	UnlockBannerDesc.Text = "More coins per flip starts now."
+	UnlockBannerCount.Text = `{coinCount} coins`
+	UnlockBanner.Visible = true
+	UnlockBanner.Position = UDim2.fromScale(0.5, -0.12)
+	UnlockBanner.BackgroundTransparency = 0.02
+
+	TweenService:Create(UnlockBanner, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.fromScale(0.5, -0.09),
+	}):Play()
+
+	task.delay(2.4, function()
+		if token ~= unlockBannerToken then
+			return
+		end
+
+		local tween = TweenService:Create(UnlockBanner, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			BackgroundTransparency = 1,
+			Position = UDim2.fromScale(0.5, -0.14),
+		})
+		tween:Play()
+		tween.Completed:Once(function()
+			if token == unlockBannerToken then
+				UnlockBanner.Visible = false
+			end
+		end)
+	end)
+end
+
+local function showFirstMultiCoinBanner(coinCount)
+	firstMultiCoinBannerToken += 1
+	local token = firstMultiCoinBannerToken
+	FirstMultiCoinTitle.Text = "First multi-coin flip"
+	FirstMultiCoinDesc.Text = `{coinCount} coins, one bigger payout moment.`
+	FirstMultiCoinBanner.Visible = true
+	FirstMultiCoinBanner.Position = UDim2.fromScale(0.5, 0.02)
+	FirstMultiCoinBanner.BackgroundTransparency = 0.02
+
+	TweenService:Create(FirstMultiCoinBanner, TweenInfo.new(0.16, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.fromScale(0.5, 0),
+	}):Play()
+
+	task.delay(2.0, function()
+		if token ~= firstMultiCoinBannerToken then
+			return
+		end
+
+		local tween = TweenService:Create(FirstMultiCoinBanner, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			BackgroundTransparency = 1,
+			Position = UDim2.fromScale(0.5, 0.03),
+		})
+		tween:Play()
+		tween.Completed:Once(function()
+			if token == firstMultiCoinBannerToken then
+				FirstMultiCoinBanner.Visible = false
+			end
+		end)
 	end)
 end
 
@@ -1046,6 +1129,11 @@ local function bindGrowthFrameVisibility()
 			end
 			updateInputActionContextState()
 			applyGameplayVisibility(currentSeatId ~= nil)
+			if not isGrowthFrameOpen() and pendingUnlockBannerCoinCount then
+				local coinCount = pendingUnlockBannerCoinCount
+				pendingUnlockBannerCoinCount = nil
+				showUnlockBanner(coinCount)
+			end
 			refreshGuide()
 		end)
 	end
@@ -1061,6 +1149,8 @@ function CoinFlipUi.Init()
 	updateAutoButtonText()
 	hideLegacyOnboardingPanel()
 	GuidePrompt.Visible = false
+	UnlockBanner.Visible = false
+	FirstMultiCoinBanner.Visible = false
 	ensureLeaveButton()
 	applyResponsiveLayout()
 	bindResponsiveLayout()
@@ -1177,7 +1267,9 @@ function CoinFlipUi.SyncRunState(args)
 	end
 	local coinCount = args.derivedStats.coinCount or 1
 	if args.rebirthUpgradePurchased == "polishedStart" and coinCount > previousCoinCount then
+		pendingFirstMultiCoinFlip = firstMultiCoinFlipShown ~= true and previousCoinCount <= 1
 		updateResultText(`Coin Spread unlocked {coinCount} coins per flip.`, "Heads")
+		showUnlockBanner(coinCount)
 	end
 
 	return true
@@ -1186,6 +1278,12 @@ end
 function CoinFlipUi.FlipResolved(args)
 	awaitingFlipResponse = false
 	currentFlipInProgress = true
+	local isFirstMultiCoinFlip = args.coinCount and args.coinCount > 1 and pendingFirstMultiCoinFlip == true
+	if isFirstMultiCoinFlip then
+		pendingFirstMultiCoinFlip = false
+		firstMultiCoinFlipShown = true
+		showFirstMultiCoinBanner(args.coinCount)
+	end
 	EffectSystem:PlayCoinFlipVisual(nil, nil, {
 		seatId = args.seatState and args.seatState.seatId,
 		result = args.result,
@@ -1206,6 +1304,21 @@ function CoinFlipUi.FlipResolved(args)
 				playSfx("cashReward")
 			end
 
+			if isFirstMultiCoinFlip then
+				EffectSystem:PlayStreakMilestone(nil, nil, {
+					seatId = args.seatState and args.seatState.seatId,
+					vfx = "multiCoinReveal",
+					sfx = "streak3",
+					lifeTime = 2.2,
+					cameraShake = {
+						duration = 0.22,
+						amplitude = 0.08,
+						frequency = 16,
+						rotation = 0.35,
+						fadeOut = true,
+					},
+				})
+			end
 			EffectSystem:PlayStreakMilestone(nil, nil, getCelebrationMilestone(args))
 			scheduleAutoFlipRequest()
 		end,
