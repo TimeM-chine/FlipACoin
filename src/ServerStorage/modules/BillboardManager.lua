@@ -14,9 +14,8 @@ local GameConfig = require(game.ReplicatedStorage.configs.GameConfig)
 local config = { count = 100, refreshTime = 60 }
 local Util = require(game.ReplicatedStorage.modules.Util)
 
-local RankingListFolder = workspace:WaitForChild("RankingList", 30)
+local RankingListFolder = workspace:FindFirstChild("RankingList")
 if not RankingListFolder then
-	warn("--------------RankingListFolder not found--------------")
 	return {
 		initBillboard = function() end,
 		savePlayerRankData = function() end,
@@ -120,7 +119,7 @@ end
 
 --[[
 	Save Player Rank Data
-	@param playerUserId 
+	@param playerUserId
 	@param count player's scrore
 	@param db dbname
 ]]
@@ -143,8 +142,6 @@ function BillboardManager.savePlayerRankData(playerUserId, count, db)
 	-- check if admin
 	if table.find(GameConfig.DevIds, playerUserId) then
 		count = math.random(1, 10)
-		-- print("admin can't save rank data")
-		-- return
 	end
 
 	local playerScope = "Player_" .. playerUserId
@@ -155,8 +152,6 @@ function BillboardManager.savePlayerRankData(playerUserId, count, db)
 
 	if not setSuccess then
 		warn(errorMessage)
-	else
-		-- print("save player rank correctly "..db.. " count="..count)
 	end
 end
 
@@ -231,7 +226,6 @@ function BillboardManager.initBillboard()
 	for rankType, pageData: Pages in pairs(rankPageList) do
 		updateLeaderBoard(pageData, rankType)
 	end
-	print("update billboard")
 end
 
 return BillboardManager

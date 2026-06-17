@@ -2,7 +2,6 @@ local Players = game:GetService("Players")
 local Replicated = game:GetService("ReplicatedStorage")
 local GuiService = game:GetService("GuiService")
 local MarketplaceService = game:GetService("MarketplaceService")
-local AdService = game:GetService("AdService")
 local UserInputService = game:GetService("UserInputService")
 
 local SystemMgr = require(Replicated.Systems.SystemMgr)
@@ -58,7 +57,6 @@ local initialized = false
 local currentCash = 0
 local currentLoadoutState = {}
 local currentGamePasses = {}
-local currentRewardedAdState = {}
 local selectedShopCategory = "coin"
 local selectedInventoryCategory = "coin"
 local selectedTabBackgroundColor = Color3.fromRGB(198, 158, 68)
@@ -74,7 +72,6 @@ local selectedBoostItemKey
 local generatedShopCards = {}
 local generatedBoostCards = {}
 local generatedInventoryCards = {}
-local rewardedAdAvailabilityToken = 0
 
 local function getGeneratedCardKey(category, itemId)
 	return `{category}:{itemId}`
@@ -124,14 +121,6 @@ end
 
 local function getOrderedBoostItems()
 	local items = {}
-	table.insert(items, {
-		itemType = "rewardedAd",
-		key = "adCash2x5m",
-		order = 0,
-		displayName = "Watch Ad: 2x Cash 5m",
-		description = "Watch a rewarded video to use a 2x Cash potion instantly",
-		configured = true,
-	})
 	for productKey, productInfo in pairs(EcoPresets.Products.flipACoin) do
 		table.insert(items, {
 			itemType = "product",
@@ -163,22 +152,6 @@ local function getOrderedBoostItems()
 		return a.order < b.order
 	end)
 	return items
-end
-
-local function formatSeconds(seconds)
-	local remaining = math.max(math.ceil(seconds or 0), 0)
-	local minutes = math.floor(remaining / 60)
-	local secondRemainder = remaining % 60
-	local paddedSeconds = secondRemainder < 10 and `0{secondRemainder}` or tostring(secondRemainder)
-	return `{minutes}:{paddedSeconds}`
-end
-
-local function getRewardedAdCooldownRemaining()
-	if typeof(currentRewardedAdState.cooldownEndsAt) ~= "number" then
-		return currentRewardedAdState.cooldownRemaining or 0
-	end
-
-	return math.max(currentRewardedAdState.cooldownEndsAt - os.time(), 0)
 end
 
 local function formatMultiplier(multiplier)
@@ -339,16 +312,7 @@ local function updateBoostsPreview(item)
 	setPreviewIcon(BoostsPreview, getItemIcon("boost", item))
 	BoostsPreview.Title.Text = item.displayName
 	BoostsPreview.Equipped.Text = item.description or "Premium boost"
-	if item.itemType == "rewardedAd" then
-		local cooldownRemaining = getRewardedAdCooldownRemaining()
-		if currentRewardedAdState.available == true then
-			BoostsPreview.TotalBonus.Text = "Free | Ready"
-		elseif cooldownRemaining > 0 then
-			BoostsPreview.TotalBonus.Text = `Free | Wait {formatSeconds(cooldownRemaining)}`
-		else
-			BoostsPreview.TotalBonus.Text = "Free | Unavailable"
-		end
-	elseif isOwnedPass then
+	if isOwnedPass then
 		BoostsPreview.TotalBonus.Text = "Owned"
 	elseif item.configured then
 		BoostsPreview.TotalBonus.Text = item.price and Util.GetRobuxText(item.price) or "Robux"
@@ -488,17 +452,7 @@ local function updateBoostsPanel()
 		card.Bonus.Text = item.description or "Premium boost"
 		card.Price.Text = item.price and Util.GetRobuxText(item.price) or "Robux"
 
-		if item.itemType == "rewardedAd" then
-			card.Price.Text = "Free"
-			local cooldownRemaining = getRewardedAdCooldownRemaining()
-			if currentRewardedAdState.available == true then
-				setButtonText(card.BuyButton, "Watch", true, BUY_BUTTON_COLOR)
-			elseif cooldownRemaining > 0 then
-				setButtonText(card.BuyButton, `Wait {formatSeconds(cooldownRemaining)}`, false, DISABLED_BUTTON_COLOR)
-			else
-				setButtonText(card.BuyButton, "Unavailable", false, DISABLED_BUTTON_COLOR)
-			end
-		elseif item.itemType == "gamePass" and currentGamePasses[item.key] == true then
+		if item.itemType == "gamePass" and currentGamePasses[item.key] == true then
 			setButtonText(card.BuyButton, "Owned", false, OWNED_BUTTON_COLOR)
 		elseif item.configured then
 			setButtonText(card.BuyButton, item.price and Util.GetRobuxText(item.price) or "Robux", true, BUY_BUTTON_COLOR)
@@ -515,13 +469,6 @@ local function updateBoostsPanel()
 		end
 		uiController.SetButtonHoverAndClick(card.BuyButton, function()
 			selectedBoostItemKey = getShopSelectionKey("boost", item)
-			if item.itemType == "rewardedAd" then
-				if currentRewardedAdState.available == true then
-					SystemMgr.systems.EcoSystem.Server:RequestRewardedCashPotionAd()
-				end
-				updateBoostsPanel()
-				return
-			end
 			if not item.configured then
 				updateBoostsPanel()
 				return
@@ -595,46 +542,6 @@ local function updatePanels()
 	refreshTopbarIconState()
 end
 
-local function refreshRewardedAdAvailability()
-	rewardedAdAvailabilityToken += 1
-	local token = rewardedAdAvailabilityToken
-	if currentRewardedAdState.available ~= true or currentRewardedAdState.reason ~= "ready" then
-		return
-	end
-
-	local serverState = currentRewardedAdState
-	currentRewardedAdState = table.clone(serverState)
-	currentRewardedAdState.available = false
-	currentRewardedAdState.reason = "checking"
-	ClientData:SetOneData("rewardedAdState", currentRewardedAdState)
-	if initialized then
-		updateBoostsPanel()
-	end
-
-	task.spawn(function()
-		local success, availability = pcall(function()
-			return AdService:GetAdAvailabilityNowAsync(Enum.AdFormat.RewardedVideo)
-		end)
-		if token ~= rewardedAdAvailabilityToken then
-			return
-		end
-
-		local updatedState = table.clone(serverState)
-		local result = success and availability and availability.AdAvailabilityResult
-		updatedState.available = result == Enum.AdAvailabilityResult.IsAvailable
-		updatedState.reason = result and result.Name or "availabilityError"
-		currentRewardedAdState = updatedState
-		ClientData:SetOneData("rewardedAdState", currentRewardedAdState)
-		SystemMgr.systems.EcoSystem.Server:ReportRewardedAdAvailability({
-			available = currentRewardedAdState.available,
-			reason = currentRewardedAdState.reason,
-		})
-		if initialized then
-			updateBoostsPanel()
-		end
-	end)
-end
-
 local function syncTopbarIcon(frame)
 	frame:GetPropertyChangedSignal("Visible"):Connect(function()
 		refreshTopbarIconState()
@@ -671,7 +578,6 @@ local function bindTopbarIcons()
 		updatePanels()
 	end)
 	boostsTopbarIcon = createTopbarFrameIcon("Boosts", "R$", 21, BoostsFrame, function()
-		SystemMgr.systems.EcoSystem.Server:RequestRewardedAdState()
 		resetScrollPosition(BoostsItems)
 		updatePanels()
 	end)
@@ -760,11 +666,9 @@ function EcoUi.Init()
 	currentCash = ClientData:GetOneData(dataKey.wins) or 0
 	currentLoadoutState = ClientData:GetOneData("loadoutState") or currentLoadoutState
 	currentGamePasses = ClientData:GetOneData(dataKey.gamePasses) or currentGamePasses
-	currentRewardedAdState = ClientData:GetOneData("rewardedAdState") or currentRewardedAdState
 	bindButtons()
 	bindTopbarIcons()
 	updatePanels()
-	refreshRewardedAdAvailability()
 end
 
 function EcoUi.SyncLoadoutState(args)
@@ -777,9 +681,6 @@ function EcoUi.SyncLoadoutState(args)
 	if args and args.loadoutState then
 		currentLoadoutState = args.loadoutState
 	end
-	if args and args.rewardedAdState then
-		currentRewardedAdState = args.rewardedAdState
-	end
 	currentGamePasses = ClientData:GetOneData(dataKey.gamePasses) or currentGamePasses
 
 	if initialized then
@@ -791,15 +692,6 @@ function EcoUi.SyncLoadoutState(args)
 	elseif args and args.equippedItem then
 		playSfx("equipItem")
 	end
-end
-
-function EcoUi.SyncRewardedAdState(args)
-	currentRewardedAdState = args or {}
-	ClientData:SetOneData("rewardedAdState", currentRewardedAdState)
-	if initialized then
-		updateBoostsPanel()
-	end
-	refreshRewardedAdAvailability()
 end
 
 function EcoUi.OpenGuideShopItem(args)

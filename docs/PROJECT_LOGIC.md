@@ -1,6 +1,6 @@
 # PROJECT_LOGIC
 
-更新时间：2026-06-15
+更新时间：2026-06-17
 
 ## 1. 这份文档的定位
 
@@ -501,7 +501,7 @@ FlipACoin
 
 当前首发成长配置按职责拆分：
 
-- `EcoSystem/Presets.lua`：首发 Coin / Desk Setup / Chair 商品、价格、稀有度 / 角色、Cash 倍率、luck 加成，以及当前 Lucky Coin 词条小步的 Edge Stand chance / Perfect reward / Tails reroll 加成；FlipACoin Developer Product / Game Pass 占位 id 与付费效果配置
+- `EcoSystem/Presets.lua`：首发 Coin / Desk Setup / Chair 商品、价格、稀有度 / 角色、Cash 倍率、luck 加成，以及当前 Lucky Coin 词条小步的 Edge Stand chance / Perfect reward / Tails reroll 加成；FlipACoin Developer Product / Game Pass 已配置 id 与付费效果配置
 - `RebirthSystem/Presets.lua`：重生最低 Cash、Cash 到点数换算、单次点数上限、重生后 Cash，以及当前 Rebirth 面板启用的 `Coin Spread / Chain Start / Quick Start / Lucky Start` 四个永久升级；重生次数本身不再自动给起始 Luck，`Coin Spread` 只提高多 Coin 数量，不再顺带提高起始 Value，首级保持 `1 RP`，后续按 `3x` 成本增长且最高 `4` 级。Rebirth 执行门槛和每点 RP 所需 Cash 会按当前 rebirth 次数轻量递增，避免永久升级叠加后重生节奏越来越短。
 - `EffectSystem/Presets.lua`：桌面硬币飞行、水平轴翻面、多金币扇形落点角度、落地随机平铺朝向收敛、自己 / 他人落地脉冲、落地短促粒子 burst、streak ring、milestone fallback 和上次结果保留表现
 
@@ -530,9 +530,9 @@ FlipACoin
 当前额外要记住：
 
 - 服务端维护 v4 首局引导链，状态写在 `guideData.coinFlipOnboarding`，漏斗仍写 `onboardingFunnelStep`。引导阶段为：
-  - 首次 Flip：客户端高亮 `FLIP`，`GuidePrompt` 文案为 `Heads pay Cash. Streaks boost your payout.`，不承诺固定 `2x`
+  - 首次 Flip：客户端高亮 `FLIP`，`GuidePrompt` 文案为 `Heads pay Cash. Streaks boost Cash rewards.`，不承诺固定 `2x`
   - 首次 Value 升级：第一次 Flip 后进入 `buyUpgrade`；Cash 不足时继续高亮 `FLIP` 并提示攒到 Value，Cash 足够时高亮 HUD 内实际 `ValueButton`，玩家点击该按钮完成步骤；目标固定为 `valueLevel`，但玩家手动先买任意其他 run upgrade 也会完成首次升级，避免卡住
-  - 首次 Rebirth：当 `RebirthSystem` 判定 `canRebirth` 后，`GuidePrompt` 引导打开 Rebirth 面板并高亮 `ConfirmButton`
+  - 首次 Rebirth：未达到门槛时 `GuidePrompt` 继续高亮 `FLIP`，展示还差多少 Cash 以及首个 `1 RP` 的 `Coin Spread` 会让每次 Flip 多一枚 coin；当 `RebirthSystem` 判定 `canRebirth` 后，引导打开 Rebirth 面板并高亮 `ConfirmButton`
   - Coin 购买 / 装备：首次 Rebirth 后，Cash 足够购买第一枚未拥有非默认 Coin 时引导 Shop 的 Coin 页购买；购买后自动转到 Inventory 的 Coin 页并高亮对应 `EquipButton`
 - 引导采用“持续到完成”的轻强制高亮；不恢复旧大 guide 面板，不发教学 / 建议类 toast。玩家手动打开与当前引导目标无关的 Shop / Inventory / Rebirth 面板时，会临时清理旧 HUD 高亮并保留普通面板遮罩，避免旧 `MaskFrame` 覆盖成长面板；关闭面板后再恢复当前步骤高亮。
 - HUD `GuidePrompt` 会在引导刷新时显式提高自身和子级 `ZIndex`，保证文字显示在 guide `MaskFrame` 之上。
@@ -569,20 +569,19 @@ FlipACoin
 - `GetLoadoutState()` 同步 owned / equipped 数据给 Shop / Inventory UI
 - `GetLoadoutBonuses()` 给 `CoinFlipSystem` 计算正面概率、Cash 倍率和 flip 间隔倍率；当前会合并 Coin / Desk / Chair 装备和已拥有的 FlipACoin gamepass 加成
 - Desk Setup 装备成功后通知 `DecorationSystem` 刷新座位可视化
-- `EcoSystem/ui.lua` 管理 `Frames.Shop / Boosts / Inventory`；Boosts 是独立付费面板，不复用 Shop 的 Coin / Desk / Chair 侧栏
+- `EcoSystem/ui.lua` 管理 `Frames.Shop / Boosts / Inventory`；Boosts 是独立付费面板，只展示 `Products.flipACoin` 和 `GamePasses`，不复用 Shop 的 Coin / Desk / Chair 侧栏
 - `MarketplaceService.ProcessReceipt` 处理 `EcoPresets.Products.flipACoin` 下的 Developer Product：Cash 包、Rebirth Points 包、Apex 外观礼包和购买后立即使用的 `paidCash2x10m`
-- Rewarded Video Ads 在 Boosts 面板展示；服务端维护 15 分钟内存冷却和 in-flight 防重入，客户端用 `AdService:GetAdAvailabilityNowAsync()` 判断当前平台可用性
-- Rewarded Video Ads 必须在 `RewardedAds.DevProductId` 配置一个独立 Developer Product id；服务端用 `AdService:CreateAdRewardFromDevProductId()` 创建 `AdReward`，并在 `ProcessReceipt` 中发放并立即使用 `adCash2x5m`，不在 `ShowRewardedVideoAdAsync()` 返回后手动重复发奖
 - `PromptGamePassPurchaseFinished` / 进服 ownership 检查处理 `EcoPresets.GamePasses` 下的 `vip / winsX2 / luckyCharm / quickFlip`；发放后统一记录 `coinflip_gamepass_granted`，`source` 为 `purchase` 或 `ownershipSync`
+- `CoinFlipSystem` 全量状态同步会携带 `gamePasses / loadoutState / rebirthState`，确保付费发货后 Boosts、Inventory、Rebirth 与 HUD 刷新读同一份客户端数据
+- Rewarded Ads 因 Roblox 新游戏 eligibility / DAU 要求移出首发范围；当前没有 `AdService` 路径、广告奖励 product 或广告 potion
 
 当前 Coin / Desk / Chair 商品配置在 `EcoSystem/Presets.lua` 的 `GrowthShopItems`。FlipACoin 付费配置在同文件：
 
-- `Products.flipACoin`：`cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle / paidCash2x10m`
-- `RewardedAds`：独立 `DevProductId`、`adCash2x5m` potion id、15 分钟冷却
-- `GamePasses`：`vip / winsX2 / luckyCharm / quickFlip`
+- `Products.flipACoin`：`cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle / paidCash2x10m`，当前均已填入非 `0` product id
+- `GamePasses`：`vip / winsX2 / luckyCharm / quickFlip`，当前均已填入非 `0` game pass id
 - `GamePassEffects`：VIP 小幅 Cash / Luck 和外观解锁、`winsX2` 的 flip Cash 倍率、`luckyCharm` 的 Heads 概率加成、`quickFlip` 的 flip 间隔倍率
 
-这些付费 id 默认可为 `0` 占位；运行时 UI 会禁用未配置的购买按钮，等 Creator Dashboard 创建商品后只需把真实 `productId / gamePassId` 填回 `EcoSystem/Presets.lua`。
+付费 id 为 `0` 时运行时 UI 会禁用未配置的购买按钮。当前 FlipACoin 首发付费 product / gamepass id 已填入，剩余工作是 Roblox 实际购买 prompt、receipt 发货和 UI / analytics 刷新验证。
 
 ### 7.4aa `PotionSystem` / `BuffSystem`
 
@@ -590,7 +589,7 @@ FlipACoin
 
 - `PotionSystem` 复用持久字段 `potions`；`GrantAndUsePotion()` 统一执行“入库存 -> 立即扣库存使用 -> AddBuff -> 客户端同步”
 - `BuffSystem` 复用持久字段 `equippedBuff`；同名 buff 重复使用时累加 duration，并重排服务端清理倒计时
-- 当前 potion 只保留 `adCash2x5m` 和 `paidCash2x10m`；都映射到 `cash2x`
+- 当前 potion 只保留 Robux product 使用的 `paidCash2x10m`，映射到 `cash2x`
 - `cash2x` 配置为 `boostType = wins`、`boost = 1`；`GetWinsBoost()` 从 `1` 起加，因此最终总倍率为 `2x`
 - 旧 simulator 的 Quest progress 和 Store / Buffs UI 依赖不再接回主线；两个系统的客户端 `ui.lua` 只保留轻量同步占位
 
@@ -688,7 +687,6 @@ FlipACoin
   - `coinflip_shop_purchase`
   - `coinflip_item_equip`
   - `coinflip_gamepass_granted`
-  - `coinflip_rewarded_ad`
   - `coinflip_potion_granted`
   - `coinflip_potion_used`
   - `coinflip_buff_active`
@@ -802,13 +800,12 @@ FlipACoin
 7. 发给其他玩家观察结果
 8. 若达到阈值，驱动 `AnnouncementSystem`
 
-### 8.4a 广告 / 付费 potion boost
+### 8.4a 付费 potion boost
 
-1. Boosts 面板展示 Rewarded Ad 和 `paidCash2x10m`
-2. Rewarded Ad 在客户端检查当前平台 availability；服务端检查独立广告奖励 Developer Product id、15 分钟内存冷却和 in-flight 状态
-3. 广告完成后的奖励 receipt 或付费购买 receipt 都由 `MarketplaceService.ProcessReceipt` 处理
-4. receipt 统一调用 `PotionSystem:GrantAndUsePotion()`，最终写入或延长 `equippedBuff.cash2x`
-5. 真实玩家后续 Flip 通过 `BuffSystem:GetWinsBoost()` 获得 `2x Cash`；概率、streak 和 flip interval 不变
+1. Boosts 面板展示 `paidCash2x10m` 和其他已配置 Robux products / gamepasses
+2. `MarketplaceService.ProcessReceipt` 处理 `paidCash2x10m` receipt
+3. receipt 调用 `PotionSystem:GrantAndUsePotion()`，最终写入或延长 `equippedBuff.cash2x`
+4. 真实玩家后续 Flip 通过 `BuffSystem:GetWinsBoost()` 获得 `2x Cash`；概率、streak 和 flip interval 不变
 
 ### 8.5 离开时清理
 
@@ -956,7 +953,7 @@ FlipACoin
 
 - 主 HUD 绑定读取 Studio 预制节点，不再为统计卡、升级按钮或离座按钮运行时创建兜底资源。
 - `CoinFlipSystem/ui.lua` 绑定 Flip HUD、run upgrade、多金币结果文案和 v4 引导高亮；不直接渲染 Shop / Inventory / Rebirth 面板内容，但会通过系统 UI 辅助方法打开并定位引导目标。
-- `EcoSystem/ui.lua` 绑定 TopbarPlus `Shop` / `Boosts` / `Inventory` 图标、兼容旧 `Buttons.CoinFlipMenu.ShopButton / InventoryButton`，并管理 `Frames.Shop / Boosts / Inventory`；Boosts 使用独立 Studio-authored 面板展示 Rewarded Ad、`Products.flipACoin` 和 `GamePasses`，不会显示 Shop 的 Coin / Desk / Chair 侧栏。广告不可用或冷却时按钮禁用，付费 id 未配置时按钮显示 `Set ID` 且不可点击。Shop 购买成功和 Inventory 装备成功后，服务端发轻 notification，客户端按同步 payload 播放购买 / 装备 SFX。
+- `EcoSystem/ui.lua` 绑定 TopbarPlus `Shop` / `Boosts` / `Inventory` 图标、兼容旧 `Buttons.CoinFlipMenu.ShopButton / InventoryButton`，并管理 `Frames.Shop / Boosts / Inventory`；Boosts 使用独立 Studio-authored 面板展示 `Products.flipACoin` 和 `GamePasses`，不会显示 Shop 的 Coin / Desk / Chair 侧栏。付费 id 未配置时按钮显示 `Set ID` 且不可点击。Shop 购买成功和 Inventory 装备成功后，服务端发轻 notification，客户端按同步 payload 播放购买 / 装备 SFX。
 - `RebirthSystem/ui.lua` 绑定 TopbarPlus `Rebirth` 图标、兼容旧 `Buttons.CoinFlipMenu.RebirthButton`，并管理 `Frames.Rebirth`。
 - `EffectSystem` 负责桌面 coin flip 表现，`CoinFlipSystem/ui.lua` 只调用它并等待落地回调。
 - 当前 in-play minimal HUD 是 Studio-authored 资源：TopbarPlus 是顶部入口，`CoinFlipMenu` 只保留兼容且玩法态隐藏，`Elements.cash / candy` 保留为 hidden legacy 节点但不再作为右上钱包显示，`CoinFlipHUD` 是全屏透明承载层，左下显示现金 / round streak，右下显示概率 / 速度 / Value / Luck，底部中心显示 `FLIP`、`Auto:Off / Auto:On`、`GuidePrompt` 和短结果提示；多金币结果复用 `ResultLabel`，单金币保持 `Heads! +$ 10` / `Tails! +$ 2`，多金币显示 `headsCount/coinCount`、combo 名、streak reset 和奖励，如 `2/3 Heads! Pair +$ 48` 或 `1/3 Heads. Streak reset. +$ 10`；Rebirth 永久升级 `Coin Spread` 提高 coin 数量时会短暂提示 `Coin Spread unlocked 2 coins per flip.`，并用 `UnlockBanner` / `FirstMultiCoinBanner` 做首次多金币解锁与首秀；`FlipButton.gamepadKeyImg` 用 `UserInputService:GetImageForKeyCode()` 显示当前输入方式对应的 R2 图片，键鼠端在同一 ImageLabel 内显示 Studio-authored `keyboardKeyText` 紧凑 Space 键帽兜底并放在 `FLIP` 按钮内部左侧，触屏端隐藏，旧 `InputHints` Frame 不再显示；`Main.Elements` 只保留 `CoinFlipHUD`、`cash`、`candy`、`ripple`，旧 `Buffs / Rewards / Quests / auto / blockInfo` 和旧 CoinFlip onboarding / spectator / overview 节点已从 Studio 资源中删除。
@@ -1029,8 +1026,8 @@ FlipACoin
 
 如果不存在：
 
-- 当前代码会降级成 no-op
-- 不会阻止主玩法运行
+- `BillboardManager` 会立即安静降级成 no-op，不等待启动超时，也不刷启动 warn
+- 不会阻止主玩法运行；补回排行榜展示时需在 server 启动前提供该实例树
 
 ### 11.3 `workspace.BGSoundsFolder`
 

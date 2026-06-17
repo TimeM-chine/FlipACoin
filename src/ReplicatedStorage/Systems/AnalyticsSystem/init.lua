@@ -33,7 +33,6 @@ local AnalyticsSystem: Types.System = {
 		"LogShopItemPurchased",
 		"LogItemEquipped",
 		"LogGamePassGranted",
-		"LogRewardedAd",
 		"LogPotionGranted",
 		"LogPotionUsed",
 		"LogBuffActive",
@@ -261,19 +260,6 @@ function AnalyticsSystem:LogGamePassGranted(sender, player, args)
 		"coinflip_gamepass_granted",
 		args and args.price or 0,
 		self:_BuildFields(args and args.gamePassName, args and args.source, args and args.effect)
-	)
-end
-
-function AnalyticsSystem:LogRewardedAd(sender, player, args)
-	if not self:_CanLog(sender, player) then
-		return
-	end
-
-	self:_LogCustomEvent(
-		player,
-		"coinflip_rewarded_ad",
-		1,
-		self:_BuildFields(args and args.stage, args and args.result, args and args.reason)
 	)
 end
 

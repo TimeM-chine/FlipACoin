@@ -40,7 +40,6 @@ local function PlayerAdded(player)
 			warn("------ [[ Debug mode, using debug data ]] ------")
 			profile.Data = TableModule.DeepCopy(DEBUG_DATA)
 		end
-		print("PlayerAdded profile ->", player.Name, profile.Data)
 		profile:AddUserId(player.UserId) -- GDPR compliance
 		profile:Reconcile() -- Fill in missing variables from ProfileTemplate (optional)
 		profile:ListenToRelease(function()
@@ -101,7 +100,7 @@ end
 
 function DataManager:GetPlayerOneData(player, key)
 	if typeof(player) == "string" then
-		print("You forgot the 'player' param, key is", player)
+		warn(`You forgot the 'player' param, key is {player}`)
 		return
 	end
 	local profile = DataManager:GetPlayerAllData(player)
@@ -114,12 +113,10 @@ function DataManager:GetPlayerOneData(player, key)
 end
 
 function DataManager:ResetPlayerData(player)
-	print("reset player data", player.Name)
 	profiles[player].Data = table.clone(DEFAULT_DATA)
 end
 
 function DataManager:ResetPlayerOneData(player, key)
-	print(`reset player {player.Name} key {key}`)
 	self:SetPlayerOneData(player, key, DEFAULT_DATA[key])
 end
 
@@ -144,7 +141,6 @@ end
 function DataManager:ReleaseProfile(player)
 	local profile = profiles[player]
 	if profile ~= nil then
-		print("ReleaseProfile ->", player.Name, profile.Data)
 		-- snapshot before release, so other systems can still read data briefly
 		snapshots[player.UserId] = TableModule.DeepCopy(profile.Data)
 		profiles[player] = nil

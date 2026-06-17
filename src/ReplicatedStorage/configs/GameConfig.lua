@@ -9,7 +9,7 @@ GameConfig.UpdateLog = {
 	"🐛 BUG FIXES",
 }
 
-local IsDebug = false
+local IsDebug = true
 GameConfig.isAlphaTest = false
 GameConfig.IsDebug = RunService:IsStudio() and IsDebug
 

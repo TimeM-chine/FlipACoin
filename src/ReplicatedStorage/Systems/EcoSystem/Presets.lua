@@ -27,12 +27,6 @@ EcoPresets.LoadoutDefaults = table.freeze({
 	equippedChair = "1",
 })
 
-EcoPresets.RewardedAds = table.freeze({
-	DevProductId = 0,
-	AdPotionName = "adCash2x5m",
-	CooldownSeconds = 15 * 60,
-})
-
 EcoPresets.GrowthShopItems = {
 	coin = table.freeze({
 		{

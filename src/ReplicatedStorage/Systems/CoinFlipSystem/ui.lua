@@ -128,7 +128,7 @@ local UpgradeTitles = {
 }
 local UpgradeTips = {
 	valueLevel = "More Cash per Heads.",
-	comboLevel = "Bigger payouts as your round streak grows.",
+	comboLevel = "Bigger Cash rewards as your round streak grows.",
 	speedLevel = "Flip again sooner.",
 	biasLevel = "More chance to flip Heads.",
 }
@@ -585,7 +585,7 @@ local function showFirstMultiCoinBanner(coinCount)
 	firstMultiCoinBannerToken += 1
 	local token = firstMultiCoinBannerToken
 	FirstMultiCoinTitle.Text = "First multi-coin flip"
-	FirstMultiCoinDesc.Text = `{coinCount} coins, one bigger payout moment.`
+	FirstMultiCoinDesc.Text = `{coinCount} coins, one bigger Cash moment.`
 	FirstMultiCoinBanner.Visible = true
 	FirstMultiCoinBanner.Position = UDim2.fromScale(0.5, 0.02)
 	FirstMultiCoinBanner.BackgroundTransparency = 0.02
@@ -759,7 +759,7 @@ end
 local function getGuideCopy(onboarding)
 	local stepKey = onboarding and onboarding.currentStep
 	if stepKey == "firstFlip" then
-		return "Heads pay Cash. Streaks boost your payout.", "FLIP"
+		return "Heads pay Cash. Streaks boost Cash rewards.", "FLIP"
 	end
 	if stepKey == "buyUpgrade" then
 		if onboarding.canBuyTargetUpgrade == true then
@@ -768,6 +768,16 @@ local function getGuideCopy(onboarding)
 		return "Flip until Value is ready.", "FLIP"
 	end
 	if stepKey == "rebirth" then
+		if onboarding.canRebirth ~= true then
+			local cashToRebirth = onboarding.cashToRebirth
+			local cashText = if typeof(cashToRebirth) == "number" and cashToRebirth > 0
+				then `$ {Util.FormatNumber(cashToRebirth, true)} more`
+				else `$ {Util.FormatNumber(onboarding.rebirthMinCash or 0, true)} Cash`
+			local coinSpreadName = onboarding.coinSpreadName or "Coin Spread"
+			local coinSpreadCost = onboarding.coinSpreadCost or 1
+			return `Need {cashText} for Rebirth. {coinSpreadCost} RP buys {coinSpreadName}: +1 coin/flip.`,
+				"FLIP"
+		end
 		return "Rebirth turns this run into permanent points.", "REBIRTH"
 	end
 	if stepKey == "coinBuy" then
@@ -781,11 +791,20 @@ local function getGuideCopy(onboarding)
 end
 
 local function openCurrentGuideTarget()
-	if not currentOnboarding or currentOnboarding.shouldGuide ~= true then
+	if not currentOnboarding then
 		return nil
 	end
 
 	local stepKey = currentOnboarding.currentStep
+	if currentOnboarding.shouldGuide ~= true then
+		if stepKey == "rebirth" and currentOnboarding.canRebirth ~= true then
+			requestFlip("guideRebirthGoal")
+			return FlipButton
+		end
+
+		return nil
+	end
+
 	if stepKey == "firstFlip" then
 		requestFlip()
 		return FlipButton
@@ -818,10 +837,13 @@ end
 
 local function refreshGuide()
 	hideLegacyOnboardingPanel()
+	local showSoftRebirthGoal = currentOnboarding
+		and currentOnboarding.currentStep == "rebirth"
+		and currentOnboarding.canRebirth ~= true
 	if
 		not currentOnboarding
 		or currentOnboarding.isComplete == true
-		or currentOnboarding.shouldGuide ~= true
+		or (currentOnboarding.shouldGuide ~= true and not showSoftRebirthGoal)
 		or currentSeatId == nil
 	then
 		GuidePrompt.Visible = false
@@ -836,7 +858,7 @@ local function refreshGuide()
 	applyGuidePromptZIndex()
 
 	local stepKey = currentOnboarding.currentStep
-	if stepKey == "rebirth" and RebirthFrame.Visible then
+	if stepKey == "rebirth" and currentOnboarding.canRebirth == true and RebirthFrame.Visible then
 		GuidePrompt.Visible = false
 		setGuideHighlight(SystemMgr.systems.RebirthSystem:OpenGuideRebirth())
 		return
@@ -876,6 +898,11 @@ local function refreshGuide()
 		else
 			setGuideHighlight(FlipButton)
 		end
+		return
+	end
+	if stepKey == "rebirth" and currentOnboarding.canRebirth ~= true then
+		GuidePrompt.Visible = Hud.Visible
+		setGuideHighlight(FlipButton)
 		return
 	end
 

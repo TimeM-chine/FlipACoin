@@ -142,9 +142,6 @@ Textures.FlipACoinItems = {
 		gamePass = {
 			icon = "rbxassetid://13267287237",
 		},
-		rewardedAd = {
-			icon = "rbxassetid://11560341132",
-		},
 	},
 	coin = {
 		coin1 = { icon = "rbxassetid://87703843792466" },

@@ -65,10 +65,7 @@ end
 for _, anim in ipairs(replacementAnimations) do
 	--Check if there is an animation to load, if so, continue this script.
 	if anim.id ~= "" then
-		print("Valid Animation ID found. Replacing default animation")
 		anim.isLoaded = true
-	else
-		print(anim.name .. " animation ID is blank. Keeping default animation")
 	end
 end
 

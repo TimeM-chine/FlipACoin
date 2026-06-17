@@ -216,6 +216,7 @@ local function buildClientState(player)
 		dailyClaim = dailyClaim,
 		seatState = getSeatState(player),
 		onboarding = Onboarding.BuildState(playerIns),
+		gamePasses = playerIns:GetOneData(dataKey.gamePasses),
 		loadoutState = loadoutState,
 		rebirthState = rebirthState,
 	}
@@ -248,6 +249,7 @@ local function syncPlayerState(self, player, extraArgs, useFlipResolved)
 
 	SystemMgr.systems.EcoSystem.Client:SyncLoadoutState(player, {
 		cash = payload.cash,
+		gamePasses = payload.gamePasses,
 		loadoutState = payload.loadoutState,
 		derivedStats = payload.derivedStats,
 		runData = payload.runData,

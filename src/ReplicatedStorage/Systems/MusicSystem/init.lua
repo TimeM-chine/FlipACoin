@@ -67,7 +67,7 @@ local function PlayBGMusic(musicData, fadeIn)
 	local volume = musicData.volume or 1
 	local resId = MusicPresets.Definition[musicName]
 	if resId == nil then
-		print(`music {musicName} is not exist`)
+		warn(`music {musicName} is not exist`)
 		return
 	end
 	local _name = "BGSound." .. musicName

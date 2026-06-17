@@ -454,6 +454,16 @@ function Onboarding.BuildState(playerIns)
 	local targetUpgradeLevel = if typeof(runData) == "table" then runData[TARGET_UPGRADE_KEY] or 0 else 0
 	local targetUpgradeCost = CoinFlipPresets.GetUpgradeCost(TARGET_UPGRADE_KEY, targetUpgradeLevel)
 	local cash = playerIns:GetOneData(dataKey.wins) or 0
+	local rebirthCount = playerIns:GetOneData(dataKey.rebirth) or 0
+	local rebirthMinCash = RebirthPresets.GetFlipACoinRebirthMinCash(rebirthCount)
+	local coinSpreadUpgradeKey = RebirthPresets.FlipACoin.UpgradeOrder[1]
+	local coinSpreadConfig = RebirthPresets.GetFlipACoinUpgradeConfig(coinSpreadUpgradeKey)
+	local coinSpreadLevel = 0
+	local rebirthTree = playerIns:GetOneData(dataKey.rebirthTree)
+	if typeof(rebirthTree) == "table" then
+		coinSpreadLevel = rebirthTree[coinSpreadUpgradeKey] or 0
+	end
+	local coinSpreadCost = RebirthPresets.GetFlipACoinUpgradeCost(coinSpreadUpgradeKey, coinSpreadLevel)
 	local purchaseTarget = Onboarding.GetCoinPurchaseTarget(playerIns)
 	local equipTarget = Onboarding.GetCoinEquipTarget(playerIns, state)
 	local canRebirth = Onboarding.CanRebirth(playerIns)
@@ -482,10 +492,15 @@ function Onboarding.BuildState(playerIns)
 		totalSteps = #Onboarding.StepOrder,
 		shouldGuide = shouldGuide,
 		canRebirth = canRebirth,
+		rebirthMinCash = rebirthMinCash,
+		cashToRebirth = math.max(rebirthMinCash - cash, 0),
 		targetUpgradeKey = TARGET_UPGRADE_KEY,
 		targetUpgradeName = CoinFlipPresets.GetUpgradeDisplayName(TARGET_UPGRADE_KEY),
 		targetUpgradeCost = targetUpgradeCost,
 		canBuyTargetUpgrade = targetUpgradeCost ~= nil and cash >= targetUpgradeCost,
+		coinSpreadUpgradeKey = coinSpreadUpgradeKey,
+		coinSpreadName = coinSpreadConfig and coinSpreadConfig.displayName or "Coin Spread",
+		coinSpreadCost = coinSpreadCost,
 		targetCoinId = targetCoin and targetCoin.id or nil,
 		targetCoinName = targetCoin and getCoinDisplayName(targetCoin.id) or nil,
 		targetCoinCost = targetCoin and targetCoin.cost or nil,

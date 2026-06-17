@@ -40,7 +40,6 @@ local function CreatePlayerIns(player: Player)
 		return
 	end
 	if not playerInsList[player.UserId] then
-		print(`  --> Created {player.name} ins`)
 		player.CharacterAdded:Connect(function(character)
 			playerIns:InitCharacter(character)
 		end)
@@ -104,7 +103,7 @@ end
 function PlayerServerClass:AddOneData(key, num)
 	local oldValue = self:GetOneData(key)
 	if not oldValue then
-		print("Value not found", self.player.Name, key)
+		warn(`Value not found for {self.player.Name}: {key}`)
 		return
 	end
 	self:SetOneData(key, oldValue + num)

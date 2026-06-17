@@ -123,7 +123,6 @@ local function PlayAnimation(args)
 	if not animTracks[identifier] then
 		animTracks[identifier] = {}
 		actor.Destroying:Connect(function(child, parent)
-			print("Destroying animTracks", actor)
 			for _, track in pairs(animTracks[identifier]) do
 				track:Stop()
 				track:Destroy()
@@ -164,7 +163,6 @@ local function PlayAnimation(args)
 
 	local animation = Instance.new("Animation")
 	animation.AnimationId = AnimatePresets.Animations[animKey][animName].id
-	-- print(animator, animator.Parent, args)
 	animTracks[identifier][animName] = animator:LoadAnimation(animation)
 	-- animTracks[identifier][animName] = {
 	--     Play = function()
