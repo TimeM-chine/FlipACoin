@@ -640,6 +640,7 @@ function CoinFlipSystem:PlayerRemoving(sender, player)
 	if not IsServer then
 		return
 	end
+	GetSystemMgr()
 	if sender ~= SENDER then
 		return
 	end
@@ -649,6 +650,7 @@ end
 
 function CoinFlipSystem:SyncPlayerState(sender, player, extraArgs, useFlipResolved)
 	if IsServer then
+		GetSystemMgr()
 		if sender ~= SENDER then
 			return
 		end
@@ -664,6 +666,7 @@ function CoinFlipSystem:RequestFlip(sender, player, args)
 		return
 	end
 
+	GetSystemMgr()
 	player = player or sender
 	if sender ~= SENDER and sender ~= player then
 		return
@@ -779,6 +782,7 @@ function CoinFlipSystem:ReportInputAction(sender, player, args)
 		return
 	end
 
+	GetSystemMgr()
 	player = player or sender
 	if sender ~= player or not player:IsDescendantOf(Players) or typeof(args) ~= "table" then
 		return
@@ -803,6 +807,7 @@ function CoinFlipSystem:RequestFakeFlip(sender, fakeActor)
 	if not IsServer then
 		return nil
 	end
+	GetSystemMgr()
 	if sender ~= SENDER then
 		return nil
 	end
@@ -853,6 +858,7 @@ function CoinFlipSystem:BuyUpgrade(sender, player, args)
 		return
 	end
 
+	GetSystemMgr()
 	player = player or sender
 	if sender ~= SENDER and sender ~= player then
 		return
@@ -952,6 +958,7 @@ function CoinFlipSystem:ReportGuideAction(sender, player, args)
 		return
 	end
 
+	GetSystemMgr()
 	player = player or sender
 	if sender ~= player then
 		return
@@ -971,6 +978,7 @@ function CoinFlipSystem:HandleGuideSit(sender, player)
 	if not IsServer then
 		return
 	end
+	GetSystemMgr()
 	if sender ~= SENDER then
 		return
 	end
@@ -982,6 +990,7 @@ function CoinFlipSystem:HandleGuideRebirth(sender, player)
 	if not IsServer then
 		return
 	end
+	GetSystemMgr()
 	if sender ~= SENDER then
 		return
 	end
@@ -993,6 +1002,7 @@ function CoinFlipSystem:HandleGuideCoinPurchased(sender, player, args)
 	if not IsServer then
 		return
 	end
+	GetSystemMgr()
 	if sender ~= SENDER then
 		return
 	end
@@ -1009,6 +1019,7 @@ function CoinFlipSystem:HandleGuideCoinEquipped(sender, player, args)
 	if not IsServer then
 		return
 	end
+	GetSystemMgr()
 	if sender ~= SENDER then
 		return
 	end

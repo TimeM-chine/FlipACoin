@@ -323,6 +323,7 @@ function controller.OpenFrame(name)
 	for _, unit in hideUnitWhenPush do
 		unit.Visible = false
 	end
+	MaskFrame.Visible = true
 
 	if GamepadEnabled then
 		local btns = frame:GetDescendants()

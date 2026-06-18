@@ -84,13 +84,13 @@ local LoadOrder = { "PlayerSystem", "CharacterSystem" }
 只有真的需要"先于其他系统完成 `Init`"才加进来。其余系统并发加载，`Init` 不保证顺序。
 
 ### 3.3 桥接生成规则（`LoadSystem`）
-服务端：遍历 system 的每个函数字段（除 `Init`、除 `whiteList` 里的），在 `system.Client[fn]` 挂 `FireClient` 包装；若 system 自行建了 `system.AllClients = setmetatable({}, System)`，也挂 `FireAllClients`。
-客户端：把每个这样的函数挂到 `system.Server[fn]` 上做 `FireServer`。
-末端：把原参数追加 `{ sysName, funName }` 作为定位信息，远端按 `systems[sysName][funName](systems[sysName], ...)` 调用。
+服务端：遍历 system 的每个函数字段（除 `Init`、除 `whiteList` 里的），在 `system.Client[fn]` 挂 `FireClient` 包装；若 system 自行建了 `system.AllClients = setmetatable({}, System)`，也挂 `FireAllClients`。`PlayerAdded` 这类同名方法可作为服务端到客户端的初始状态通知。
+客户端：把每个这样的函数挂到 `system.Server[fn]` 上做 `FireServer`，但不会为生命周期方法生成 client-to-server 代理。
+末端：把原参数追加 `{ sysName, funName }` 作为定位信息，远端按显式 `sender / player / payload` 槽位调用目标方法。
 
-RemoteEvent / UnreliableRemoteEvent 运行时作为 `SystemMgr.lua` 脚本的直接子级创建，客户端通过 `script:WaitForChild(...)` 等待。
+RemoteEvent / UnreliableRemoteEvent 运行时放在 `ReplicatedStorage.Systems.SystemMgrRuntime`，客户端通过该 runtime folder 等待。
 
-服务端 remote 派发通过末尾 `{ sysName, funName }` 定位目标，并阻止调用 `whiteList` 方法。客户端 remote 进入系统方法前会插入空的 sender / player slot，确保客户端表现入口不能伪造目标玩家。
+服务端 remote 派发通过末尾 `{ sysName, funName }` 定位目标，并阻止调用 `whiteList` 方法。客户端 remote 进入系统方法前保留空的 player slot，服务端以真实发送者作为 sender，并显式把 player slot 置空，确保客户端不能伪造目标玩家；remote 参数必须保留 nil 占位，不要依赖普通 `table.unpack(args)` 的默认长度。
 
 调用约定：
 
@@ -112,7 +112,7 @@ local System: Types.System = { whiteList = { "SomeInternal" }, ... }
 - **不会**被框架挂成 remote（外部客户端伪造 RemoteEvent 无法触发）
 - 专供同服务端内部调用 / 共享工具方法
 
-框架还会统一拒绝客户端 remote 调用生命周期方法：`Init` / `PlayerAdded` / `PlayerRemoving`，且客户端不会生成这些 `self.Server:*` 代理。它们只允许 `SystemMgr` 启动与生命周期编排触发，不能作为系统业务 remote。
+框架还会统一拒绝客户端 remote 调用生命周期方法：`Init` / `PlayerAdded` / `PlayerRemoving`，且客户端不会生成这些 `self.Server:*` 的 `FireServer` 代理。它们只允许 `SystemMgr` 启动与生命周期编排触发，或作为服务端到客户端的初始化通知，不能作为客户端业务 remote。
 
 ### 3.5 `SENDER`
 - `SystemMgr` 生成的随机整数，挂 `SystemMgr.SENDER`。
@@ -141,8 +141,8 @@ local System: Types.System = { whiteList = { "SomeInternal" }, ... }
 
 离服（服务端）：
 1. **先**按 `ListenMoving` 遍历调每个系统的 `PlayerRemoving`（此时 profile 数据仍可写）；系统若未定义 `PlayerRemoving`，框架会自动清空 `system.players[player.UserId]`。
-2. **然后** `PlayerServerClass.PlayerRemoving(player)` 清理服务端玩家实例。
-3. **最后** `DataManager.PlayerRemoving(player)`：snapshot + ProfileService 释放。
+2. **然后** `DataManager:ReleaseProfile(player)`：snapshot + ProfileService 释放。
+3. **最后** `PlayerServerClass.RemoveIns(player)` 清理服务端玩家实例。
 
 > 单个系统**不要**自己 hook `Players.PlayerRemoving` 释放 profile；只实现 `PlayerRemoving(self, sender, player)` 交给 `SystemMgr` 调度。
 
@@ -410,4 +410,3 @@ SystemMgr.systems.BackpackSystem:DeleteItems(SENDER, player, { items = ... })
 - **`.cursor/rules/*.mdc`**：Cursor 专属注入，是 §8 与 AGENTS 规则的压缩子集，不得分叉扩写。
 
 文档体积是每轮对话的固定成本：宁可删旧句，不要在旧句旁追加修正。
-

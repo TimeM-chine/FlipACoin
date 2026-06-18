@@ -233,7 +233,7 @@ function BuffSystem:GetLuckyBoost(player)
 
 	-- Lucky GamePass bonus
 	local gamePasses = playerIns:GetOneData(dataKey.gamePasses)
-	if gamePasses.lucky then
+	if gamePasses.luckyCharm or gamePasses.lucky then
 		boost += 0.2
 	end
 

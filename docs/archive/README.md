@@ -15,4 +15,5 @@
 - `TASK_STATE_DONE_2026-06-05.md`：从旧 `TASK_STATE.md` 的 `Recent Done` 压缩出来的已完成历史摘要，覆盖 2026-06-05。
 - `TASK_STATE_DONE_2026-06-13.md`：从旧 `TASK_STATE.md` 的 `Recent Done` 压缩出来的已完成历史摘要，覆盖 2026-06-13。
 - `TASK_STATE_DONE_2026-06-14.md`：从旧 `TASK_STATE.md` 的 `Recent Done` 压缩出来的已完成历史摘要，覆盖 2026-06-14。
+- `TASK_STATE_DONE_2026-06-15.md`：从旧 `TASK_STATE.md` 的 `Recent Done` 压缩出来的已完成历史摘要，覆盖 2026-06-15。
 - `TASK_STATE_DONE_2026-05_TO_2026-06-01.md`：从旧 `TASK_STATE.md` 压缩出来的已完成历史摘要，覆盖 2026-05-01 到 2026-06-01。

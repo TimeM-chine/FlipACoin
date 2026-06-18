@@ -178,6 +178,7 @@ function PlayerSystem:AddExp(sender, player, args)
 
 		return payload
 	else
+		ClientData = ClientData or require(Replicated.Systems.ClientData)
 		ClientData:SetOneData(dataKey.exp, args.exp)
 		ClientData:SetOneData(dataKey.level, args.level)
 		if PlayerUi.AddExp then

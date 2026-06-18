@@ -5,11 +5,11 @@ local TableModule = require(Replicated.modules.TableModule)
 local DebugData = table.clone(DEFAULT_DATA) -- just for auto completion
 DebugData = TableModule.DeepCopy(DEFAULT_DATA)
 
--- DebugData.settingsData = {
--- 	bgm = 1,
--- 	sfx = 1,
--- 	trade = true,
--- }
+DebugData.settingsData = {
+	bgm = 0,
+	sfx = 0,
+	trade = true,
+}
 
 -- DebugData.backpack.weapons = {
 -- 	[1] = {

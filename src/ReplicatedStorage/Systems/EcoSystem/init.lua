@@ -29,6 +29,7 @@ local SENDER, SystemMgr
 local PlayerServerClass, purchaseHistoryStore, DataStoreService, GlobalDataModule, AnalyticsService
 local productFunctions = {}
 local gamePassFunctions = {}
+local processedPurchaseReceipts = {}
 
 ---- client variables ----
 local LocalPlayer, ClientData
@@ -74,10 +75,20 @@ function processReceipt(receiptInfo)
 		purchased = purchaseHistoryStore:GetAsync(playerProductKey)
 	end)
 	-- if there is a record, then this receipt is done
-	if success and purchased then
+	if success and (purchased or processedPurchaseReceipts[playerProductKey]) then
+		if processedPurchaseReceipts[playerProductKey] and not purchased then
+			local saveSuccess, saveError = pcall(function()
+				purchaseHistoryStore:SetAsync(playerProductKey, true)
+			end)
+			if not saveSuccess then
+				warn(`[EcoSystem] Cannot save purchase data for {playerProductKey}: {saveError}`)
+				return Enum.ProductPurchaseDecision.NotProcessedYet
+			end
+		end
 		return Enum.ProductPurchaseDecision.PurchaseGranted
 	elseif not success then
-		error("Data store error:" .. errorMessage)
+		warn(`[EcoSystem] Cannot read purchase data for {playerProductKey}: {errorMessage}`)
+		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
 	-- get online player
@@ -88,11 +99,13 @@ function processReceipt(receiptInfo)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
-	-- check handle
-	if not productFunctions[receiptInfo.ProductId] then
-		productFunctions[receiptInfo.ProductId] = emptyHandle
-	end
 	local handler = productFunctions[receiptInfo.ProductId]
+	if not handler then
+		warn(
+			`[EcoSystem] Missing product handler for product {receiptInfo.ProductId}; keeping receipt pending for {player.Name}.`
+		)
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
 
 	-- result check
 	local result
@@ -101,13 +114,15 @@ function processReceipt(receiptInfo)
 		warn(`[EcoSystem] Error processing product {receiptInfo.ProductId} for {player.Name}: {tostring(result)}`)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
+	processedPurchaseReceipts[playerProductKey] = true
 
 	-- 将购买操作记录在数据库中
 	success, errorMessage = pcall(function()
 		purchaseHistoryStore:SetAsync(playerProductKey, true)
 	end)
 	if not success then
-		error("Cannot save purchase data: " .. errorMessage)
+		warn(`[EcoSystem] Cannot save purchase data for {playerProductKey}: {errorMessage}`)
+		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
 	return Enum.ProductPurchaseDecision.PurchaseGranted
@@ -127,11 +142,6 @@ function gamePassPurchaseFinished(player, purchasedPassID, purchaseSuccess)
 		-- })
 		-- passFunctions[purchasedPassID](player)
 	end
-end
-
-function emptyHandle(receipt, player)
-	warn(`player {player.Name} bought item {receipt.ProductId}, but there is no handle.`)
-	return true
 end
 
 function GetSystemMgr()

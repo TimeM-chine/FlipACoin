@@ -107,6 +107,54 @@ SystemMgr.systems = systems
 local RemoteEvent, UnreliableRemoteEvent, BindableEvent
 local RuntimeFolder
 
+local LifecycleMethods = {
+	Init = true,
+	PlayerAdded = true,
+	PlayerRemoving = true,
+}
+
+local function packRemoteArgs(...)
+	return {
+		n = select("#", ...),
+		...
+	}
+end
+
+local function isServerToClientMethod(system, fName)
+	if system.whiteList and table.find(system.whiteList, fName) then
+		return false
+	end
+	return typeof(system[fName]) == "function"
+end
+
+local function isClientToServerMethod(system, fName)
+	if LifecycleMethods[fName] then
+		return false
+	end
+	return isServerToClientMethod(system, fName)
+end
+
+local function callSystemFunction(system, fName, sender, player, args, payloadStartIndex, payloadEndIndex)
+	if payloadStartIndex <= payloadEndIndex then
+		system[fName](system, sender, player, table.unpack(args, payloadStartIndex, payloadEndIndex))
+	else
+		system[fName](system, sender, player)
+	end
+end
+
+local function dispatchSystemFunction(system, sysName, fName, sender, player, args, payloadStartIndex, payloadEndIndex)
+	if IsStudio then
+		callSystemFunction(system, fName, sender, player, args, payloadStartIndex, payloadEndIndex)
+	else
+		local success, result = pcall(function()
+			callSystemFunction(system, fName, sender, player, args, payloadStartIndex, payloadEndIndex)
+		end)
+		if not success then
+			warn(`Failed to call {fName} for {sysName}: {result}`)
+		end
+	end
+end
+
 local function getRuntimeFolder()
 	if RuntimeFolder and RuntimeFolder.Parent then
 		return RuntimeFolder
@@ -128,8 +176,9 @@ end
 
 -- Helper: process a server remote event with player-alive guard
 local function HandleServerRemote(args)
+	local argCount = args.n or #args
 	local player = args[1]
-	local info = args[#args]
+	local info = args[argCount]
 	if typeof(info) ~= "table" then
 		return
 	end
@@ -138,42 +187,54 @@ local function HandleServerRemote(args)
 	if typeof(sysName) ~= "string" or typeof(fName) ~= "string" then
 		return
 	end
-	table.remove(args, #args)
+	args[argCount] = nil
+	argCount -= 1
 
 	-- Player-alive guard: reject requests from players who are leaving
 	if not player or not player:IsDescendantOf(game.Players) then
 		return
 	end
-	-- The bridge owns the target player slot; clients may not spoof another Player there.
-	args[2] = nil
 
 	-- whiteList check: block remote calls to whitelisted functions
 	local system = rawget(systems, sysName)
 	if not system then
 		return
 	end
-	if typeof(system[fName]) ~= "function" then
+	if not isClientToServerMethod(system, fName) then
 		return
 	end
-	if system and system.whiteList and table.find(system.whiteList, fName) then
-		warn(`[SystemMgr] Blocked remote call to whitelisted function: {sysName}.{fName}`)
-		return
-	end
-	if IsStudio then
-		systems[sysName][fName](systems[sysName], table.unpack(args))
-	else
-		local success, result = pcall(function()
-			systems[sysName][fName](systems[sysName], table.unpack(args))
-		end)
-		if not success then
-			warn(`Failed to call {fName} for {sysName}: {result}`)
-		end
-	end
+
+	-- The bridge owns the target player slot; clients may not spoof another Player there.
+	local payloadStartIndex = if args[2] == nil then 3 else 2
+	dispatchSystemFunction(system, sysName, fName, player, nil, args, payloadStartIndex, argCount)
 end
 
 local function ShouldUseUnreliable(args)
 	local firstArg = args[1]
 	return typeof(firstArg) == "table" and firstArg.unreliable == true
+end
+
+local function HandleClientRemote(args)
+	local argCount = args.n or #args
+	local info = args[argCount]
+	if typeof(info) ~= "table" then
+		return
+	end
+	local sysName = info.sysName
+	local fName = info.funName
+	if typeof(sysName) ~= "string" or typeof(fName) ~= "string" then
+		return
+	end
+	args[argCount] = nil
+	argCount -= 1
+
+	local system = systems[sysName]
+	if not system.IsLoaded then
+		Replicated.Systems[sysName]:WaitForChild("IsLoaded")
+	end
+
+	local payloadStartIndex = if args[1] == nil and args[2] == nil then 3 else 1
+	dispatchSystemFunction(system, sysName, fName, nil, nil, args, payloadStartIndex, argCount)
 end
 
 if IsServer then
@@ -186,7 +247,7 @@ if IsServer then
 	end
 
 	RemoteEvent.OnServerEvent:Connect(function(...)
-		HandleServerRemote({ ... })
+		HandleServerRemote(packRemoteArgs(...))
 	end)
 
 	UnreliableRemoteEvent = RuntimeFolder:FindFirstChild(UnreliableRemoteEventName)
@@ -196,7 +257,7 @@ if IsServer then
 		UnreliableRemoteEvent.Parent = RuntimeFolder
 	end
 	UnreliableRemoteEvent.OnServerEvent:Connect(function(...)
-		HandleServerRemote({ ... })
+		HandleServerRemote(packRemoteArgs(...))
 	end)
 
 	BindableEvent = Instance.new("BindableEvent")
@@ -206,47 +267,11 @@ else
 	UnreliableRemoteEvent = RuntimeFolder:WaitForChild(UnreliableRemoteEventName)
 
 	RemoteEvent.OnClientEvent:Connect(function(...)
-		local args = { ... }
-
-		--print("---------OnClientEvent ------------", args)
-		local info = args[#args]
-		local sysName = info.sysName
-		local fName = info.funName
-		table.remove(args, #args)
-		if not systems[sysName].IsLoaded then
-			Replicated.Systems[sysName]:WaitForChild("IsLoaded")
-		end
-		if IsStudio then
-			systems[sysName][fName](systems[sysName], table.unpack(args))
-		else
-			local success, result = pcall(function()
-				systems[sysName][fName](systems[sysName], table.unpack(args))
-			end)
-			if not success then
-				warn(`Failed to call {fName} for {sysName}: {result}`)
-			end
-		end
+		HandleClientRemote(packRemoteArgs(...))
 	end)
 
 	UnreliableRemoteEvent.OnClientEvent:Connect(function(...)
-		local args = { ... }
-		local info = args[#args]
-		local sysName = info.sysName
-		local fName = info.funName
-		table.remove(args, #args)
-		if not systems[sysName].IsLoaded then
-			Replicated.Systems[sysName]:WaitForChild("IsLoaded")
-		end
-		if IsStudio then
-			systems[sysName][fName](systems[sysName], table.unpack(args))
-		else
-			local success, result = pcall(function()
-				systems[sysName][fName](systems[sysName], table.unpack(args))
-			end)
-			if not success then
-				warn(`Failed to call {fName} for {sysName}: {result}`)
-			end
-		end
+		HandleClientRemote(packRemoteArgs(...))
 	end)
 end
 
@@ -265,7 +290,7 @@ function LoadSystem(name)
 					continue
 				end
 
-				if table.find(system.whiteList, funName) then
+				if not isServerToClientMethod(system, funName) then
 					continue
 				end
 
@@ -314,11 +339,7 @@ function LoadSystem(name)
 					continue
 				end
 
-				if funName == "Init" then
-					continue
-				end
-
-				if table.find(system.whiteList, funName) then
+				if not isClientToServerMethod(system, funName) then
 					continue
 				end
 

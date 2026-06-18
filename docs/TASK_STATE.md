@@ -6,7 +6,6 @@
 
 ## Active
 
-- 当前没有进行中的实现任务。
 - 上线版本任务以 `Launch Must-Do Task List` 为准；收集 / 图鉴 / 套装完成奖励已降级为后续内容，不作为首发阻塞项。
 
 ## Current Baseline
@@ -34,6 +33,7 @@
 - Growth panels 保持 Studio-authored 结构但由运行时代码统一套黑底大面板布局；当前游戏具备基础触屏支持，默认移动 / 跳跃控件已关闭，但移动端布局、安全区和实机观感仍需专项收敛。
 - `Main.Frames.noUse` 下的 legacy 透明 UI 保持不可交互，避免抢 Rebirth / Shop / Inventory hit test。
 - 复杂客户端视觉、多客户端、移动端设备或 Studio-only 观感验证交由用户手动确认；Codex 只记录可自动覆盖的源码 / 单客户端 sanity 和用户回传结果。
+- 2026-06-18 用户已手动修好手机端 UI；Codex 后续不再主动修改手机端 UI、布局或新增手机端逻辑，除非用户明确要求。
 - 2026-06-17 市场评审取舍：资源有限时，首发优先前 `3` 分钟留存、Flip 反馈层级、移动端首屏、合规变现和现有同桌弱社交验证；收集 / 图鉴 / 稀有度 / 套装 / 限时外观进入后续 Backlog。
 - 2026-06-17 Rewarded Ads 因 Roblox 新游戏 eligibility / DAU 要求移出首发范围；首发只保留 Robux Developer Product / Game Pass 变现，广告奖励后续满足资格再评估。
 - Timing Bonus / Power Flip / Buff Choice 等轻操作补充暂不进入首发必做，除非首轮测试明确暴露“一键 Flip”疲劳问题。
@@ -45,16 +45,15 @@
 
 ### P0 Release Blockers
 
-- **生产配置与变现闭环**：`Products.flipACoin` 七个 Developer Product 和四个 Game Pass ID 已填入；源码侧已补齐付费发货后的 `gamePasses / loadout / rebirthState` 客户端同步；仍需真实 Roblox 购买 prompt、发货、HUD / Shop / Inventory / Rebirth / Boosts 刷新、`coinflip_gamepass_granted` 和 potion grant / use 埋点手动 QA。
+- **生产配置与变现闭环**：`Products.flipACoin` 七个 Developer Product 和四个 Game Pass ID 已填入；源码侧已补齐付费发货后的 `gamePasses / loadout / rebirthState` 客户端同步，并加固未知 product / 同服 receipt 重试处理；仍需真实 Roblox 购买 prompt、发货、HUD / Shop / Inventory / Rebirth / Boosts 刷新、`coinflip_gamepass_granted` 和 potion grant / use 埋点手动 QA。
 - **Creator Dashboard 清理**：确认旧项目商品入口已隐藏；Rewarded Ads 不进首发，不再创建或填回广告专用 Developer Product；如果需要排行榜展示，再补回启动前存在的 `Workspace.RankingList` 实例树。
-- **前 `3` 分钟首局体验**：源码侧已补齐新档默认 Cash `9`、首次 Flip 引导、v4 Value 升级高亮、Rebirth 不可用阶段的目标金额和 `Coin Spread` 首级价值曝光；仍需 Studio Play 确认 `2-3` 分钟内节奏与文案观感。
+- **前 `3` 分钟首局体验**：源码侧已补齐新档默认 Cash `9`、首次 Flip 引导、v4 Value 升级高亮、Rebirth 不可用阶段的目标金额和 `Coin Spread` 首级价值曝光；Studio Play 单客户端已确认首屏、`Space` 首次 Flip、Value 升级后 Rebirth 目标曝光，最终 `2-3` 分钟手感仍可真人复核。
 - **核心单客户端 Play QA**：确认 `8` 座自动分配、满员等待、空位释放再分配、重生回座、HUD `Seat --` 到真实座位稳定切换、HUD / `Space` / 手柄 `RT` 统一 Flip、桌面相机两态切换、Rebirth / Shop / Inventory / Boosts 顶栏打开关闭流程。
 - **移动端首屏 QA**：覆盖手机 portrait / landscape、平板和安全区；确认默认移动 / 跳跃控件关闭，`FLIP`、Cash、Streak、Chance、Auto、当前目标和四个升级入口不互相遮挡，growth panels 与 Topbar 入口可点且不挤压。
-- **合规语义检查**：玩家可见文案继续保持 simulator / luck / fortune / table bonus 方向；避免 `bet / wager / casino / payout / gambling / stake` 等包装；`Perfect Five / Table Bonus / Edge Stand` 不表现为下注或对赌。
 
 ### P1 Launch Polish
 
-- **Flip 反馈层级验证与微调**：Tails 保底、Heads、Multi Heads、Triple / Four Heads、Perfect / Perfect Five、Edge Stand、Streak milestone、Table Bonus 要有可分辨的文案、VFX、SFX 和强度层级；高价值结果不能挤压移动端 ResultLabel。
+- **Flip 反馈层级验证与微调**：源码侧已收短 Perfect / Perfect Five / Table Bonus 结果文案，Edge Stand 使用独立结果色且不再播放普通 Tails 失败音；仍需 Studio / 真机确认 VFX、SFX 听感强度和移动端 ResultLabel 实际观感。
 - **多 Coin 与 Rebirth 体感**：确认 `Coin Spread` 购买后即时生效，primary coin 是视觉中位币并承载镜头 / 强落地 burst，多枚 coin 落点清晰且下一轮会清理；第一次 Rebirth 后能看到 unlock banner 和下一次多 coin 首秀。
 - **Bad Luck / 稀有事件体感**：确认 Bad Luck Pity 不显得保送；Edge Stand 只由真实玩家失败轮低概率触发并保护 round streak；高阶 Coin `coin7` 到 `coin10` 的 Edge Stand bonus、Perfect reward bonus 和 Tails reroll 不让结果文案困惑。
 - **同桌弱社交 QA**：双客户端确认他人落地 pulse / streak ring / highlight、table knock、Table Bonus 共享奖励和 notification；fake player 不触发共享奖励、Edge Stand 或真实玩家 analytics。
@@ -79,6 +78,50 @@
 - `Post-launch P2` 完整 Daily 面板：当前只保留轻量每日目标；如果要做完整 Daily UI，使用 Studio-authored prefab，不接回旧 `DailySystem / QuestSystem` 主线。
 
 ## Recent Done
+
+### 2026-06-18 P0 core single-client Play QA sweep
+
+- Outcome: 单客户端 Studio smoke 已复核自动入座、HUD 首屏、`Space` Flip 结算、`Main.Frames.Shop / Boosts / Inventory / Rebirth` 打开关闭时 HUD 隐藏与恢复；客户端确认 `Seat02`、`profileLoaded`、`ClientData.initialized`、Cash `$9` 起始值和一次 `Tails! +$4` 结算均正常，控制台未出现新的 runtime error。`git diff --check` 通过，`stylua --check` 仍因 Aftman 未注册 stylua 无法运行；真实移动端 / 手柄 / 购买 prompt / 多客户端仍留给后续手动 QA。
+
+### 2026-06-18 P0 bridge lifecycle hardening follow-up
+
+- Outcome: `SystemMgr` remote dispatch now preserves nil payload slots while rejecting client-to-server calls for lifecycle methods (`Init / PlayerAdded / PlayerRemoving`); server-to-client `PlayerAdded` startup payloads remain allowed because `PlayerSystem` uses them to initialize `ClientData`. Studio Play smoke confirmed `ClientData.initialized` appears after startup and the previous infinite-yield warning no longer recurs; MCP module-cache proxy probes were inconsistent, so final proxy truth was source-reviewed. `git diff --check` passed; `stylua --check` still cannot run because Aftman has no stylua registration.
+
+### 2026-06-18 P0 remote payload bridge QA
+
+- Outcome: Studio Play 单客户端确认自动入座、HUD 首屏和 `Space` Flip 结算仍可走通，并修复 `SystemMgr` remote 分发依赖 nil 占位时可能截断 payload 的问题；框架文档同步 `SystemMgrRuntime` 与显式 `sender / player / payload` 槽位语义。`git diff --check` 通过，`stylua --check` 仍因 Aftman 未注册 stylua 无法运行；MCP 鼠标点击 ValueButton 不稳定，真实 HUD 点击 / 手柄 RT / 多客户端仍需真人 QA。
+
+### 2026-06-18 P0 core single-client Play QA follow-up
+
+- Outcome: Studio Play 单客户端复核自动入座、HUD 首屏、`Space` Flip 成功 / 失败结算、桌面硬币视觉、相机回到桌面视角，以及 Shop / Boosts / Inventory / Rebirth 打开隐藏 HUD、关闭恢复 HUD；修复 `CoinFlipSystem` 远端入口早于 `Init()` 时 `SystemMgr` 为 nil 的 runtime error，并修复 growth panel 打开后 `Mask` 被隐藏的问题。`git diff --check` 通过，`stylua --check` 仍因 Aftman 未注册 stylua 无法运行；MCP 鼠标 / 手柄模拟未能可靠触发 HUD 点击 / ButtonR2，真实桌面鼠标、手柄 RT、多客户端仍需真人 QA。
+
+### 2026-06-18 P0 monetization purchase chain source QA
+
+- Outcome: 审计 `Products.flipACoin`、`GamePasses`、receipt 发货、gamepass ownership sync、Potion/Buff、客户端 `gamePasses / loadoutState / rebirthState` 刷新和 analytics 链路；修复未知 Developer Product 不再静默 `PurchaseGranted`、发货后 `PurchaseHistory` 写失败时同服重试不重复发货、`BuffSystem:GetLuckyBoost()` 兼容当前 `luckyCharm` gamepass 字段。`git diff --check` 通过，`stylua --check` 仍因 Aftman 未注册 stylua 无法运行；真实 Roblox prompt / receipt / Dashboard analytics 仍需手动 QA。
+
+### 2026-06-18 P1 flip feedback source polish
+
+- Outcome: 源码审计 `CoinFlipSystem`、`EffectSystem`、`AnnouncementSystem` 的结果层级后，收短 Perfect / Perfect Five / Table Bonus ResultLabel 文案，把触发者 Table Bonus 文案改成共享语义，并让 Edge Stand 使用独立蓝色结果反馈且不播放普通 Tails 失败音；`git diff --check` 通过，`stylua --check` 因 Aftman 未注册 stylua 无法运行，VFX / SFX 体感仍需 Studio / 真机 QA。
+
+### 2026-06-18 P0 first-3-minutes Studio Play QA
+
+- Outcome: Studio Play 单客户端确认首屏 Cash `$9`、首次 `Space` Flip 结算、Value `$12` 升级、Rebirth 目标 `Need $231 more... 1 RP buys Coin Spread: +1 coin/flip.` 均能走通；修复 `PlayerSystem:AddExp` 客户端先于 `PlayerAdded` 初始化到达时 `ClientData` 为 nil 的 runtime error，复测控制台未再出现该错误。MCP 鼠标点击命中不稳定，最终鼠标手感仍建议用户真人复核。
+
+### 2026-06-18 P0 first-3-minutes source/state sanity
+
+- Outcome: 核对首局默认 Cash `9`、Value 首级 `$ 12`、Rebirth 门槛 `$ 250`、`Coin Spread` 首级 `1 RP` 与 Onboarding 状态机；Studio 首屏确认 Cash / GuidePrompt / FLIP / Value / Rebirth 目标可见，Play 输入结算链路因会话出现 `Server Kick Message` / 断连日志未能自动判定通过，完整 `2-3` 分钟节奏和真实点击仍需用户手动 QA。
+
+### 2026-06-18 Core single-client Play QA pass
+
+- Outcome: 源码确认 `SystemMgr` 首发注册链、`TableSeatSystem` 自动入座、`CoinFlipSystem` 统一 Flip 入口和 growth panel 绑定；Studio Play 单客户端确认玩家会坐到桌边、HUD / 引导 / TopbarPlus 图标和四个 growth frame 实例存在，控制台未见 Luau runtime error；MCP 对 Topbar 点击、服务端模块 state 和远端结算观察不稳定，`Space` / HUD / 真 Topbar 点击、完整 FlipResolved 和多客户端仍需用户手动 QA。
+
+### 2026-06-18 Mobile HUD profile follow-up
+
+- Outcome: `CoinFlipSystem/ui.lua` 保留触屏 / 窄屏 mobile HUD profile 与安全区计算代码，但运行态仍不启用该分支；用户随后已手动修好手机端 UI，Codex 后续不再主动修改手机端 UI、布局或新增手机端逻辑，除非用户明确要求。
+
+### 2026-06-18 Compliance wording pass
+
+- Outcome: 执行首发合规语义扫描，运行态源码未发现玩家可见 `bet / wager / casino / payout / gambling / stake` 包装；首局引导文案从 `Heads pay Cash` / `Heads pay more` 收紧为 `Heads give Cash` / `earn more from Heads`，并清理项目文档里的 casino 风描述。
 
 ### 2026-06-18 Early Rebirth goal exposure
 
@@ -116,12 +159,9 @@
 
 - Outcome: 多金币 Flip 现在用视觉中位币作为 primary coin，并只让 primary coin 承载强落地 burst 和镜头跟随；非 primary 硬币只保留轻落地反馈。
 
-### 2026-06-15 Launch readiness audit
-
-- Outcome: 完成上线前源码、配置、Studio 实例和单客户端 Play sanity 审计；核心服务端权威路径成立，但上线前仍需处理生产日志、购买链路验证、排行榜缺失提示和旧商品 Dashboard 暴露风险；Rewarded Ads 后续已移出首发范围。
-
 ## Archived Done History
 
+- 2026-06-15 的完成记录已压缩归档到 `docs/archive/TASK_STATE_DONE_2026-06-15.md`。
 - 2026-06-14 的完成记录已压缩归档到 `docs/archive/TASK_STATE_DONE_2026-06-14.md`。
 - 2026-06-13 的完成记录已压缩归档到 `docs/archive/TASK_STATE_DONE_2026-06-13.md`。
 - 2026-06-05 的完成记录已压缩归档到 `docs/archive/TASK_STATE_DONE_2026-06-05.md`。

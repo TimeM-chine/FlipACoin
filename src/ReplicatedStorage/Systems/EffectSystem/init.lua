@@ -503,7 +503,7 @@ function EffectSystem:PlayCoinFlipVisual(sender, player, args)
 				FirstPersonCamera.ReturnToFirstPerson(visual.focusPart)
 			end
 			visual.shouldFollowCamera = false
-			if shouldPlayResultSfx then
+			if shouldPlayResultSfx and not edgeStand then
 				playSfx(result == "Heads" and "headsWin" or "tailsLose")
 			end
 			refreshPendingCoinVisual(visual, seatId)
@@ -734,7 +734,7 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 				FirstPersonCamera.ReturnToFirstPerson(primaryState.coinVisual.focusPart)
 			end
 			visual.shouldFollowCamera = false
-			if shouldPlayResultSfx then
+			if shouldPlayResultSfx and args.edgeStand ~= true then
 				playSfx(overallResult == "Heads" and "headsWin" or "tailsLose")
 			end
 			refreshPendingCoinVisual(visual, seatId)

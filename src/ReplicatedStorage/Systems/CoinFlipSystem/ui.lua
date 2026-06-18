@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
+local GuiService = game:GetService("GuiService")
 local Replicated = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -292,11 +293,10 @@ local function resolveHudLayoutProfile()
 	local layout = Presets.UiLayout
 	local hudLayout = layout.Hud
 	local viewportSize = getViewportSize()
-	local isMobile = false
-	-- Mobile HUD redistribution is temporarily disabled while mobile layout is being reworked.
-	-- local aspectRatio = viewportSize.X / viewportSize.Y
+	local aspectRatio = viewportSize.X / viewportSize.Y
 	-- local isMobile = UserInputService.TouchEnabled
 	-- 	and (viewportSize.X <= layout.MobileMaxWidth or aspectRatio <= layout.MobileMaxAspect)
+	local isMobile = false
 
 	if not isMobile then
 		local size = hudLayout.DesktopSize
@@ -313,11 +313,13 @@ local function resolveHudLayoutProfile()
 	end
 
 	local isPortrait = viewportSize.Y >= viewportSize.X
+	local _, bottomInset = GuiService:GetGuiInset()
+	local bottomPaddingScale = math.clamp((bottomInset.Y + 8) / viewportSize.Y, 0, 0.12)
 	local size = hudLayout.MobileLandscapeSize
-	local y = hudLayout.MobileLandscapeY
+	local y = hudLayout.MobileLandscapeY - bottomPaddingScale
 	if isPortrait then
 		size = hudLayout.MobilePortraitSize
-		y = hudLayout.MobilePortraitY
+		y = hudLayout.MobilePortraitY - bottomPaddingScale
 	end
 
 	return {
@@ -400,7 +402,9 @@ local function getFlipInputIconKeyCode()
 	end
 
 	local lastInputType = UserInputService:GetLastInputType()
-	if isGamepadInputType(lastInputType) or (UserInputService.GamepadEnabled and not UserInputService.KeyboardEnabled) then
+	if
+		isGamepadInputType(lastInputType) or (UserInputService.GamepadEnabled and not UserInputService.KeyboardEnabled)
+	then
 		return FLIP_GAMEPAD_KEY
 	end
 
@@ -524,6 +528,8 @@ local function updateResultText(text, tone)
 		resultColor = Color3.fromRGB(255, 225, 109)
 	elseif tone == "Tails" then
 		resultColor = Color3.fromRGB(255, 173, 156)
+	elseif tone == "Edge" then
+		resultColor = Color3.fromRGB(148, 231, 255)
 	end
 
 	ResultLabel.Text = text
@@ -568,10 +574,11 @@ local function showUnlockBanner(coinCount)
 			return
 		end
 
-		local tween = TweenService:Create(UnlockBanner, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			BackgroundTransparency = 1,
-			Position = UDim2.fromScale(0.5, -0.14),
-		})
+		local tween =
+			TweenService:Create(UnlockBanner, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				BackgroundTransparency = 1,
+				Position = UDim2.fromScale(0.5, -0.14),
+			})
 		tween:Play()
 		tween.Completed:Once(function()
 			if token == unlockBannerToken then
@@ -599,10 +606,14 @@ local function showFirstMultiCoinBanner(coinCount)
 			return
 		end
 
-		local tween = TweenService:Create(FirstMultiCoinBanner, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			BackgroundTransparency = 1,
-			Position = UDim2.fromScale(0.5, 0.03),
-		})
+		local tween = TweenService:Create(
+			FirstMultiCoinBanner,
+			TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				BackgroundTransparency = 1,
+				Position = UDim2.fromScale(0.5, 0.03),
+			}
+		)
 		tween:Play()
 		tween.Completed:Once(function()
 			if token == firstMultiCoinBannerToken then
@@ -617,14 +628,14 @@ local function buildResultCopy(args)
 	local rewardCopy = `+$ {Util.FormatNumber(reward, true)}`
 	local tableBonusCopy = ""
 	if (args.tableJackpotAudienceReward or 0) > 0 and (args.tableJackpotRecipientCount or 0) > 0 then
-		tableBonusCopy = ` Table +$ {Util.FormatNumber(args.tableJackpotAudienceReward, true)}`
+		tableBonusCopy = " Table Bonus shared"
 	end
 	local coinCount = args.coinCount or 1
 	local headsCount = args.headsCount or (args.result == "Heads" and 1 or 0)
 	local roundSuccess = args.roundSuccess == true or args.result == "Heads"
 
 	if args.edgeStand == true then
-		return `Edge Stand! Streak saved. {rewardCopy}`, "Heads"
+		return `Edge Stand! Streak saved {rewardCopy}`, "Edge"
 	end
 
 	if coinCount <= 1 then
@@ -641,10 +652,10 @@ local function buildResultCopy(args)
 	if roundSuccess then
 		local comboName = args.comboName
 		if args.comboKey == "jackpot" then
-			return `{comboName}! {headsCount}/{coinCount} Heads {rewardCopy}{tableBonusCopy}`, "Heads"
+			return `{headsCount}/{coinCount} Heads! {comboName} {rewardCopy}{tableBonusCopy}`, "Heads"
 		end
 		if args.comboKey == "perfect" then
-			return `{comboName}! {headsCount}/{coinCount} Heads {rewardCopy}`, "Heads"
+			return `{headsCount}/{coinCount} Heads! {comboName} {rewardCopy}`, "Heads"
 		end
 		if comboName and comboName ~= "Heads" then
 			return `{headsCount}/{coinCount} Heads! {comboName} {rewardCopy}`, "Heads"
@@ -759,11 +770,11 @@ end
 local function getGuideCopy(onboarding)
 	local stepKey = onboarding and onboarding.currentStep
 	if stepKey == "firstFlip" then
-		return "Heads pay Cash. Streaks boost Cash rewards.", "FLIP"
+		return "Heads give Cash. Streaks boost Cash rewards.", "FLIP"
 	end
 	if stepKey == "buyUpgrade" then
 		if onboarding.canBuyTargetUpgrade == true then
-			return "Upgrade Value to make Heads pay more.", "UPGRADE"
+			return "Upgrade Value to earn more from Heads.", "UPGRADE"
 		end
 		return "Flip until Value is ready.", "FLIP"
 	end
@@ -775,8 +786,7 @@ local function getGuideCopy(onboarding)
 				else `$ {Util.FormatNumber(onboarding.rebirthMinCash or 0, true)} Cash`
 			local coinSpreadName = onboarding.coinSpreadName or "Coin Spread"
 			local coinSpreadCost = onboarding.coinSpreadCost or 1
-			return `Need {cashText} for Rebirth. {coinSpreadCost} RP buys {coinSpreadName}: +1 coin/flip.`,
-				"FLIP"
+			return `Need {cashText} for Rebirth. {coinSpreadCost} RP buys {coinSpreadName}: +1 coin/flip.`, "FLIP"
 		end
 		return "Rebirth turns this run into permanent points.", "REBIRTH"
 	end
