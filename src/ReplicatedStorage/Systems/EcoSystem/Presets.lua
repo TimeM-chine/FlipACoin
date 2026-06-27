@@ -416,11 +416,11 @@ EcoPresets.Products = {
 		},
 		apexLoadoutBundle = {
 			order = 6,
-			productName = "Apex Loadout Bundle",
+			productName = "Apex Bundle",
 			productId = 3596712138,
 			price = 599,
 			grantType = "loadoutBundle",
-			description = "Unlock Ancient Ruby Coin, Amethyst Hourglass, and Royal Chaise",
+			description = "3 apex cosmetics",
 			fallbackCash = 25_000,
 			unlocks = {
 				coin = { "coin10" },
@@ -435,7 +435,7 @@ EcoPresets.Products = {
 			price = 99,
 			grantType = "potion",
 			potionName = "paidCash2x10m",
-			description = "Use instantly for 2x Cash during the next 10 minutes",
+			description = "2x Cash for 10m",
 		},
 	},
 	cardPacks = {
@@ -823,7 +823,7 @@ EcoPresets.GamePasses = {
 		title = "VIP",
 		gamePassId = 1854149220,
 		price = 199,
-		description = "+10% Cash, +1% Luck, and VIP loadout unlocks",
+		description = "+10% Cash, +1% Luck",
 	},
 	winsX2 = {
 		order = 2,
@@ -831,7 +831,7 @@ EcoPresets.GamePasses = {
 		title = "2x Cash",
 		gamePassId = 1852463340,
 		price = 299,
-		description = "Double Cash from flip rewards",
+		description = "Double flip Cash",
 	},
 	luckyCharm = {
 		order = 3,

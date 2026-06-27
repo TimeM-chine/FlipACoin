@@ -1,6 +1,6 @@
 # PROJECT_LOGIC
 
-更新时间：2026-06-18
+更新时间：2026-06-20
 
 ## 1. 这份文档的定位
 
@@ -578,7 +578,7 @@ FlipACoin
 
 当前 Coin / Desk / Chair 商品配置在 `EcoSystem/Presets.lua` 的 `GrowthShopItems`。FlipACoin 付费配置在同文件：
 
-- `Products.flipACoin`：`cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle / paidCash2x10m`，当前均已填入非 `0` product id
+- `Products.flipACoin`：`cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle / paidCash2x10m`，当前均已填入非 `0` product id；Boosts 卡片文案保持短句以适配小横屏
 - `GamePasses`：`vip / winsX2 / luckyCharm / quickFlip`，当前均已填入非 `0` game pass id
 - `GamePassEffects`：VIP 小幅 Cash / Luck 和外观解锁、`winsX2` 的 flip Cash 倍率、`luckyCharm` 的 Heads 概率加成、`quickFlip` 的 flip 间隔倍率
 - `BuffSystem:GetLuckyBoost()` 兼容当前 `luckyCharm` 字段和旧 `lucky` 字段；当前 Flip 主线的 Heads 概率仍以 `EcoPresets.BuildLoadoutBonuses()` 为准

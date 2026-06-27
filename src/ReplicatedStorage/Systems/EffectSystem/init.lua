@@ -539,8 +539,9 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 	clearTransientCoinVisuals(visual)
 
 	for coinIndex = 1, coinCount do
+		local isPrimary = coinIndex == primaryIndex
 		local coinVisual = visual
-		if coinIndex ~= primaryIndex then
+		if not isPrimary then
 			coinVisual = createTransientCoinVisual(visual, args and args.coinId)
 			if coinVisual then
 				visual.transientCoinVisuals = visual.transientCoinVisuals or {}
@@ -606,7 +607,7 @@ function playMultiCoinFlipVisual(visual, seatId, args)
 			baseShadowSize = baseShadowSize,
 			shadowPos = shadowPos,
 			edgeStand = edgeStand,
-			isPrimary = coinVisual == visual,
+			isPrimary = isPrimary,
 		})
 	end
 

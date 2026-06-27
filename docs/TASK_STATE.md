@@ -1,6 +1,6 @@
 # TASK_STATE
 
-最后更新：2026-06-18
+最后更新：2026-06-20
 
 > 目的：记录当前正在做什么、下一步是什么、关键决策、待验证项与后续想法。项目事实放 `PROJECT_LOGIC.md`，框架规则放 `FRAMEWORK.md`；已完成的历史日志放 `docs/archive/`。
 
@@ -45,24 +45,24 @@
 
 ### P0 Release Blockers
 
-- **生产配置与变现闭环**：`Products.flipACoin` 七个 Developer Product 和四个 Game Pass ID 已填入；源码侧已补齐付费发货后的 `gamePasses / loadout / rebirthState` 客户端同步，并加固未知 product / 同服 receipt 重试处理；仍需真实 Roblox 购买 prompt、发货、HUD / Shop / Inventory / Rebirth / Boosts 刷新、`coinflip_gamepass_granted` 和 potion grant / use 埋点手动 QA。
+- **生产配置与变现闭环**：`Products.flipACoin` 七个 Developer Product 和四个 Game Pass ID 已填入；源码侧已补齐付费发货后的 `gamePasses / loadout / rebirthState` 客户端同步，并加固未知 product / 同服 receipt 重试处理；2026-06-19 用户已手动确认所有 UI、Game Pass 和 Developer Product 购买 / 发货 / 刷新链路，埋点因 Roblox 日活限制当前 Dashboard 暂不可查看。
 - **Creator Dashboard 清理**：确认旧项目商品入口已隐藏；Rewarded Ads 不进首发，不再创建或填回广告专用 Developer Product；如果需要排行榜展示，再补回启动前存在的 `Workspace.RankingList` 实例树。
-- **前 `3` 分钟首局体验**：源码侧已补齐新档默认 Cash `9`、首次 Flip 引导、v4 Value 升级高亮、Rebirth 不可用阶段的目标金额和 `Coin Spread` 首级价值曝光；Studio Play 单客户端已确认首屏、`Space` 首次 Flip、Value 升级后 Rebirth 目标曝光，最终 `2-3` 分钟手感仍可真人复核。
-- **核心单客户端 Play QA**：确认 `8` 座自动分配、满员等待、空位释放再分配、重生回座、HUD `Seat --` 到真实座位稳定切换、HUD / `Space` / 手柄 `RT` 统一 Flip、桌面相机两态切换、Rebirth / Shop / Inventory / Boosts 顶栏打开关闭流程。
-- **移动端首屏 QA**：覆盖手机 portrait / landscape、平板和安全区；确认默认移动 / 跳跃控件关闭，`FLIP`、Cash、Streak、Chance、Auto、当前目标和四个升级入口不互相遮挡，growth panels 与 Topbar 入口可点且不挤压。
+- **前 `3` 分钟首局体验**：源码侧已补齐新档默认 Cash `9`、首次 Flip 引导、v4 Value 升级高亮、Rebirth 不可用阶段的目标金额和 `Coin Spread` 首级价值曝光；Studio Play 单客户端已确认首屏、`Space` 首次 Flip、Value 升级后 Rebirth 目标曝光，2026-06-19 用户已确认 `Space` 可触发 Flip，最终 `2-3` 分钟手感可继续真人复核。
+- **核心单客户端 Play QA**：确认 `8` 座自动分配、满员等待、空位释放再分配、重生回座、HUD `Seat --` 到真实座位稳定切换、HUD / `Space` / 手柄 `RT` 统一 Flip、桌面相机两态切换、Rebirth / Shop / Inventory / Boosts 顶栏打开关闭流程；2026-06-20 Studio Play/MCP 确认自动入座、`Space` Flip 结算、死亡重生回座和 `ButtonR2 / ButtonY` InputAction 绑定，手柄 `RT` 真实触发、Rebirth 成功链路和满员等待仍需真手柄 / 稳定多客户端复核。
+- **移动端首屏 QA**：`StarterGui.ScreenOrientation = LandscapeSensor`，portrait 不适用于当前首发配置；2026-06-20 Studio Device Simulator 覆盖 iPhone 17 Pro、Samsung Galaxy A06、iPad Pro M5 横屏首屏，HUD / 四个升级入口无越界，Shop / Boosts / Inventory / Rebirth 根面板在 A06 小横屏内可见；Boosts 长文案已收短并复测 `TextNotFit=0`。最终真机触摸手感仍可由用户复核。
 
 ### P1 Launch Polish
 
-- **Flip 反馈层级验证与微调**：源码侧已收短 Perfect / Perfect Five / Table Bonus 结果文案，Edge Stand 使用独立结果色且不再播放普通 Tails 失败音；仍需 Studio / 真机确认 VFX、SFX 听感强度和移动端 ResultLabel 实际观感。
-- **多 Coin 与 Rebirth 体感**：确认 `Coin Spread` 购买后即时生效，primary coin 是视觉中位币并承载镜头 / 强落地 burst，多枚 coin 落点清晰且下一轮会清理；第一次 Rebirth 后能看到 unlock banner 和下一次多 coin 首秀。
-- **Bad Luck / 稀有事件体感**：确认 Bad Luck Pity 不显得保送；Edge Stand 只由真实玩家失败轮低概率触发并保护 round streak；高阶 Coin `coin7` 到 `coin10` 的 Edge Stand bonus、Perfect reward bonus 和 Tails reroll 不让结果文案困惑。
-- **同桌弱社交 QA**：双客户端确认他人落地 pulse / streak ring / highlight、table knock、Table Bonus 共享奖励和 notification；fake player 不触发共享奖励、Edge Stand 或真实玩家 analytics。
-- **成长与埋点 QA**：确认 Profile XP、轻量每日目标、前 `3` 分钟短会话、首次入座 / Flip / Auto / run upgrade / growth panel、`10` 次 Flip、离服等 analytics 写入；Dashboard `Count` / `Sum value` 语义按批处理文档理解。
-- **现有装扮资产观感**：确认 `coin1` 到 `coin10`、Desk Setup、Chair 的购买 / 装备 notification 与 SFX，座位刷新即时生效，落点不沉桌，桌搭 / 椅子不遮挡 Coin。
+- **Flip 反馈层级验证与微调**：源码侧已复核 Perfect / Perfect Five / Table Bonus 结果文案、Edge Stand 独立结果色和跳过普通 Tails 失败音、observed flip 低噪音 SFX、milestone 优先级与 announcement notification；仍需 Studio / 真机确认 VFX、SFX 听感强度和 ResultLabel 实际观感。
+- **多 Coin 与 Rebirth 体感**：源码 / Edit 态已确认 `Coin Spread` 购买后即时生效、primary coin 中位视觉、下一轮清理路径、unlock banner / first multi-coin banner / `multiCoinReveal` / `CoinVisuals` 资源；真实多 Coin 首秀观感、镜头 / VFX / SFX 强度仍需稳定 Play 或真人复核。
+- **Bad Luck / 稀有事件体感**：源码侧已确认 Bad Luck Pity 只加隐藏正面率且受 `MaxHeadsChance` 上限约束，Edge Stand 只对真实玩家失败轮按失败压力低概率触发并保护 round streak；高阶 Coin `coin7` 到 `coin10` 的 Edge Stand bonus、Perfect reward bonus 和 Tails reroll 均只进服务端 outcome / analytics 字段。真实稀有事件观感仍需稳定 Play 或真人复核。
+- **同桌弱社交 QA**：源码侧已确认 observed flip 会给同桌其他玩家播放低噪音落地 / streak / highlight，Table Bonus 只由真实玩家 `5/5 Heads` 触发共享奖励和 notification，fake player 不触发共享奖励、Edge Stand 或真实玩家 analytics。双客户端真实观感仍需真人复核。
+- **成长与埋点 QA**：源码侧已确认 Profile XP、轻量每日目标、前 `3` 分钟短会话、首次入座 / Flip / Auto / run upgrade / growth panel、`10` 次 Flip、离服、Table Bonus / Edge Stand / Rebirth 等 analytics 入口和批量 flush 路径；Dashboard `Count` / `Sum value` 语义及真实可见性需等 Roblox 日活条件满足后复核。
+- **现有装扮资产观感**：源码侧已确认 `coin1` 到 `coin10`、Desk Setup、Chair 的购买 / 装备 notification 与 SFX，装备会刷新 `DecorationSystem` / audience / HUD；`Textures.FlipACoinItems` 覆盖当前 Coin / Desk / Chair 图标。真实座位刷新、落点不沉桌、桌搭 / 椅子不遮挡 Coin 仍需 Studio 稳定 Play 或真人观感复核。
 
 ## Resource Needs
 
-- Creator Dashboard 确认项：旧商品入口是否已隐藏；`cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle / paidCash2x10m` 和 `vip / winsX2 / luckyCharm / quickFlip` 的 ID 已在配置中填入，首发不再需要 Rewarded Ads 专用 product。
+- Creator Dashboard 确认项：旧商品入口是否已隐藏；`cashPackSmall / cashPackMedium / cashPackLarge / rebirthShardSmall / rebirthShardLarge / apexLoadoutBundle / paidCash2x10m` 和 `vip / winsX2 / luckyCharm / quickFlip` 的 ID 已在配置中填入并由用户手动验证，首发不再需要 Rewarded Ads 专用 product；analytics 当前受日活限制暂不可见。
 - 上线商店资产：Roblox 游戏 icon、缩略图、截图 / 短视频素材和最终标题 / 描述文案；这些不影响源码，但影响发布页转化。
 - 手动 QA 资源：至少一轮手机 portrait、手机 landscape、平板、桌面键鼠、手柄和双客户端同桌测试反馈；Codex 自动化不能可靠判断最终移动端观感。
 - 可选表现资源：如果当前占位 VFX / SFX 分不清 Heads、Perfect、Edge Stand、Table Bonus，需要补短音效、光效或粒子资源；这属于首发 polish，不要求新增完整图鉴资产。
@@ -78,6 +78,38 @@
 - `Post-launch P2` 完整 Daily 面板：当前只保留轻量每日目标；如果要做完整 Daily UI，使用 Studio-authored prefab，不接回旧 `DailySystem / QuestSystem` 主线。
 
 ## Recent Done
+
+### 2026-06-20 Remaining source-checkable launch QA sweep
+
+- Outcome: 复核 P1 剩余可源码确认项：Bad Luck Pity / Edge Stand / Lucky Coin trait 均由服务端 outcome 控制并写入 compact analytics；Edge Stand 和 Table Bonus 不对 fake player 发奖或写真实玩家 analytics；observed flip 只给同桌其他玩家低噪音反馈；Profile XP、daily goal、first-session funnel、input、growth panel、flip milestone、Rebirth、Table Bonus 和 Edge Stand analytics 入口与批量 flush 路径存在；EcoSystem 购买 / 装备会通知、记录 analytics、同步 loadout，并在装备 Desk / Chair 时刷新 Decoration / audience / HUD。Studio 资产类观感仍因 Play 会话不稳定留真人或稳定会话复核。
+
+### 2026-06-20 CentralRules shared rules sync
+
+- Outcome: Synced managed shared rule files from sibling `../CentralRules` according to this project's `.rules-sync.json` (`AGENTS.md`, `.cursor/rules/*.mdc`, `docs/FRAMEWORK.md`), left project-local task / project-logic docs intact, and confirmed the managed files match CentralRules; `pwsh` is not installed, so verification used direct file comparison.
+
+### 2026-06-20 P1 multi-coin and Rebirth source/resource validation
+
+- Outcome: 复核 `RebirthSystem / CoinFlipSystem / EffectSystem` 链路，确认 `polishedStart` 玩家可见为 `Coin Spread`，升级后会扣 RP、更新 `rebirthTree`、立即把 `runData.coinCountLevel` baseline 应用到本局并通过 `rebirthUpgradePurchased` 同步 HUD；客户端会显示 unlock banner，并把下一次从 1 coin 到多 coin 的 Flip 标记为 first multi-coin 首秀。Edit 态确定性检查确认 `Coin Spread` level `0-4` 映射 `1-5` 枚 coin、成本 `1/3/9/27/81 RP`，`UnlockBanner`、`FirstMultiCoinBanner`、`ReplicatedStorage.Systems.EffectSystem.Assets.multiCoinReveal` 和 `Workspace.CoinFlipTable.CoinVisuals` 均存在。Studio Play 仍被 `Server Kick Message` / Server `Players=0` 中断，运行态多 Coin 首秀观感留稳定会话或真人 QA。
+
+### 2026-06-20 P1 flip feedback source validation follow-up
+
+- Outcome: 源码复核 `CoinFlipSystem / EffectSystem / AnnouncementSystem` 的反馈层级，确认 Perfect / Perfect Five 使用短结果文案，Table Bonus 只追加共享语义，Edge Stand 使用蓝色结果文本且不播放普通 Tails 失败音，observed flip suppress 本地结果音效，announcement 只做 notification 不重复播 VFX/SFX，fake player 不触发 Table Bonus / Edge Stand / 真实玩家 analytics。Studio Play 可见 HUD / CoinFlipTable / CoinVisuals 实例，但会话掉到 Server `Players=0`，未能稳定自动触发 Flip；真实 VFX/SFX 听感、rare event 观感和移动端 ResultLabel 仍留人工 QA。
+
+### 2026-06-20 P0 mobile landscape HUD and Boosts QA
+
+- Outcome: Studio Device Simulator 确认 `ScreenOrientation = LandscapeSensor`，portrait 不适用于当前首发配置；Play 模式覆盖 iPhone 17 Pro `748x361`、Samsung Galaxy A06 `705x338`、iPad Pro M5 `1373x1031` 横屏首屏，`FLIP`、Cash、Streak、Chance/Speed、Auto、引导条和四个升级入口无坐标越界。A06 小横屏打开 Shop / Boosts / Inventory / Rebirth 根面板均在 viewport 内；收短 Boosts 付费商品 / gamepass 文案后，A06 Boosts 面板可见文本 `TextNotFit` 从 `5` 降到 `0`。Studio 设备模拟器已还原默认 viewport；控制台未见新增 runtime error。
+
+### 2026-06-20 P0 core QA source and Studio smoke
+
+- Outcome: 源码复核 `ButtonR2` / `ButtonY` 绑定、等待座位队列、释放 fake 座位、重生与 Rebirth 同步路径；Studio Play 单客户端确认 `profileLoaded`、自动入座 `Seat02`、HUD 可见、`CoinFlipGameplayInputContext` 启用且 `FlipCoin = Space / ButtonR2`、`ToggleAutoFlip = ButtonY`，`Space` 完成一次 `Tails! +$ 4` 结算并保持入座，死亡重生后自动回到 `Seat02`。MCP `ButtonR2` 自动输入未触发结算但源码和 HUD 绑定存在，记录为工具模拟不可判定；Rebirth 成功链路探测被 Studio `Server Kick Message` / Server `Players=0` 中断，保留真人或稳定会话复核。
+
+### 2026-06-19 P0 user QA confirmation
+
+- Outcome: 用户手动确认所有 UI、Game Pass 和 Developer Product 均已验证，`Space` 可以触发 Flip；Roblox analytics / 埋点因日活限制当前 Dashboard 不可查看，后续满足可见条件后再复核，不再作为当前源码阻塞。
+
+### 2026-06-19 P1 multi-coin primary visual alignment follow-up
+
+- Outcome: 修正 `EffectSystem` 多金币 visual 分配，让持久硬币绑定到视觉中位 primary index，确保 3/5 枚多金币时镜头跟随、强落地 burst、streak pulse 与下一轮保留状态都落在中位币；源码确认 `Coin Spread` 购买后会即时应用 `runData.coinCountLevel` baseline 并同步 `rebirthUpgradePurchased` 触发 unlock / first multi-coin UI。Studio Play 单客户端确认自动入座 `Seat02`、HUD / `FLIP` 按钮存在且客户端桥接请求无新增 runtime error；`git diff --check` 通过，`stylua --check` 仍因 Aftman 未声明 stylua 无法运行。真实多金币首秀观感、真机 VFX/SFX 和多客户端仍需手动 QA。
 
 ### 2026-06-18 P0 core single-client Play QA sweep
 

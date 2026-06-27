@@ -116,7 +116,7 @@ local LifecycleMethods = {
 local function packRemoteArgs(...)
 	return {
 		n = select("#", ...),
-		...
+		...,
 	}
 end
 
