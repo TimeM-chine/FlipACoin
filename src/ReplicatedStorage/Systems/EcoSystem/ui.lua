@@ -69,6 +69,15 @@ local inventoryTopbarIcon
 local boostsTopbarIcon
 local selectedShopItemKeys = {}
 local selectedBoostItemKey
+
+local function reportPurchaseFunnel(stage, purchaseType, storeId, purchased)
+	SystemMgr.systems.AnalyticsSystem.Server:ReportPurchaseFunnel({
+		stage = stage,
+		purchaseType = purchaseType,
+		storeId = storeId,
+		purchased = purchased,
+	})
+end
 local generatedShopCards = {}
 local generatedBoostCards = {}
 local generatedInventoryCards = {}
@@ -379,6 +388,7 @@ local function updateLoadoutSummary()
 end
 
 local function updateShopPanel()
+	ShopFrame:SetAttribute("GrowthCategory", selectedShopCategory)
 	updateTabButton(ShopTabs.CoinTab, selectedShopCategory == "coin")
 	updateTabButton(ShopTabs.DeskTab, selectedShopCategory == "desk")
 	updateTabButton(ShopTabs.ChairTab, selectedShopCategory == "chair")
@@ -414,11 +424,19 @@ local function updateShopPanel()
 
 		local selectButton = card:FindFirstChild("SelectButton")
 		if selectButton and selectButton:IsA("GuiButton") then
+			selectButton.Selectable = false
 			uiController.SetButtonHoverAndClick(selectButton, function()
 				selectedShopItemKeys[selectedShopCategory] = item.id
 				updateShopPanel()
 			end)
 		end
+		card.BuyButton.SelectionGained:Connect(function()
+			selectedShopItemKeys[selectedShopCategory] = item.id
+			for _, generatedCard in pairs(generatedShopCards) do
+				updateCardSelection(generatedCard, generatedCard == card)
+			end
+			updateShopPreview(item, ownedItems)
+		end)
 		uiController.SetButtonHoverAndClick(card.BuyButton, function()
 			selectedShopItemKeys[selectedShopCategory] = item.id
 			if not ownedItems[item.id] then
@@ -462,11 +480,19 @@ local function updateBoostsPanel()
 
 		local selectButton = card:FindFirstChild("SelectButton")
 		if selectButton and selectButton:IsA("GuiButton") then
+			selectButton.Selectable = false
 			uiController.SetButtonHoverAndClick(selectButton, function()
 				selectedBoostItemKey = getShopSelectionKey("boost", item)
 				updateBoostsPanel()
 			end)
 		end
+		card.BuyButton.SelectionGained:Connect(function()
+			selectedBoostItemKey = getShopSelectionKey("boost", item)
+			for _, generatedCard in pairs(generatedBoostCards) do
+				updateCardSelection(generatedCard, generatedCard == card)
+			end
+			updateBoostsPreview(item)
+		end)
 		uiController.SetButtonHoverAndClick(card.BuyButton, function()
 			selectedBoostItemKey = getShopSelectionKey("boost", item)
 			if not item.configured then
@@ -474,8 +500,10 @@ local function updateBoostsPanel()
 				return
 			end
 			if item.itemType == "product" then
+				reportPurchaseFunnel("entry", "product", item.storeId)
 				MarketplaceService:PromptProductPurchase(LocalPlayer, item.storeId)
 			elseif item.itemType == "gamePass" and not currentGamePasses[item.key] then
+				reportPurchaseFunnel("entry", "gamePass", item.storeId)
 				MarketplaceService:PromptGamePassPurchase(LocalPlayer, item.storeId)
 			end
 			updateBoostsPanel()
@@ -486,6 +514,7 @@ local function updateBoostsPanel()
 end
 
 local function updateInventoryPanel()
+	InventoryFrame:SetAttribute("GrowthCategory", selectedInventoryCategory)
 	updateTabButton(InventoryTabs.CoinTab, selectedInventoryCategory == "coin")
 	updateTabButton(InventoryTabs.DeskTab, selectedInventoryCategory == "desk")
 	updateTabButton(InventoryTabs.ChairTab, selectedInventoryCategory == "chair")
@@ -529,6 +558,12 @@ local function updateInventoryPanel()
 					itemId = item.id,
 				})
 			end)
+			card.EquipButton.SelectionGained:Connect(function()
+				for _, generatedCard in pairs(generatedInventoryCards) do
+					updateCardSelection(generatedCard, generatedCard == card)
+				end
+				updateLoadoutSummary()
+			end)
 		end
 	end
 
@@ -540,6 +575,18 @@ local function updatePanels()
 	updateBoostsPanel()
 	updateInventoryPanel()
 	refreshTopbarIconState()
+	local openFrame = if ShopFrame.Visible
+		then ShopFrame
+		elseif BoostsFrame.Visible
+		then BoostsFrame
+		elseif InventoryFrame.Visible then InventoryFrame else nil
+	if openFrame and UserInputService.GamepadEnabled then
+		task.defer(function()
+			if openFrame.Visible then
+				uiController.ConfigureGrowthFrameGamepad(openFrame)
+			end
+		end)
+	end
 end
 
 local function syncTopbarIcon(frame)
@@ -588,6 +635,13 @@ local function bindTopbarIcons()
 end
 
 local function bindButtons()
+	ShopTabs.CoinTab:SetAttribute("GrowthCategory", "coin")
+	ShopTabs.DeskTab:SetAttribute("GrowthCategory", "desk")
+	ShopTabs.ChairTab:SetAttribute("GrowthCategory", "chair")
+	InventoryTabs.CoinTab:SetAttribute("GrowthCategory", "coin")
+	InventoryTabs.DeskTab:SetAttribute("GrowthCategory", "desk")
+	InventoryTabs.ChairTab:SetAttribute("GrowthCategory", "chair")
+	InventoryTabs.OtherTab:SetAttribute("GrowthCategory", "other")
 	uiController.SetButtonHoverAndClick(CoinFlipMenu.ShopButton, function()
 		resetScrollPosition(ShopItems)
 		updatePanels()
@@ -652,6 +706,16 @@ function EcoUi.Init()
 		return
 	end
 	initialized = true
+	MarketplaceService.PromptProductPurchaseFinished:Connect(function(userId, productId, purchased)
+		if userId == LocalPlayer.UserId then
+			reportPurchaseFunnel("prompt_result", "product", productId, purchased)
+		end
+	end)
+	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, gamePassId, purchased)
+		if player == LocalPlayer then
+			reportPurchaseFunnel("prompt_result", "gamePass", gamePassId, purchased)
+		end
+	end)
 
 	ShopFrame.Visible = false
 	BoostsFrame.Visible = false

@@ -406,7 +406,13 @@ local function resolveActorFlip(self, actor)
 	local hiddenChanceAssist = playerState and getHiddenChanceAssist(actor.playerIns, playerState) or nil
 	local hiddenChanceBonus = hiddenChanceAssist and hiddenChanceAssist.bonus or 0
 	local hiddenChanceMax = hiddenChanceAssist and hiddenChanceAssist.maxHeadsChance or nil
-	local outcome = Presets.BuildRoundOutcome(runData, bonusStats, hiddenChanceBonus, hiddenChanceMax)
+	local testSystem = not actor.isFake and rawget(GetSystemMgr().systems, "TestSystem") or nil
+	local outcome = testSystem
+		and testSystem:ConsumeForcedOutcome(SENDER, actor.player, {
+			runData = runData,
+			bonusStats = bonusStats,
+		})
+		or Presets.BuildRoundOutcome(runData, bonusStats, hiddenChanceBonus, hiddenChanceMax)
 	local edgeStandChance = 0
 	if playerState then
 		edgeStandChance = Presets.GetEdgeStandChance(

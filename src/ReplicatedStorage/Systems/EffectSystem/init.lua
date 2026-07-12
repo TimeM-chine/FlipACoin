@@ -57,6 +57,7 @@ local EffectSystem: Types.System = {
 		"PlayStreakMilestone",
 		"RefreshPersistentSeatCoins",
 		"PlayerRemoving",
+		"GetQaActiveCoinCount",
 	},
 	players = {},
 	IsLoaded = false,
@@ -1764,7 +1765,10 @@ function playHighlightFlash(target, options)
 		})
 	tween:Play()
 	tween.Completed:Once(function()
-		highlight:Destroy()
+		if highlight.Parent then
+			highlight:Destroy()
+		end
+		tween:Destroy()
 	end)
 	Debris:AddItem(highlight, duration + 0.12)
 end
@@ -2530,6 +2534,25 @@ function clearCoinVisual(seatId)
 	else
 		setCoinObjectEnabled(visual.coin, visual.shadow, false)
 	end
+end
+
+function EffectSystem:GetQaActiveCoinCount()
+	if IsServer or not RunService:IsStudio() then
+		return 0
+	end
+
+	local count = 0
+	for _, visual in pairs(activeCoinFlipVisuals) do
+		if visual.coin and visual.coin.Parent then
+			count += 1
+		end
+		for _, transientVisual in ipairs(visual.transientCoinVisuals or {}) do
+			if transientVisual.coin and transientVisual.coin.Parent then
+				count += 1
+			end
+		end
+	end
+	return count
 end
 
 return EffectSystem

@@ -94,6 +94,10 @@ local systems = {
 	-- WeatherSystem = require(Replicated.Systems.WeatherSystem),
 }
 
+if IsStudio then
+	systems.TestSystem = require(Replicated.Systems.TestSystem)
+end
+
 setmetatable(systems, mt)
 
 local LoadOrder = {

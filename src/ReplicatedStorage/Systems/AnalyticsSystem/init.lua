@@ -33,6 +33,7 @@ local AnalyticsSystem: Types.System = {
 		"LogShopItemPurchased",
 		"LogItemEquipped",
 		"LogGamePassGranted",
+		"LogPurchaseDelivery",
 		"LogPotionGranted",
 		"LogPotionUsed",
 		"LogBuffActive",
@@ -157,6 +158,34 @@ function AnalyticsSystem:ReportDeviceProfile(sender, player, args)
 	)
 end
 
+function AnalyticsSystem:ReportPurchaseFunnel(sender, player, args)
+	if not IsServer then
+		return
+	end
+	if RunService:IsStudio() then
+		return
+	end
+
+	player = player or sender
+	if sender ~= player or not player:IsDescendantOf(Players) or typeof(args) ~= "table" then
+		return
+	end
+	local stage = args.stage
+	local purchaseType = args.purchaseType
+	local storeId = args.storeId
+	if stage ~= "entry" and stage ~= "prompt_result" then
+		return
+	end
+	if purchaseType ~= "product" and purchaseType ~= "gamePass" then
+		return
+	end
+	if typeof(storeId) ~= "number" or storeId <= 0 or storeId % 1 ~= 0 then
+		return
+	end
+	local result = if stage == "entry" then "opened" else if args.purchased == true then "purchased" else "cancelled"
+	self:_LogCustomEvent(player, "coinflip_purchase_funnel", 1, self:_BuildFields(stage, purchaseType, `{storeId}:{result}`))
+end
+
 function AnalyticsSystem:PlayerRemoving(sender, player, args)
 	if not IsServer or sender ~= SENDER then
 		return
@@ -260,6 +289,27 @@ function AnalyticsSystem:LogGamePassGranted(sender, player, args)
 		"coinflip_gamepass_granted",
 		args and args.price or 0,
 		self:_BuildFields(args and args.gamePassName, args and args.source, args and args.effect)
+	)
+end
+
+function AnalyticsSystem:LogPurchaseDelivery(sender, player, args)
+	if not self:_CanLog(sender, player) then
+		return
+	end
+	local purchaseType = args and args.purchaseType
+	local storeId = args and args.storeId
+	if purchaseType ~= "product" and purchaseType ~= "gamePass" then
+		return
+	end
+	if typeof(storeId) ~= "number" or storeId <= 0 or storeId % 1 ~= 0 then
+		return
+	end
+
+	self:_LogCustomEvent(
+		player,
+		"coinflip_purchase_funnel",
+		1,
+		self:_BuildFields("delivery", purchaseType, `{storeId}:granted`)
 	)
 end
 
@@ -487,6 +537,9 @@ function AnalyticsSystem:_CanLog(sender, player)
 	if not IsServer then
 		return false
 	end
+	if RunService:IsStudio() then
+		return false
+	end
 	if sender ~= SENDER then
 		return false
 	end
@@ -710,6 +763,9 @@ function AnalyticsSystem:_LogFlipProgress(player, args)
 end
 
 function AnalyticsSystem:_LogCustomEvent(player, eventName, value, fields)
+	if RunService:IsStudio() then
+		return
+	end
 	if not AnalyticsService then
 		return
 	end

@@ -39,6 +39,8 @@ local currentCash = 0
 local currentRebirthState = {}
 local suppressTopbarToggle = false
 local rebirthTopbarIcon
+local canRequestRebirth = false
+local purchasableRebirthUpgrades = {}
 
 local function setButtonText(button, text, isEnabled)
 	button.Text = text
@@ -77,6 +79,8 @@ local function updateRebirthPanel()
 	local cashPerPoint = currentRebirthState.rebirthCashPerPoint or RebirthPresets.FlipACoin.Rebirth.CashPerPoint
 	local cashAfterReset = currentRebirthState.rebirthCashAfterReset or RebirthPresets.FlipACoin.Rebirth.CashAfterReset
 	local canRebirth = currentRebirthState.canRebirth == true
+	canRequestRebirth = canRebirth
+	table.clear(purchasableRebirthUpgrades)
 
 	RebirthPointGain.Label.Text = "Rebirth Points"
 	RebirthPointGain.Value.Text = `+{pointGain} now | {rebirthPoints} banked`
@@ -114,6 +118,7 @@ local function updateRebirthPanel()
 		card.Title.Text = config.displayName
 		card.Desc.Text = config.description
 		if entry.cost then
+			purchasableRebirthUpgrades[upgradeKey] = rebirthPoints >= entry.cost
 			card.Chip.Text = `Lv.{entry.level}/{entry.maxLevel} | Cost {entry.cost} RP`
 			setButtonText(card.UpgradeButton, `Upgrade ({entry.cost} RP)`, rebirthPoints >= entry.cost)
 		else
@@ -163,12 +168,18 @@ local function bindButtons()
 		uiController.CloseFrame("Rebirth")
 	end)
 	uiController.SetButtonHoverAndClick(RebirthConfirmButton, function()
+		if not canRequestRebirth then
+			return
+		end
 		SystemMgr.systems.RebirthSystem.Server:RequestRebirth()
 	end)
 
 	for index, upgradeKey in ipairs(RebirthPresets.FlipACoin.UpgradeOrder) do
 		local boundUpgradeKey = upgradeKey
 		uiController.SetButtonHoverAndClick(RebirthPerkCards[index].UpgradeButton, function()
+			if not purchasableRebirthUpgrades[boundUpgradeKey] then
+				return
+			end
 			SystemMgr.systems.RebirthSystem.Server:RequestRebirthUpgrade({
 				upgradeKey = boundUpgradeKey,
 			})

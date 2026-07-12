@@ -11,6 +11,7 @@
 
 ## Files
 
+- `TASK_STATE_DONE_2026-06-17_TO_2026-07-11.md`：2026-07-11 重置 live task board 前的首发准备状态摘要，覆盖 2026-06-17 到 2026-07-11。
 - `TASK_STATE_DONE_2026-06-02_TO_2026-06-04.md`：从旧 `TASK_STATE.md` 的 `Recent Done` 压缩出来的已完成历史摘要，覆盖 2026-06-02 到 2026-06-04。
 - `TASK_STATE_DONE_2026-06-05.md`：从旧 `TASK_STATE.md` 的 `Recent Done` 压缩出来的已完成历史摘要，覆盖 2026-06-05。
 - `TASK_STATE_DONE_2026-06-13.md`：从旧 `TASK_STATE.md` 的 `Recent Done` 压缩出来的已完成历史摘要，覆盖 2026-06-13。

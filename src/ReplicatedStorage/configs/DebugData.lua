@@ -7,7 +7,7 @@ DebugData = TableModule.DeepCopy(DEFAULT_DATA)
 
 DebugData.settingsData = {
 	bgm = 0,
-	sfx = 0,
+	sfx = 1,
 	trade = true,
 }
 

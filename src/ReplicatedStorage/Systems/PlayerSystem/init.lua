@@ -94,7 +94,9 @@ function PlayerSystem:PlayerAdded(sender, player, args)
 			playerIns:SetOneData(dataKey.createTime, os.time())
 			self:InitData(player)
 		end
-		AnalyticsService:LogOnboardingFunnelStepEvent(player, 1, "login")
+		if not RunService:IsStudio() then
+			AnalyticsService:LogOnboardingFunnelStepEvent(player, 1, "login")
+		end
 
 		-- CreateTimer(player)
 		CreateLeaderStats(player)

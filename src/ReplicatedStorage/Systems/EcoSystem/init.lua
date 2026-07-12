@@ -124,6 +124,10 @@ function processReceipt(receiptInfo)
 		warn(`[EcoSystem] Cannot save purchase data for {playerProductKey}: {errorMessage}`)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
+	SystemMgr.systems.AnalyticsSystem:LogPurchaseDelivery(SENDER, player, {
+		purchaseType = "product",
+		storeId = receiptInfo.ProductId,
+	})
 
 	return Enum.ProductPurchaseDecision.PurchaseGranted
 end
@@ -136,6 +140,10 @@ function gamePassPurchaseFinished(player, purchasedPassID, purchaseSuccess)
 			return
 		end
 		func(player)
+		SystemMgr.systems.AnalyticsSystem:LogPurchaseDelivery(SENDER, player, {
+			purchaseType = "gamePass",
+			storeId = purchasedPassID,
+		})
 		-- SystemMgr.systems.GuiSystem:SetNotification(SENDER, player, {
 		--     content = "Thank you for your support!🎇",
 		--     color = Color3.fromRGB(0, 255, 0)
@@ -636,14 +644,16 @@ function EcoSystem:AddResource(sender, player, args: { resourceType: string, cou
 			else
 				followType = Enum.AnalyticsEconomyFlowType.Sink
 			end
-			AnalyticsService:LogEconomyEvent(
-				player,
-				followType,
-				resourceType,
-				math.abs(count),
-				playerIns:GetOneData(resourceType),
-				args.reason or "unknown"
-			)
+			if not RunService:IsStudio() then
+				AnalyticsService:LogEconomyEvent(
+					player,
+					followType,
+					resourceType,
+					math.abs(count),
+					playerIns:GetOneData(resourceType),
+					args.reason or "unknown"
+				)
+			end
 
 			total = playerIns:GetOneData(resourceType)
 		end

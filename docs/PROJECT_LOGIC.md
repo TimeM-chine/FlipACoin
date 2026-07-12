@@ -210,6 +210,8 @@ FlipACoin
 - `TableSeatSystem`
 - `DecorationSystem`
 
+Studio 中还会额外注册 `TestSystem`；生产运行时不 require、不创建桥接接口，也不加载 QA 面板。
+
 没有在这里注册的系统，即使目录还在，也默认不参与运行时主链路。
 
 当前主线不使用 Roblox Team 分队；Studio 中不保留 legacy `red / blue / white` Team 实例，避免默认玩家列表按队伍分组显示。
@@ -532,7 +534,8 @@ FlipACoin
 - 服务端维护 v4 首局引导链，状态写在 `guideData.coinFlipOnboarding`，漏斗仍写 `onboardingFunnelStep`。引导阶段为：
   - 首次 Flip：客户端高亮 `FLIP`，`GuidePrompt` 文案为 `Heads give Cash. Streaks boost Cash rewards.`，不承诺固定 `2x`
   - 首次 Value 升级：第一次 Flip 后进入 `buyUpgrade`；Cash 不足时继续高亮 `FLIP` 并提示攒到 Value，Cash 足够时高亮 HUD 内实际 `ValueButton`，玩家点击该按钮完成步骤；目标固定为 `valueLevel`，但玩家手动先买任意其他 run upgrade 也会完成首次升级，避免卡住
-  - 首次 Rebirth：未达到门槛时 `GuidePrompt` 继续高亮 `FLIP`，展示还差多少 Cash 以及首个 `1 RP` 的 `Coin Spread` 会让每次 Flip 多一枚 coin；当 `RebirthSystem` 判定 `canRebirth` 后，引导打开 Rebirth 面板并高亮 `ConfirmButton`
+- 首次 Rebirth：未达到门槛时 `GuidePrompt` 继续高亮 `FLIP`，展示还差多少 Cash 以及首个 `1 RP` 的 `Coin Spread` 会让每次 Flip 多一枚 coin；当 `RebirthSystem` 判定 `canRebirth` 后，引导打开 Rebirth 面板并高亮 `ConfirmButton`
+- Rebirth 未达到门槛时，`GuidePrompt.ActionButton` 隐藏，避免出现第二个无效 `FLIP`；玩家只操作被高亮的 HUD 主 `FlipButton`。
   - Coin 购买 / 装备：首次 Rebirth 后，Cash 足够购买第一枚未拥有非默认 Coin 时引导 Shop 的 Coin 页购买；购买后自动转到 Inventory 的 Coin 页并高亮对应 `EquipButton`
 - 引导采用“持续到完成”的轻强制高亮；不恢复旧大 guide 面板，不发教学 / 建议类 toast。玩家手动打开与当前引导目标无关的 Shop / Inventory / Rebirth 面板时，会临时清理旧 HUD 高亮并保留普通面板遮罩，避免旧 `MaskFrame` 覆盖成长面板；关闭面板后再恢复当前步骤高亮。
 - HUD `GuidePrompt` 会在引导刷新时显式提高自身和子级 `ZIndex`，保证文字显示在 guide `MaskFrame` 之上。
@@ -666,6 +669,7 @@ FlipACoin
 当前职责：
 
 - 作为 Roblox `AnalyticsService` 的服务端内部门面；绝大多数公开记录方法都在 `whiteList`，不暴露给客户端 remote。例外是 `ReportDeviceProfile()` 这类客户端只能上报自身低基数设备画像、且服务端会清洗字段的一次性入口。
+- 购买漏斗使用 `coinflip_purchase_funnel` 的 `entry / prompt_result / delivery` 三阶段；前两阶段只接受本人客户端的固定类型和数值 Store ID，delivery 只由服务端成功发货路径记录。Studio 跳过正式 Analytics、onboarding 和 economy API 调用。
 - `coinflip_flip_resolved` 的三个自定义字段当前是：兼容 `result`、压缩 round outcome（形如 `c3_h2_success_s2_4_pair`，末尾带 combo key）、当前装备 Coin id
 - Custom events 先按 `player + eventName + CustomField01/02/03` 在内存队列聚合同字段 value，再定时发送；不新增 batch size 字段，避免抬高字段组合基数
 - 发送节奏按 Roblox 官方 `120 + 20 * CCU` / min AnalyticsService 全局限制留 `20%` 余量，每 `15` 秒 flush；`PlayerRemoving` 与关服会强制 flush pending bucket
@@ -848,8 +852,16 @@ FlipACoin
 
 当前 `DebugData` 特点：
 
-- `wins` 被设成超大值
-- 方便开发期间快速测试升级与展示
+- 保持接近 `DefaultData` 的新档基线（`wins = 9`、0 Rebirth、0 Fate Shards）
+- Studio 默认 SFX 可听；特殊 Cash、Fate Shards、Rebirth 和 runData 只由 Studio QA 情景临时覆盖
+
+### 9.2.1 Studio QA 边界
+
+- `TestSystem` 仅在 `RunService:IsStudio()` 时由 `SystemMgr` 注册，客户端只能请求预定义情景枚举。
+- 服务端会再次校验 Studio、调用玩家和情景白名单；情景先恢复完整 `DebugData`，再覆盖受控状态并走现有同步路径。
+- `Perfect Five` / `Edge Stand` 是一次性服务端强制结果，只在 Studio 由真实 `CoinFlipSystem` 结算消费；Fake Player 不读取该状态。
+- Studio 客户端入口在 `SystemMgr.Start()` 后显式初始化 QA UI；Long Session 定时调用真实服务端 `RequestFlip`，每 5 分钟保留最多 7 条样本并在 30 分钟自动停止。
+- QA 不新增存档字段，不接受任意数值或任意结果表，也不改变生产经济、商品和发货路径。
 
 ### 9.3 `PlayerServerClass`
 

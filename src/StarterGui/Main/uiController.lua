@@ -15,7 +15,6 @@ local TweenService = game:GetService("TweenService")
 local CAS = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
-local GamepadEnabled = UserInputService.GamepadEnabled
 
 ---- requires ----
 local Textures = require(Replicated.configs.Textures)
@@ -40,12 +39,31 @@ local responsiveGrowthFrameLayouts = {}
 local responsiveGrowthFrameBound = false
 local responsiveViewportConnection
 local closeInputContext
+local previousSelectedObject
+local growthFrameSelectionConnection
+local notificationChannels = {}
 local GrowthFrameNames = {
 	Shop = true,
 	Boosts = true,
 	Inventory = true,
 	Rebirth = true,
+	StudioQA = RunService:IsStudio(),
 }
+
+local function isGamepadInput(inputType)
+	return inputType == Enum.UserInputType.Gamepad1
+		or inputType == Enum.UserInputType.Gamepad2
+		or inputType == Enum.UserInputType.Gamepad3
+		or inputType == Enum.UserInputType.Gamepad4
+		or inputType == Enum.UserInputType.Gamepad5
+		or inputType == Enum.UserInputType.Gamepad6
+		or inputType == Enum.UserInputType.Gamepad7
+		or inputType == Enum.UserInputType.Gamepad8
+end
+
+local function isUsingGamepad()
+	return isGamepadInput(UserInputService:GetLastInputType())
+end
 
 local Main = PlayerGui:WaitForChild("Main")
 local Frames = Main:WaitForChild("Frames")
@@ -207,12 +225,36 @@ local function bindResponsiveGrowthFrameLayout()
 	end)
 end
 
-function controller.SetNotification(args: { text: string, soundName: string, lastTime: number, textColor: Color3 })
+function controller.SetNotification(args: {
+	text: string,
+	soundName: string,
+	lastTime: number,
+	textColor: Color3,
+	channel: string?,
+	priority: number?,
+})
 	local text = args.text
 	local soundName = args.soundName
 	local duration = args.lastTime or 3
 	local textColor = args.textColor or Color3.new(1, 1, 1)
+	local channel = args.channel
+	local priority = args.priority or 0
 	local template = Notifications:FindFirstChild("Templates"):FindFirstChild("Template")
+	local channelEntry = channel and notificationChannels[channel]
+	if channelEntry then
+		if priority < channelEntry.priority then
+			return false
+		end
+		if channelEntry == NotificationStorage[text] then
+			channelEntry.priority = priority
+			channelEntry.count += 1
+			channelEntry.unit.Text = `{text} (x {channelEntry.count})`
+			refreshNotificationLifetime(channelEntry, duration)
+			return true
+		elseif channelEntry.unit and channelEntry.unit.Parent then
+			channelEntry.unit:Destroy()
+		end
+	end
 	local entry = NotificationStorage[text]
 	if entry then
 		local unit = entry.unit
@@ -220,8 +262,13 @@ function controller.SetNotification(args: { text: string, soundName: string, las
 		local newCount = count + 1
 		entry.count = newCount
 		unit.Text = `{text} (x {newCount})`
+		if channel then
+			entry.channel = channel
+			entry.priority = priority
+			notificationChannels[channel] = entry
+		end
 		refreshNotificationLifetime(entry, duration)
-		return
+		return true
 	end
 	Util.Clone(template, Box, function(unit)
 		unit.Text = text
@@ -234,13 +281,22 @@ function controller.SetNotification(args: { text: string, soundName: string, las
 			count = 1,
 		}
 		NotificationStorage[text] = newEntry
+		if channel then
+			newEntry.channel = channel
+			newEntry.priority = priority
+			notificationChannels[channel] = newEntry
+		end
 		unit.Destroying:Once(function()
 			NotificationStorage[text] = nil
+			if channel and notificationChannels[channel] == newEntry then
+				notificationChannels[channel] = nil
+			end
 		end)
 		refreshNotificationLifetime(newEntry, duration)
 
 		playUiSound("SFX", soundName)
 	end)
+	return true
 end
 
 local function createCloseInputBinding(action, name, keyCode)
@@ -294,11 +350,15 @@ function controller.OpenFrame(name)
 		return
 	end
 
+	local previousFrame = frameCache
 	if frameCache then
 		if frameCache == frame then
 			return
 		end
 		frameCache.Visible = false
+	end
+	if not previousFrame then
+		previousSelectedObject = GuiService.SelectedObject
 	end
 	frameCache = frame
 	-- Mobile growth panel redistribution is temporarily disabled while mobile layout is being reworked.
@@ -325,18 +385,12 @@ function controller.OpenFrame(name)
 	end
 	MaskFrame.Visible = true
 
-	if GamepadEnabled then
-		local btns = frame:GetDescendants()
-		for _, btn in pairs(btns) do
-			if not btn:IsA("GuiButton") then
-				continue
+	if isUsingGamepad() then
+		task.defer(function()
+			if frameCache == frame and frame.Visible then
+				controller.ConfigureGrowthFrameGamepad(frame)
 			end
-			if btn.Name == "X" then
-				continue
-			end
-			GuiService.SelectedObject = btn
-			break
-		end
+		end)
 	end
 	return frame
 end
@@ -362,15 +416,125 @@ function controller.CloseFrame(name)
 		MaskFrame.Visible = false
 	end
 
-	if GamepadEnabled then
-		GuiService.SelectedObject = nil
+	if growthFrameSelectionConnection then
+		growthFrameSelectionConnection:Disconnect()
+		growthFrameSelectionConnection = nil
+	end
+	if isUsingGamepad() then
+		GuiService.SelectedObject = if previousSelectedObject and previousSelectedObject:IsDescendantOf(PlayerGui)
+			then previousSelectedObject
+			else nil
+		previousSelectedObject = nil
 	end
 
 	CAS:UnbindAction("GAMEPAD_CLOSE_FRAME")
 	if closeInputContext then
 		closeInputContext.Enabled = false
 	end
+	CAS:UnbindAction("GROWTH_PANEL_SWITCH_TAB")
 end
+
+function controller.IsGrowthFrameOpen()
+	return frameCache ~= nil and frameCache.Visible
+end
+
+function controller.ConfigureGrowthFrameGamepad(frame)
+	local buttons = {}
+	local tabs = {}
+	for _, descendant in frame:GetDescendants() do
+		if
+			not descendant:IsA("GuiButton")
+			or descendant.Name == "X"
+			or descendant.Name == "TouchHitTarget"
+			or descendant.Name == "SelectButton"
+		then
+			continue
+		end
+		if not descendant.Visible then
+			continue
+		end
+
+		descendant.Selectable = true
+		table.insert(buttons, descendant)
+		if string.find(descendant.Name, "Tab", 1, true) then
+			table.insert(tabs, descendant)
+		end
+	end
+
+	table.sort(buttons, function(a, b)
+		local aPosition = a.AbsolutePosition
+		local bPosition = b.AbsolutePosition
+		if math.abs(aPosition.Y - bPosition.Y) > 8 then
+			return aPosition.Y < bPosition.Y
+		end
+		return aPosition.X < bPosition.X
+	end)
+	table.sort(tabs, function(a, b)
+		return a.AbsolutePosition.X < b.AbsolutePosition.X
+	end)
+
+	for _, button in buttons do
+		button.NextSelectionUp = controller.GetNearestGrowthButton(button, buttons, Vector2.new(0, -1))
+		button.NextSelectionDown = controller.GetNearestGrowthButton(button, buttons, Vector2.new(0, 1))
+		button.NextSelectionLeft = controller.GetNearestGrowthButton(button, buttons, Vector2.new(-1, 0))
+		button.NextSelectionRight = controller.GetNearestGrowthButton(button, buttons, Vector2.new(1, 0))
+	end
+
+	if growthFrameSelectionConnection then
+		growthFrameSelectionConnection:Disconnect()
+	end
+	growthFrameSelectionConnection = GuiService:GetPropertyChangedSignal("SelectedObject"):Connect(function()
+		local selectedObject = GuiService.SelectedObject
+		if selectedObject and selectedObject:IsDescendantOf(frame) then
+			controller.ScrollGrowthButtonIntoView(selectedObject)
+		end
+	end)
+
+	if #tabs > 1 then
+		CAS:BindActionAtPriority("GROWTH_PANEL_SWITCH_TAB", function(_, inputState, inputObject)
+			if inputState ~= Enum.UserInputState.Begin or frameCache ~= frame then
+				return Enum.ContextActionResult.Pass
+			end
+
+			local currentCategory = frame:GetAttribute("GrowthCategory")
+			local currentIndex = 1
+			for index, tab in ipairs(tabs) do
+				if tab:GetAttribute("GrowthCategory") == currentCategory then
+					currentIndex = index
+					break
+				end
+			end
+			local direction = inputObject.KeyCode == Enum.KeyCode.ButtonL1 and -1 or 1
+			local nextIndex = ((currentIndex - 1 + direction) % #tabs) + 1
+			local nextTab = tabs[nextIndex]
+			local recall = controller.GetButtonRecall(nextTab)
+			if recall then
+				recall()
+			end
+			task.defer(function()
+				if frameCache == frame then
+					controller.ConfigureGrowthFrameGamepad(frame)
+					GuiService.SelectedObject = nextTab
+				end
+			end)
+			return Enum.ContextActionResult.Sink
+		end, false, 2999, Enum.KeyCode.ButtonL1, Enum.KeyCode.ButtonR1)
+	end
+
+	GuiService.SelectedObject = buttons[1]
+end
+
+UserInputService.LastInputTypeChanged:Connect(function(inputType)
+	if not frameCache or not frameCache.Visible or not isGamepadInput(inputType) then
+		return
+	end
+
+	task.defer(function()
+		if frameCache and frameCache.Visible then
+			controller.ConfigureGrowthFrameGamepad(frameCache)
+		end
+	end)
+end)
 
 function controller.OpenModal(args)
 	local title = args.title
@@ -442,10 +606,14 @@ function controller.SetUIBlink(element, endSignal: RBXScriptSignal)
 end
 
 local function RemoveButtonConn(btn)
-	for _, conn in pairs(connections[btn]) do
-		conn:Disconnect()
-		conn = nil
+	local buttonConnections = connections[btn]
+	if not buttonConnections then
+		return
 	end
+	for _, conn in pairs(buttonConnections) do
+		conn:Disconnect()
+	end
+	connections[btn] = nil
 	btnRecalls[btn] = nil
 end
 
@@ -471,7 +639,7 @@ function controller.SetGuideButton(btn, frame)
 		guideRipple = rippleTemplate:Clone()
 		guideRipple.Size = UDim2.fromScale(1, 1)
 		guideRipple.Visible = true
-		guideRipple.Parent = btn
+		guideRipple.Parent = btn:FindFirstChild("OverlayElements") or btn
 		local currentRipple = guideRipple
 		local currentToken = guideRippleToken
 		local function playGuideRippleTween()
@@ -568,9 +736,12 @@ function controller.SetButtonHoverAndClick(btn, fun, playSound)
 			controller.RotateUnit(RotateIcon, rotate)
 		end
 	end)
-	local desBtn
+	local desBtn = btn:FindFirstChild("TouchHitTarget", true)
+	if desBtn and not desBtn:IsA("GuiButton") then
+		desBtn = nil
+	end
 	if not btn:IsA("GuiButton") then
-		desBtn = btn:FindFirstChildWhichIsA("GuiButton")
+		desBtn = desBtn or btn:FindFirstChildWhichIsA("GuiButton")
 		if not desBtn then
 			desBtn = Instance.new("TextButton")
 			desBtn.Name = "clickBtn"
@@ -588,7 +759,7 @@ function controller.SetButtonHoverAndClick(btn, fun, playSound)
 				desBtn.Parent = btn
 			end
 		end
-	else
+	elseif not desBtn then
 		desBtn = btn
 	end
 
@@ -606,6 +777,9 @@ function controller.SetButtonHoverAndClick(btn, fun, playSound)
 		end)
 
 		conns.MouseButton1Click = desBtn.MouseButton1Click:Connect(function()
+			if not btn.Active or not btn.Interactable then
+				return
+			end
 			if coolDown == false then
 				if guideButton and btn:IsDescendantOf(Main) then
 					local allowedByGuideButton = guideButton == btn or guideButton:IsDescendantOf(btn)
@@ -1263,5 +1437,67 @@ end
 -- 		end)
 -- 	end
 -- end
+
+function controller.GetNearestGrowthButton(sourceButton, buttons, direction)
+	local sourceCenter = sourceButton.AbsolutePosition + sourceButton.AbsoluteSize * 0.5
+	local nearestButton
+	local nearestScore
+	for _, candidate in buttons do
+		if candidate == sourceButton then
+			continue
+		end
+
+		local candidateCenter = candidate.AbsolutePosition + candidate.AbsoluteSize * 0.5
+		local offset = candidateCenter - sourceCenter
+		local forwardDistance = offset:Dot(direction)
+		if forwardDistance <= 1 then
+			continue
+		end
+
+		local crossDistance = math.abs(offset.X * direction.Y - offset.Y * direction.X)
+		local score = forwardDistance + crossDistance * 2.5
+		if not nearestScore or score < nearestScore then
+			nearestScore = score
+			nearestButton = candidate
+		end
+	end
+
+	return nearestButton
+end
+
+function controller.ScrollGrowthButtonIntoView(button)
+	local scrollingFrame = button:FindFirstAncestorWhichIsA("ScrollingFrame")
+	if not scrollingFrame then
+		return
+	end
+
+	local buttonTop = button.AbsolutePosition.Y - scrollingFrame.AbsolutePosition.Y + scrollingFrame.CanvasPosition.Y
+	local buttonBottom = buttonTop + button.AbsoluteSize.Y
+	local visibleTop = scrollingFrame.CanvasPosition.Y
+	local visibleBottom = visibleTop + scrollingFrame.AbsoluteWindowSize.Y
+	if buttonTop < visibleTop then
+		scrollingFrame.CanvasPosition = Vector2.new(scrollingFrame.CanvasPosition.X, math.max(buttonTop, 0))
+	elseif buttonBottom > visibleBottom then
+		local maxCanvasY = math.max(scrollingFrame.AbsoluteCanvasSize.Y - scrollingFrame.AbsoluteWindowSize.Y, 0)
+		scrollingFrame.CanvasPosition = Vector2.new(
+			scrollingFrame.CanvasPosition.X,
+			math.min(buttonBottom - scrollingFrame.AbsoluteWindowSize.Y, maxCanvasY)
+		)
+	end
+end
+
+function controller.GetQaNotificationCount()
+	if not RunService:IsStudio() then
+		return 0
+	end
+
+	local count = 0
+	for _, entry in pairs(NotificationStorage) do
+		if entry.unit and entry.unit.Parent then
+			count += 1
+		end
+	end
+	return count
+end
 
 return controller

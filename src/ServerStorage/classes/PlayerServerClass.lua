@@ -141,7 +141,9 @@ function PlayerServerClass:LogOnboarding(step, stepName)
 	if onboardingFunnelStep >= step then
 		return
 	end
-	AnalyticsService:LogOnboardingFunnelStepEvent(self.player, step, stepName)
+	if not RunService:IsStudio() then
+		AnalyticsService:LogOnboardingFunnelStepEvent(self.player, step, stepName)
+	end
 	self:SetOneData(dataKey.onboardingFunnelStep, step)
 	self.player:SetAttribute("onboardingFunnelStep", step)
 end

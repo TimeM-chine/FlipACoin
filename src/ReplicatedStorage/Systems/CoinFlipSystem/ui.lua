@@ -806,12 +806,11 @@ local function openCurrentGuideTarget()
 	end
 
 	local stepKey = currentOnboarding.currentStep
+	if stepKey == "rebirth" and currentOnboarding.canRebirth ~= true then
+		requestFlip("guideRebirthGoal")
+		return FlipButton
+	end
 	if currentOnboarding.shouldGuide ~= true then
-		if stepKey == "rebirth" and currentOnboarding.canRebirth ~= true then
-			requestFlip("guideRebirthGoal")
-			return FlipButton
-		end
-
 		return nil
 	end
 
@@ -911,6 +910,7 @@ local function refreshGuide()
 		return
 	end
 	if stepKey == "rebirth" and currentOnboarding.canRebirth ~= true then
+		GuideActionButton.Visible = false
 		GuidePrompt.Visible = Hud.Visible
 		setGuideHighlight(FlipButton)
 		return
@@ -1106,6 +1106,37 @@ local function updateUpgradeButton(button, title, level, cost, isMaxed)
 	button.AutoButtonColor = not isMaxed
 end
 
+local function showUpgradePurchasedFeedback(upgradeKey, previousSnapshot, currentSnapshot)
+	local button = UpgradeMap[upgradeKey]
+	if not button then
+		return
+	end
+
+	local oldLevel = previousSnapshot.runData[upgradeKey] or 0
+	local newLevel = currentSnapshot.runData[upgradeKey] or oldLevel
+	local detail = `Lv.{oldLevel} -> Lv.{newLevel}`
+	if upgradeKey == "valueLevel" then
+		detail = `Cash x{math.round((previousSnapshot.derivedStats.valueMultiplier or 1) * 100) / 100} -> x{math.round(
+			(currentSnapshot.derivedStats.valueMultiplier or 1) * 100
+		) / 100}`
+	elseif upgradeKey == "comboLevel" then
+		detail = `Streak +{math.round((previousSnapshot.derivedStats.comboStep or 0) * 100)}% -> +{math.round(
+			(currentSnapshot.derivedStats.comboStep or 0) * 100
+		)}% per step`
+	elseif upgradeKey == "speedLevel" then
+		detail = `{math.round((previousSnapshot.derivedStats.flipInterval or 0) * 100) / 100}s -> {math.round(
+			(currentSnapshot.derivedStats.flipInterval or 0) * 100
+		) / 100}s`
+	elseif upgradeKey == "biasLevel" then
+		detail = `{math.round((previousSnapshot.derivedStats.headsChance or 0) * 1000) / 10}% -> {math.round(
+			(currentSnapshot.derivedStats.headsChance or 0) * 1000
+		) / 10}% Heads`
+	end
+
+	uiController.SetUnitJump(button, 0.08)
+	updateResultText(`{UpgradeTitles[upgradeKey]} upgraded: {detail}`, "Heads")
+end
+
 local function ensureLeaveButton()
 	local leaveButton = Content:FindFirstChild("LeaveSeatButton")
 	if leaveButton then
@@ -1256,7 +1287,8 @@ function CoinFlipUi.SyncRunState(args)
 	local isSeated = currentSeatId ~= nil
 	currentFlipInterval = (args.derivedStats and args.derivedStats.flipInterval) or currentFlipInterval
 	local cash = args.cash or args.wins or 0
-	local previousCoinCount = currentRunSnapshot.derivedStats.coinCount or 1
+	local previousRunSnapshot = currentRunSnapshot
+	local previousCoinCount = previousRunSnapshot.derivedStats.coinCount or 1
 	currentRunSnapshot = {
 		cash = cash,
 		runData = args.runData or {},
@@ -1292,6 +1324,9 @@ function CoinFlipUi.SyncRunState(args)
 		local level = args.runData[upgradeKey] or 0
 		local cost = args.nextCosts[upgradeKey]
 		updateUpgradeButton(button, UpgradeTitles[upgradeKey], level, cost, cost == nil)
+	end
+	if args.upgradePurchased then
+		showUpgradePurchasedFeedback(args.upgradePurchased, previousRunSnapshot, currentRunSnapshot)
 	end
 
 	setVisible(isSeated)
